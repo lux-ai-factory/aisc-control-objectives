@@ -1,0 +1,121 @@
+{
+  "findings": [
+    {
+      "title": "Data & Data Governance",
+      "points": [
+        "Four documented data sources: historical loan outcomes, credit bureau records, PSD2-derived transaction features, and demographic fields (age band, postal-code area).",
+        "Per-source lineage, licensing, and consent basis recorded in a data registry, supporting Article 10.2.b and Annex IV.1.a traceability.",
+        "Stratification across DE/FR/NL markets, age bands, income deciles, and postal-code clusters, with explicit oversampling of historically under-represented postal areas.",
+        "Quarterly fairness audits compare approval, default, and override rates across age band, gender (bureau proxy), and postal-code SES proxy; the last two audits found 'no statistically significant disparity above the 5% threshold'."
+      ],
+      "article": "Article 10",
+      "summary": "Training data is sourced from the bank's 7-year historical loan-outcome dataset (~620K records), DPA-compliant credit bureau records, PSD2-authorised 12-month aggregated transaction features, and limited demographic fields, with lineage, licensing, and consent basis tracked per source in a data registry. Representativeness is addressed through stratification across the three deployment markets and across age, income, and postal-code clusters, with oversampling of under-represented areas and quarterly fairness audits.",
+      "references": [
+        "Article 10.2.b",
+        "Article 10.2.f",
+        "Article 10.3",
+        "Article 10.4",
+        "Annex IV.1.a"
+      ]
+    },
+    {
+      "title": "Documentation & Logging",
+      "points": [
+        "Versioned design log (Git + Confluence) records each design decision with owner, date, evidence, and AI Act risk-class assignment.",
+        "Sign-off on releases requires the model owner, compliance officer, and a deployer-bank representative.",
+        "Training, evaluation, and re-calibration runs log hyperparameters, dataset hashes, fairness/accuracy metrics, and model artifacts to MLflow.",
+        "Logs are immutable and retained for 10 years to match retail-banking record-keeping obligations.",
+        "Each model release is tied to a git tag, a signed model card, and the corresponding regulatory impact assessment."
+      ],
+      "article": "Article 12",
+      "summary": "Governance and lifecycle logging are documented end-to-end. Design decisions (model choice, thresholds, policy rules, AI Act risk-class assignment) are captured in a versioned, Git-backed design log with named owners, dates, and evidence, and require tri-party sign-off. Training, evaluation, and re-calibration runs are logged to an internal MLflow instance with immutable retention aligned to retail-banking obligations.",
+      "references": [
+        "Article 12",
+        "Article 12.3",
+        "Article 16",
+        "Article 19"
+      ]
+    },
+    {
+      "title": "Transparency",
+      "points": [
+        "Intended purpose tightly scoped to €100–€5,000 consumer-loan pre-screening and decision support in DE/FR/NL retail-banking workflows.",
+        "Out-of-scope uses (other loan ranges, non-consumer credit, sole-basis rejection without human review) are gated by contract and by technical input validation.",
+        "IFU bundle includes a printable PDF and an in-product help centre keyed to the running model version, plus an operator checklist for the Review queue.",
+        "Customer-facing explanations are surfaced via the LLM explanation module across web portal and mobile app for plain-language reasons.",
+        "Evaluator did not explicitly confirm a machine-readable IFU format (e.g., JSON/XML) alongside the human-readable artifacts."
+      ],
+      "article": "Article 13",
+      "summary": "Intended purpose, supported scope, and out-of-scope uses are explicitly defined and enforced both contractually and via input validation. Deployer banks receive a versioned Instructions for Use bundle in both human-readable (PDF, in-product help centre) and operational formats, including an operator checklist for Review-queue handling and mandatory-justification overrides. Applicants receive plain-language explanations reusing the LLM explanation module.",
+      "references": [
+        "Article 13.2",
+        "Article 13.3.a",
+        "Article 13.b.i",
+        "Article 13.b.iii"
+      ]
+    },
+    {
+      "title": "Human Oversight",
+      "points": [
+        "All rejections and Review-bucket cases require trained-loan-officer review before any binding decision.",
+        "Only approvals at or below a configured high-confidence threshold are auto-issued; overrides require written justification recorded against the case.",
+        "LLM chatbot is non-binding, disclaims appeals advice, and appeal handling is human-only.",
+        "Daily monitoring dashboard tracks approval/rejection/override rates by branch and demographic stratum, score drift, and chatbot disagreement/escalation rates.",
+        "Standing oversight committee (model owner, compliance, customer-experience lead) meets monthly with documented escalation paths to the bank's risk committee and to Creditum AI support."
+      ],
+      "article": "Article 14",
+      "summary": "Human oversight is built into the decision flow: all rejections and all Review-bucket cases are routed to a trained loan officer before a binding decision; only high-confidence approvals are auto-issued, and any override of the model output requires a written justification recorded against the case. The LLM chatbot is non-binding and explicitly excludes appeals. Deployer banks run a daily monitoring dashboard and a standing oversight committee with escalation paths.",
+      "references": [
+        "Article 14",
+        "Article 14.4.a",
+        "Article 14.4.d"
+      ]
+    }
+  ],
+  "overview": "MicroCredit Assist Score (MCAS) v1.2.0, developed by Creditum AI SARL, is a credit scoring system used in retail and micro-finance contexts in Germany, France, and the Netherlands for consumer loans between €100 and €5,000. It combines a gradient-boosted decision tree on applicant, bureau, and PSD2-derived transaction data with an LLM chatbot that produces plain-language explanations and answers policy questions, returning a 0–1000 score, a Low/Medium/High risk category, and an Approve/Review/Reject recommendation. As a credit-scoring system for natural persons, MCAS falls within the high-risk scope of Annex III of the AI Act. The provided evaluator answers indicate substantive compliance posture across Articles 10, 12, 13, and 14, with documented data lineage, quarterly fairness audits, immutable lifecycle logging, versioned human- and machine-accessible Instructions for Use, and mandatory human review for rejections and borderline cases.",
+  "provider": "Creditum AI SARL (Luxembourg)",
+  "description": "Credit scoring system that evaluates creditworthiness for short-term consumer loans (€100–€5,000). It combines a gradient-boosted decision tree on applicant data with an LLM chatbot that produces natural-language explanations and answers customer questions from policy documentation. Licensing: proprietary, on-premise with audit access. Documentation: https://docs.microcreditassist.ai (public technical docs, API specs, deployment guides).",
+  "open_issues": [
+    "Article 13.2: The IFU is described in human-readable formats (PDF, in-product help centre) but no machine-readable counterpart (JSON/XML) is confirmed.",
+    "Article 14.4.a/d: No explicit stop/kill-switch or 'halt operation' mechanism is described; oversight is covered via review routing, dashboards, and committee escalation rather than a documented technical shutdown control.",
+    "Article 10: Cybersecurity and data-quality validation controls beyond lineage tracking (e.g., handling of erroneous or missing values, adversarial inputs) are not detailed.",
+    "Article 12: Logging coverage for live inference events (per-decision input/output traces, chatbot interactions) is not explicitly described alongside training-time logging."
+  ],
+  "system_name": "MicroCredit Assist Score (MCAS)",
+  "generated_at": "2026-05-20 22:59 UTC",
+  "target_users": "Primary: bank customers aged 18+ applying for consumer loans through the bank's web portal or mobile app. Secondary: bank loan officers and compliance staff who monitor decisions, conduct manual reviews of borderline cases, and can approve, reject, or override outcomes with mandatory written justification.",
+  "classification": {
+    "sectors": [
+      "Finance and insurance"
+    ],
+    "target_systems": [
+      {
+        "category": "Tabular & Structured Data",
+        "subcategory": "Tabular Classification & Regression"
+      },
+      {
+        "category": "Predictive & Analytical AI",
+        "subcategory": "Risk Scoring & Assessment"
+      },
+      {
+        "category": "Predictive & Analytical AI",
+        "subcategory": "Predictive Analytics"
+      },
+      {
+        "category": "Natural Language Processing",
+        "subcategory": "Text Generation & Summarization"
+      },
+      {
+        "category": "Natural Language Processing",
+        "subcategory": "Question Answering"
+      },
+      {
+        "category": "Knowledge & Retrieval",
+        "subcategory": "Retrieval-Augmented Generation (RAG)"
+      }
+    ]
+  },
+  "system_version": "v1.2.0",
+  "target_use_case": "Retail banking and consumer micro-finance in the EU (deployed in Germany, France, and the Netherlands). Evaluates creditworthiness for €100–€5,000 consumer loans, returns a 0–1000 credit score, a Low/Medium/High risk category, and an Approve/Review/Reject recommendation, alongside influential factors and a natural-language explanation surfaced via the bank's web portal, mobile app, and staff dashboard. The subjects of the system are individual loan applicants whose access to credit is affected by its outputs.",
+  "qualification_id": "cmpeno6uw0001h9ig8l1d5b27"
+}

@@ -1,0 +1,4471 @@
+[
+  {
+    "name": "Accuracy_Checklist",
+    "slug": "accuracy-checklist",
+    "description": "Accuracy checklist by AESIA",
+    "licensing": "Open_Source",
+    "completion_status": "full",
+    "dimension_slug": "technical-robustness-safety",
+    "controls_subdim_slugs": [],
+    "metadata": {
+      "provider": "AESIA",
+      "link": "https://aesia.digital.gob.es/en/guides",
+      "project_maturity": "",
+      "control_topic": "Accuracy",
+      "target_legal_requirements": ""
+    },
+    "questions": [
+      {
+        "order": 1,
+        "text": "In the selection of the accuracy metrics and their values, has the intended purpose of the system been taken into account, has it been indicated in what aspects?",
+        "article": "Article 15",
+        "category": "MG01 - Selection of accuracy metrics and their values taking into account the intended purpose of the system"
+      },
+      {
+        "order": 2,
+        "text": "Has the correspondence between each selected metric and the intended use of the system been documented in a traceable way?",
+        "article": "Article 15",
+        "category": "MG01 - Selection of accuracy metrics and their values taking into account the intended purpose of the system"
+      },
+      {
+        "order": 3,
+        "text": "Has it been validated that the chosen metrics correctly reflect the expected performance in the actual application contexts of the system?",
+        "article": "Article 15",
+        "category": "MG01 - Selection of accuracy metrics and their values taking into account the intended purpose of the system"
+      },
+      {
+        "order": 4,
+        "text": "Is the selection of accuracy metrics motivated by the mitigation of the risks identified in the risk plan and has such motivation been documented?",
+        "article": "Article 15",
+        "category": "MG02 - Establish accuracy metrics motivated by risk mitigation"
+      },
+      {
+        "order": 5,
+        "text": "Have tests been conducted to study the correlation between the risks detected and the selected metrics that specifically address them?",
+        "article": "Article 15",
+        "category": "MG02 - Establish accuracy metrics motivated by risk mitigation"
+      },
+      {
+        "order": 6,
+        "text": "Have you prioritized metrics that help control the risks with the greatest impact on health, safety, and fundamental rights?",
+        "article": "Article 15",
+        "category": "MG02 - Establish accuracy metrics motivated by risk mitigation"
+      },
+      {
+        "order": 7,
+        "text": "Has the impact of preprocessing the data been considered, making records of the preprocessing operations and their relationship with the results of the accuracy metrics?",
+        "article": "Article 15",
+        "category": "MG03 - Impact of preprocessing data"
+      },
+      {
+        "order": 8,
+        "text": "Has the impact of improving data quality on system accuracy been considered?",
+        "article": "Article 15",
+        "category": "MG03 - Impact of preprocessing data"
+      },
+      {
+        "order": 9,
+        "text": "Has the impact of feature engineering operations on system accuracy been documented and considered?",
+        "article": "Article 15",
+        "category": "MG03 - Impact of preprocessing data"
+      },
+      {
+        "order": 10,
+        "text": "Have you considered the impact of overlearning on accuracy and taken to prevent it?",
+        "article": "Article 15",
+        "category": "MG04 - Impact of overlearning on accuracy"
+      },
+      {
+        "order": 11,
+        "text": "Have cross-validation mechanisms or other methods been implemented to prevent overlearning?",
+        "article": "Article 15",
+        "category": "MG04 - Impact of overlearning on accuracy"
+      },
+      {
+        "order": 12,
+        "text": "Have key indicators been recorded to detect signs of overlearning during training and assessment?",
+        "article": "Article 15",
+        "category": "MG04 - Impact of overlearning on accuracy"
+      },
+      {
+        "order": 13,
+        "text": "Have criteria been defined for the choice of base models and their relevance in each phase of the life cycle?",
+        "article": "Article 15",
+        "category": "MG05 - Establish base models for systematic comparison"
+      },
+      {
+        "order": 14,
+        "text": "Is the accuracy of the model systematically compared during the life cycle with those base models associated with it?",
+        "article": "Article 15",
+        "category": "MG05 - Establish base models for systematic comparison"
+      },
+      {
+        "order": 15,
+        "text": "Does the AI result have a measure of the level of certainty or confidence of the results, which accompanies the outputs of the model?",
+        "article": "Article 15",
+        "category": "MG06 - Measure of certainty/confidence of results"
+      },
+      {
+        "order": 16,
+        "text": "Is the end-user provided with understandable information about the level of certainty in critical contexts?",
+        "article": "Article 15",
+        "category": "MG06 - Measure of certainty/confidence of results"
+      },
+      {
+        "order": 17,
+        "text": "Have confidence thresholds been defined that trigger specific alerts or recommendations, especially for those systems in which a malfunction of the models could lead to serious incidents?",
+        "article": "Article 15",
+        "category": "MG06 - Measure of certainty/confidence of results"
+      },
+      {
+        "order": 18,
+        "text": "Have unit, stress, and integration tests been performed, cumulative during the AI system development process, in relation to accuracy measurement?",
+        "article": "Article 15",
+        "category": "MG07 - Cumulative unit, stress, and integration tests"
+      },
+      {
+        "order": 19,
+        "text": "Are the results of these tests and the actions derived from the results of the tests documented on the evolution of the accuracy metrics?",
+        "article": "Article 15",
+        "category": "MG07 - Cumulative unit, stress, and integration tests"
+      },
+      {
+        "order": 20,
+        "text": "Have limit or failure conditions been defined for these tests where accuracy metrics are no longer acceptable?",
+        "article": "Article 15",
+        "category": "MG07 - Cumulative unit, stress, and integration tests"
+      },
+      {
+        "order": 21,
+        "text": "Is the information related to accuracy metrics updated and centralized, with access to all the actors involved?",
+        "article": "Article 15",
+        "category": "MG08 - Update and centralize information on accuracy metrics"
+      },
+      {
+        "order": 22,
+        "text": "Has a system of versioning or traceability of changes in the documentation related to the metrics been implemented?",
+        "article": "Article 15",
+        "category": "MG08 - Update and centralize information on accuracy metrics"
+      },
+      {
+        "order": 23,
+        "text": "Is there a formal procedure for communicating metric updates to relevant deployment managers?",
+        "article": "Article 15",
+        "category": "MG08 - Update and centralize information on accuracy metrics"
+      },
+      {
+        "order": 24,
+        "text": "Has the target function of the system been selected according to the intended purpose?",
+        "article": "Article 15",
+        "category": "MG09 - Establish the objective function of the system"
+      },
+      {
+        "order": 25,
+        "text": "Have the risks found in the risk analysis been taken into account and how the accuracy of the system influences them?",
+        "article": "Article 15",
+        "category": "MG09 - Establish the objective function of the system"
+      },
+      {
+        "order": 26,
+        "text": "Does the system have a mechanism (graphical interface, alarm, etc.) that allows the user to track the accuracy status, to detect potential malfunctions in line with human surveillance obligations?",
+        "article": "Article 15",
+        "category": "MG10 - Mechanism for user to track accuracy status"
+      },
+      {
+        "order": 27,
+        "text": "Is the operation of such a mechanism properly documented, with explanations of the metrics associated with the accuracy status that allow users to take appropriate readings of the results?",
+        "article": "Article 15",
+        "category": "MG10 - Mechanism for user to track accuracy status"
+      },
+      {
+        "order": 28,
+        "text": "Have users been trained to correctly interpret accuracy tracking information in line with the literacy obligations of relevant personnel in AI systems?",
+        "article": "Article 15",
+        "category": "MG10 - Mechanism for user to track accuracy status"
+      },
+      {
+        "order": 29,
+        "text": "Does the system have a mechanism that stores all the accuracies reported to the user in a history format?",
+        "article": "Article 15",
+        "category": "MG11 - Mechanism storing accuracy history"
+      },
+      {
+        "order": 30,
+        "text": "Can the historical accuracy be consulted by date, version of the model or context of use?",
+        "article": "Article 15",
+        "category": "MG11 - Mechanism storing accuracy history"
+      },
+      {
+        "order": 31,
+        "text": "Is the accuracy history used to improve the model or adjust the confidence threshold?",
+        "article": "Article 15",
+        "category": "MG11 - Mechanism storing accuracy history"
+      },
+      {
+        "order": 32,
+        "text": "During the process of selecting the precision and objective function metric(s), have statistical significance tests been carried out to justify the choices?",
+        "article": "Article 15",
+        "category": "MG12 - Statistical significance tests"
+      },
+      {
+        "order": 33,
+        "text": "Have the results of the significance tests been recorded and documented?",
+        "article": "Article 15",
+        "category": "MG12 - Statistical significance tests"
+      },
+      {
+        "order": 34,
+        "text": "Have minimum significance criteria been defined to accept a metric as valid?",
+        "article": "Article 15",
+        "category": "MG12 - Statistical significance tests"
+      },
+      {
+        "order": 35,
+        "text": "Have comparisons (benchmarks) been made during the design process considering the intended purpose and in relation to the model or family of models used?",
+        "article": "Article 15",
+        "category": "MG13 - Establish comparisons (benchmarks)"
+      },
+      {
+        "order": 36,
+        "text": "Is the use of benchmarks justified, prioritizing those publicly recognized in those cases where relevant?",
+        "article": "Article 15",
+        "category": "MG13 - Establish comparisons (benchmarks)"
+      },
+      {
+        "order": 37,
+        "text": "In the case of using benchmarks with respect to manual measurements or historical data, is the internal benchmark justified and documented, explaining its significance?",
+        "article": "Article 15",
+        "category": "MG13 - Establish comparisons (benchmarks)"
+      },
+      {
+        "order": 38,
+        "text": "Is it documented how the comparisons were made and the results of the comparisons?",
+        "article": "Article 15",
+        "category": "MG13 - Establish comparisons (benchmarks)"
+      },
+      {
+        "order": 39,
+        "text": "Do the system instructions for the user include all relevant accuracy levels and accuracy metrics?",
+        "article": "Article 15.3",
+        "category": "MG14 - Include accuracy levels and metrics in user instructions"
+      },
+      {
+        "order": 40,
+        "text": "Are the metrics presented in an accessible and understandable format for non-technical users?",
+        "article": "Article 15.3",
+        "category": "MG14 - Include accuracy levels and metrics in user instructions"
+      }
+    ]
+  },
+  {
+    "name": "Cybersecurity_Checklist",
+    "slug": "cybersecurity-checklist",
+    "description": "Cybersecurity checklist by AESIA",
+    "licensing": "Open_Source",
+    "completion_status": "full",
+    "dimension_slug": "technical-robustness-safety",
+    "controls_subdim_slugs": [],
+    "metadata": {
+      "provider": "AESIA",
+      "link": "https://aesia.digital.gob.es/en/guides",
+      "project_maturity": "",
+      "control_topic": "Cybersecurity",
+      "target_legal_requirements": ""
+    },
+    "questions": [
+      {
+        "order": 1,
+        "text": "Have cybersecurity risks been globally assessed based on current and emerging threats?",
+        "article": "Article 15.1",
+        "category": "Appropiate levels of cybersecurity and consistency (MG01)"
+      },
+      {
+        "order": 2,
+        "text": "Are there procedures in place to maintain consistency of security configurations over time?",
+        "article": "Article 15.1",
+        "category": "Appropiate levels of cybersecurity and consistency (MG01)"
+      },
+      {
+        "order": 3,
+        "text": "Does the system design incorporate mechanisms to detect and respond to unauthorized or anomalous uses?",
+        "article": "Article 15.5",
+        "category": "Systems resistant to alterations of use (MG02)"
+      },
+      {
+        "order": 4,
+        "text": "Are integrity controls in place to prevent undue modification of system configuration or behavior?",
+        "article": "Article 15.5",
+        "category": "Systems resistant to alterations of use (MG02)"
+      },
+      {
+        "order": 5,
+        "text": "Have protocols and technical measures been established to detect, report and remedy anomalies or inconsistencies in the dataset?",
+        "article": "Article 15.5",
+        "category": "Prevent and control dataset manipulation (MG03)"
+      },
+      {
+        "order": 6,
+        "text": "Have the sources of data collection been mapped, what security controls are in place and who is responsible for monitoring this integrity?",
+        "article": "Article 15.5",
+        "category": "Prevent and control dataset manipulation (MG03)"
+      },
+      {
+        "order": 7,
+        "text": "Have the risks of adversarial attacks been identified and assessed at each stage of the system's development?",
+        "article": "Article 15.5",
+        "category": "Protection against adversarial attacks (MG04)"
+      },
+      {
+        "order": 8,
+        "text": "Does the system incorporate specific detection and mitigation techniques to neutralize potential adversarial attacks in production?",
+        "article": "Article 15.5",
+        "category": "Protection against adversarial attacks (MG04)"
+      },
+      {
+        "order": 9,
+        "text": "Are adversarial attack exercises conducted on a regular basis to validate resilience to such attacks?",
+        "article": "Article 15.5",
+        "category": "Protection against adversarial attacks (MG04)"
+      },
+      {
+        "order": 10,
+        "text": "Has it been assessed whether the intelligent system itself may have specific cybersecurity risks?",
+        "article": "Article 15.5",
+        "category": "Protection against system defects (MG05)"
+      },
+      {
+        "order": 11,
+        "text": "Have obfuscation, encryption, or component separation techniques been adopted to make it difficult to extract or copy the model?",
+        "article": "Article 15.5",
+        "category": "Protection against inversion attacks and/or model theft (MG06)"
+      },
+      {
+        "order": 12,
+        "text": "Are robust access controls and authentication in place to prevent unauthorized access to the model?",
+        "article": "Article 15.5",
+        "category": "Protection against inversion attacks and/or model theft (MG06)"
+      },
+      {
+        "order": 13,
+        "text": "Have response protocols been established for specific incidents of theft or manipulation of the model?",
+        "article": "Article 15.5",
+        "category": "Protection against inversion attacks and/or model theft (MG06)"
+      },
+      {
+        "order": 14,
+        "text": "Are there session monitoring and control systems in place to avoid reverse engineering the model through requests?",
+        "article": "Article 15.5",
+        "category": "Protection against inversion attacks and/or model theft (MG06)"
+      },
+      {
+        "order": 15,
+        "text": "Does the system incorporate mechanisms that allow detecting attempts to evade data entry or manipulation, such as detection of data outside the domain?",
+        "article": "Article 15.5",
+        "category": "Protection against evasion attacks (MG07)"
+      },
+      {
+        "order": 16,
+        "text": "Have pre-processing or similar techniques been implemented to prevent these types of attacks from occurring?",
+        "article": "Article 15.5",
+        "category": "Protection against evasion attacks (MG07)"
+      },
+      {
+        "order": 17,
+        "text": "Have specific controls been developed and documented to prevent jailbreaking, such as a firewall for requests to systems?",
+        "article": "Article 15.5",
+        "category": "Protection against jailbreak attacks (MG08)"
+      },
+      {
+        "order": 18,
+        "text": "Does the system have verification mechanisms that block attempts to bypass the restrictions or return the content of the system prompt?",
+        "article": "Article 15.5",
+        "category": "Protection against jailbreak attacks (MG08)"
+      },
+      {
+        "order": 19,
+        "text": "Has the effectiveness of these measures been tested through drills or red team exercises?",
+        "article": "Article 15.5",
+        "category": "Protection against jailbreak attacks (MG08)"
+      },
+      {
+        "order": 20,
+        "text": "Have vulnerabilities related to the possibility of inferring data participation in the training set been assessed?",
+        "article": "Article 15.5",
+        "category": "Protection against membership inference attacks (MG09)"
+      },
+      {
+        "order": 21,
+        "text": "Have privacy protection techniques, such as the use of differential privacy, been implemented to minimize these risks?",
+        "article": "Article 15.5",
+        "category": "Protection against membership inference attacks (MG09)"
+      },
+      {
+        "order": 22,
+        "text": "Have all the functions or tools that the intelligent system activates that could be useful to an attacker been mapped? Example: Python3 console, process management, online searches, etc.",
+        "article": "Article 15.5",
+        "category": "Protection against side-channel attack (MG10)"
+      },
+      {
+        "order": 23,
+        "text": "Does the system depend on libraries not controlled by the development team?",
+        "article": "Article 15.5",
+        "category": "Protection against side-channel attack (MG10)"
+      },
+      {
+        "order": 24,
+        "text": "In the work of human supervision or post-market surveillance, can the intelligent system be affected by some type of action related to social engineering?",
+        "article": "Article 15.5",
+        "category": "Protection against social engineering attacks (MG11)"
+      },
+      {
+        "order": 25,
+        "text": "How will secure and reliable communication between customers and those responsible for surveillance be ensured?",
+        "article": "Article 15.5",
+        "category": "Protection against social engineering attacks (MG11)"
+      }
+    ]
+  },
+  {
+    "name": "Data and Data Governance Evaluation Tool - Article 10 AI Act",
+    "slug": "data-and-data-governance-evaluation-tool---article-10-ai-act",
+    "description": "Data and Data Governance checklist by EUSAiR (Article 10 AI Act)",
+    "licensing": "Open_Source",
+    "completion_status": "full",
+    "dimension_slug": "privacy-data-governance",
+    "controls_subdim_slugs": [
+      "purpose-limitation",
+      "lineage-tracking"
+    ],
+    "metadata": {
+      "provider": "EUSAiR",
+      "link": "https://eusair-project.eu/",
+      "project_maturity": "",
+      "control_topic": "Data and Data Governance",
+      "target_legal_requirements": ""
+    },
+    "questions": [
+      {
+        "order": 1,
+        "text": "What is the source of the dataset? (e.g. Proprietary vs open source, primary vs secondary source)",
+        "article": "Article 10.2.b",
+        "category": "Data Source"
+      },
+      {
+        "order": 2,
+        "text": "What are the legal ramifications of the dataset source?",
+        "article": "Article 10.2.b",
+        "category": "Data Source"
+      },
+      {
+        "order": 3,
+        "text": "What is the data repository? (public repository where the dataset can be found)",
+        "article": "Article 10.2.b",
+        "category": "Data Source"
+      },
+      {
+        "order": 4,
+        "text": "Who owns the dataset?",
+        "article": "Article 10.2.b",
+        "category": "Data Source"
+      },
+      {
+        "order": 5,
+        "text": "Which institutes/organisations are the dataset owners affiliated with? If so, are there any data (sharing) agreements that are or should be consolidated?",
+        "article": "Article 10.2.b",
+        "category": "Data Source"
+      },
+      {
+        "order": 6,
+        "text": "Who has access to the data/ the datasets? (internally & externally)",
+        "article": "Article 10.2.b",
+        "category": "Data Source"
+      },
+      {
+        "order": 7,
+        "text": "Was the dataset split? If so, how?",
+        "article": "Article 10.2.b",
+        "category": "Data Source"
+      },
+      {
+        "order": 8,
+        "text": "Which dataset did you use for validation?",
+        "article": "Article 10.2.b",
+        "category": "Data Source"
+      },
+      {
+        "order": 9,
+        "text": "What is the purpose this data will be used for (use cases)?",
+        "article": "Annex IV.1.a",
+        "category": "Purpose of Data collection"
+      },
+      {
+        "order": 10,
+        "text": "Is the volume of data collected proportional to the scope of the intended purpose?",
+        "article": "Annex IV.1.a",
+        "category": "Purpose of Data collection"
+      },
+      {
+        "order": 11,
+        "text": "What are suitable use cases for this dataset?",
+        "article": "Annex IV.1.a",
+        "category": "Purpose of Data collection"
+      },
+      {
+        "order": 12,
+        "text": "What are unsuitable use-cases for this dataset?",
+        "article": "Annex IV.1.a",
+        "category": "Purpose of Data collection"
+      },
+      {
+        "order": 13,
+        "text": "What form is this data in? (e.g. structured, unstructured, semi-structured, etc)",
+        "article": "Article 10.3 & 10.4",
+        "category": "Data Type"
+      },
+      {
+        "order": 14,
+        "text": "What are the data types present in the dataset? (e.g. image, audio, text, video, etc.)",
+        "article": "Article 10.3 & 10.4",
+        "category": "Data Type"
+      },
+      {
+        "order": 15,
+        "text": "Does the dataset contain any special categories of personal data under GDPR? If yes, what kind?",
+        "article": "Article 10.3 & 10.4",
+        "category": "Data Type"
+      },
+      {
+        "order": 16,
+        "text": "Is the dataset free of errors?",
+        "article": "Article 10.2.h & 10.3",
+        "category": "Free of Errors and Complete"
+      },
+      {
+        "order": 17,
+        "text": "Who has taken responsibility to evaluate and check the dataset? What methodologies were used?",
+        "article": "Article 10.2.h & 10.3",
+        "category": "Free of Errors and Complete"
+      },
+      {
+        "order": 18,
+        "text": "Are there any inconsistencies in the dataset?",
+        "article": "Article 10.2.h & 10.3",
+        "category": "Free of Errors and Complete"
+      },
+      {
+        "order": 19,
+        "text": "Are there any duplicate entries?",
+        "article": "Article 10.2.h & 10.3",
+        "category": "Free of Errors and Complete"
+      },
+      {
+        "order": 20,
+        "text": "Are there any missing values?",
+        "article": "Article 10.2.h & 10.3",
+        "category": "Free of Errors and Complete"
+      },
+      {
+        "order": 21,
+        "text": "Are there any significant outliers or anomalies?",
+        "article": "Article 10.2.h & 10.3",
+        "category": "Free of Errors and Complete"
+      },
+      {
+        "order": 22,
+        "text": "Is there version consistency?",
+        "article": "Article 10.2.h & 10.3",
+        "category": "Free of Errors and Complete"
+      },
+      {
+        "order": 23,
+        "text": "Are the units of measurement consistent throughout the dataset?",
+        "article": "Article 10.2.h & 10.3",
+        "category": "Free of Errors and Complete"
+      },
+      {
+        "order": 24,
+        "text": "Are the data formats consistent throughout the dataset?",
+        "article": "Article 10.2.h & 10.3",
+        "category": "Free of Errors and Complete"
+      },
+      {
+        "order": 25,
+        "text": "What demographic information and domain is the dataset aiming to represent?",
+        "article": "Article 10.2.f, 10.3 & 10.4",
+        "category": "Sufficiently Representative"
+      },
+      {
+        "order": 26,
+        "text": "What is the minimum sample size to represent the population sufficiently and significantly?",
+        "article": "Article 10.2.f, 10.3 & 10.4",
+        "category": "Sufficiently Representative"
+      },
+      {
+        "order": 27,
+        "text": "Is the dataset sufficiently large to capture the variability and complexity of the underlying phenomena? Is the dataset representative of the target population or domain?",
+        "article": "Article 10.2.f, 10.3 & 10.4",
+        "category": "Sufficiently Representative"
+      },
+      {
+        "order": 28,
+        "text": "Are there enough samples from minority or underrepresented groups to avoid biases and ensure fairness?",
+        "article": "Article 10.2.f, 10.3 & 10.4",
+        "category": "Sufficiently Representative"
+      },
+      {
+        "order": 29,
+        "text": "Does the dataset reflect temporal changes, and are those changes relevant?",
+        "article": "Article 10.2.f, 10.3 & 10.4",
+        "category": "Sufficiently Representative"
+      },
+      {
+        "order": 30,
+        "text": "Is the dataset being updated to reflect evolving trends and changes?",
+        "article": "Article 10.2.f, 10.3 & 10.4",
+        "category": "Sufficiently Representative"
+      },
+      {
+        "order": 31,
+        "text": "Has the dataset been checked for harmful biases?",
+        "article": "Article 10.2.f, 10.3 & 10.4",
+        "category": "Sufficiently Representative"
+      },
+      {
+        "order": 32,
+        "text": "Is the dataset sufficiently representative in view of the intended purpose?",
+        "article": "Article 10.2.f, 10.3 & 10.4",
+        "category": "Sufficiently Representative"
+      },
+      {
+        "order": 33,
+        "text": "Does the dataset cover the full scope of scenarios the AI system will encounter?",
+        "article": "Article 10.2.d",
+        "category": "Suitability"
+      },
+      {
+        "order": 34,
+        "text": "If the dataset contained personal data, how was the data features anonymised or pseudonymised?",
+        "article": "Article 10.3 & 10.4",
+        "category": "Data Type"
+      },
+      {
+        "order": 35,
+        "text": "How was this data collected? What collection methods were used?",
+        "article": "Article 10.2.b",
+        "category": "Data Collection"
+      },
+      {
+        "order": 36,
+        "text": "What were the sampling methods used?",
+        "article": "Article 10.2.b",
+        "category": "Data Collection"
+      },
+      {
+        "order": 37,
+        "text": "Could any of the sampling methods biased towards a particular group? If yes, is this bias necessary to fulfil the intended purpose?",
+        "article": "Article 10.2.b",
+        "category": "Data Collection"
+      },
+      {
+        "order": 38,
+        "text": "What are specific and appropriate measures that address the identified bias?",
+        "article": "Article 10.2.b",
+        "category": "Data Collection"
+      },
+      {
+        "order": 39,
+        "text": "When was this data collected?",
+        "article": "Article 10.2.b",
+        "category": "Data Collection"
+      },
+      {
+        "order": 40,
+        "text": "What were the general criteria for including the selected data features/data points?",
+        "article": "Article 10.2.b",
+        "category": "Data Collection"
+      },
+      {
+        "order": 41,
+        "text": "What data features/data points were excluded? Based on what criteria?",
+        "article": "Article 10.2.b",
+        "category": "Data Collection"
+      },
+      {
+        "order": 42,
+        "text": "Has the dataset been checked for the individual data features? Are those correct and complete?",
+        "article": "Article 10.2.b",
+        "category": "Data Collection"
+      },
+      {
+        "order": 43,
+        "text": "Volume: What is the volume of the data?",
+        "article": "Article 10.2.e & 10.3",
+        "category": "Data Characteristics"
+      },
+      {
+        "order": 44,
+        "text": "What volume of data is necessary for the development of the AI system, keeping in mind the data minimisation principle?",
+        "article": "Article 10.2.e & 10.3",
+        "category": "Data Characteristics"
+      },
+      {
+        "order": 45,
+        "text": "Velocity: What is the speed at which the data arrives?",
+        "article": "Article 10.2.e & 10.3",
+        "category": "Data Characteristics"
+      },
+      {
+        "order": 46,
+        "text": "Variety: How varied are the data types and sources?",
+        "article": "Article 10.2.e & 10.3",
+        "category": "Data Characteristics"
+      },
+      {
+        "order": 47,
+        "text": "What is the data sample size?",
+        "article": "Article 10.2.e & 10.3",
+        "category": "Data Characteristics"
+      },
+      {
+        "order": 48,
+        "text": "Were (parts of) the dataset(s) unavailable?",
+        "article": "Article 10.2.e & 10.3",
+        "category": "Data Characteristics"
+      },
+      {
+        "order": 49,
+        "text": "What data processing techniques were used? (e.g. cleaning, normalisation, standardization)",
+        "article": "Article 10.2.c, 10.2.f & 10.2.g",
+        "category": "Data Processing"
+      },
+      {
+        "order": 50,
+        "text": "Was data labelling used? Was the labelling manual or automatic? What are the ground truths attached to each label?",
+        "article": "Article 10.2.c, 10.2.f & 10.2.g",
+        "category": "Data Processing"
+      },
+      {
+        "order": 51,
+        "text": "Are the data processing techniques appropriate, given the intended purposes? If no, which data processing elements are inappropriate and why?",
+        "article": "Article 10.2.c, 10.2.f & 10.2.g",
+        "category": "Data Processing"
+      },
+      {
+        "order": 52,
+        "text": "What data processing tools were used?",
+        "article": "Article 10.2.c, 10.2.f & 10.2.g",
+        "category": "Data Processing"
+      },
+      {
+        "order": 53,
+        "text": "Are there any inconsistencies in the data processing that might affect the completeness of the dataset?",
+        "article": "Article 10.2.c, 10.2.f & 10.2.g",
+        "category": "Data Processing"
+      },
+      {
+        "order": 54,
+        "text": "Have any possible biases been identified at the level of data preparation processing operations that may impact the datasets?",
+        "article": "Article 10.2.c, 10.2.f & 10.2.g",
+        "category": "Data Processing"
+      },
+      {
+        "order": 55,
+        "text": "What are specific and appropriate measures that address the identified bias?",
+        "article": "Article 10.2.c, 10.2.f & 10.2.g",
+        "category": "Data Processing"
+      },
+      {
+        "order": 56,
+        "text": "What are the measures of central tendency? Do these measures accurately represent the dataset?",
+        "article": "Article 10.3",
+        "category": "Statistical properties"
+      },
+      {
+        "order": 57,
+        "text": "What is the variability of the dataset around the central tendency? Are there any outliers or extreme values present?",
+        "article": "Article 10.3",
+        "category": "Statistical properties"
+      },
+      {
+        "order": 58,
+        "text": "Are there significant differences in statistical properties within the dataset?",
+        "article": "Article 10.3",
+        "category": "Statistical properties"
+      },
+      {
+        "order": 59,
+        "text": "What are the assumptions that are formulated with respect to the information the dataset is supposed to represent and measure? Are these assumptions appropriate, reasonable and fair in light of the AI system's intended purpose?",
+        "article": "Article 10.2.d and 10.3",
+        "category": "Relevance and suitability"
+      },
+      {
+        "order": 60,
+        "text": "What is the rationale behind these assumptions if you look at the people that the system is going to be used for? (ANNEX IV 2(b))",
+        "article": "Article 10.2.d and 10.3",
+        "category": "Relevance and suitability"
+      },
+      {
+        "order": 61,
+        "text": "Do the relevant formulated assumptions target a specific vulnerable group? And are those formulations likely to harm that group? If so, how can the formulations be adjusted?",
+        "article": "Article 10.2.d and 10.3",
+        "category": "Relevance and suitability"
+      },
+      {
+        "order": 62,
+        "text": "Will the dataset provide meaningful insights or outcomes? If so, what are they?",
+        "article": "Article 10.2.d and 10.3",
+        "category": "Relevance and suitability"
+      },
+      {
+        "order": 63,
+        "text": "Are there any outlier cases that need to be included in the dataset?",
+        "article": "Article 10.2.d and 10.3",
+        "category": "Relevance and suitability"
+      },
+      {
+        "order": 64,
+        "text": "Have any possible biases that are likely to affect the health of persons been identified as a result of this examination?",
+        "article": "Article 10.2.f & 10.3",
+        "category": "Data Fairness"
+      },
+      {
+        "order": 65,
+        "text": "Have any possible biases that are likely to affect the safety of persons been identified as a result of this examination?",
+        "article": "Article 10.2.f & 10.3",
+        "category": "Data Fairness"
+      },
+      {
+        "order": 66,
+        "text": "What is the scale of the data feature?",
+        "article": "Article 10.2.f, 10.2.h & 10.3",
+        "category": "Scale"
+      },
+      {
+        "order": 67,
+        "text": "Can the scale introduce errors/bias/unfairness/unsafety into the system? If so, how?",
+        "article": "Article 10.2.f, 10.2.h & 10.3",
+        "category": "Scale"
+      },
+      {
+        "order": 68,
+        "text": "What is the volume of the data feature?",
+        "article": "Article 10.2.f, 10.2.h & 10.3",
+        "category": "Volume"
+      },
+      {
+        "order": 69,
+        "text": "Can the volume introduce errors/bias/unfairness/unsafety into the system? If so, how?",
+        "article": "Article 10.2.f, 10.2.h & 10.3",
+        "category": "Volume"
+      },
+      {
+        "order": 70,
+        "text": "What is the distribution of the data feature? Is the distribution representative in view of the intended purpose?",
+        "article": "Article 10.2.f & 10.3",
+        "category": "Distribution"
+      },
+      {
+        "order": 71,
+        "text": "Is the information provided by the data feature necessary and proportionate for the intended purpose?",
+        "article": "Article 10.2.d and 10.3",
+        "category": "Relevance"
+      },
+      {
+        "order": 72,
+        "text": "What is the information in the data feature supposed to measure and represent?",
+        "article": "Article 10.2.d and 10.3",
+        "category": "Relevance"
+      },
+      {
+        "order": 73,
+        "text": "What are the assumptions that are formulated with respect to the information the data feature is supposed to represent and measure?",
+        "article": "Article 10.2.d and 10.3",
+        "category": "Relevance"
+      },
+      {
+        "order": 74,
+        "text": "Where do these assumptions come from? Are there any historical, social, or cultural biases that underpin these assumptions?",
+        "article": "Article 10.2.d and 10.3",
+        "category": "Relevance"
+      },
+      {
+        "order": 75,
+        "text": "Are there any missing elements re. the data feature?",
+        "article": "Article 10.2.f, 10.2.h & 10.3",
+        "category": "Free of errors"
+      },
+      {
+        "order": 76,
+        "text": "Does the data feature, considering its scale, provide a complete view/ representation of the group(s) it aims to represent?",
+        "article": "Article 10.2.b, 10.2.h & 10.3",
+        "category": "Complete"
+      },
+      {
+        "order": 77,
+        "text": "Does the data feature, considering its volume provide a complete view/representation of the group(s) it aims to represent?",
+        "article": "Article 10.2.b, 10.2.h & 10.3",
+        "category": "Complete"
+      },
+      {
+        "order": 78,
+        "text": "Is the feature a characteristic that is relevant for the geographical setting of the system",
+        "article": "Article 10.2.b, 10.2.h & 10.3",
+        "category": "Complete"
+      },
+      {
+        "order": 79,
+        "text": "In light of the system's intended purpose, are there geographical elements that should be taken into account re. the data feature?",
+        "article": "Article 10.4",
+        "category": "Geographical elements"
+      },
+      {
+        "order": 80,
+        "text": "In light of the system's intended purpose, are there contextual elements that should be taken into account re. the data feature?",
+        "article": "Article 10.4",
+        "category": "Contextual elements"
+      },
+      {
+        "order": 81,
+        "text": "In light of the system's intended purpose, are there behavioral elements that should be taken into account re. the data feature?",
+        "article": "Article 10.4",
+        "category": "Behavioural elements"
+      },
+      {
+        "order": 82,
+        "text": "In light of the system's intended purpose, are there functional elements that should be taken into account re. the data feature?",
+        "article": "Article 10.4",
+        "category": "Functional elements"
+      },
+      {
+        "order": 83,
+        "text": "Are there any interactions with other features that could collectively introduce or amplify any biases or unfair outcomes that may not be apparent when considering a data feature in isolation?",
+        "article": "Article 10.2.f & 10.3",
+        "category": "Data Feature Interaction"
+      },
+      {
+        "order": 84,
+        "text": "Within the context of the data point, is the information provided by the data feature necessary and proportionate for the intended purposes? Could interactions with other features negate this?",
+        "article": "Article 10.2.f & 10.3",
+        "category": "Data Feature Interaction"
+      },
+      {
+        "order": 85,
+        "text": "Can the combination of multiple sensitive data features increase the discrimination potential?",
+        "article": "Article 10.2.f & 10.3",
+        "category": "Data Feature Interaction"
+      },
+      {
+        "order": 86,
+        "text": "Is the data variable/feature considered personal data under the GDPR?",
+        "article": "Article 10.5",
+        "category": "Type of data feature"
+      },
+      {
+        "order": 87,
+        "text": "Is the data variable/feature considered a special category of personal data under the GDPR?",
+        "article": "Article 10.5",
+        "category": "Type of data feature"
+      },
+      {
+        "order": 88,
+        "text": "Is the processing of the special category personal data variable/feature strictly necessary for bias detection / correction? Could other data (including synthetic / anonymised) fulfil it?",
+        "article": "Article 10.5",
+        "category": "Type of data feature"
+      },
+      {
+        "order": 89,
+        "text": "Do the processing activity records adequately document and reflect the reasons for processing this data feature, including why the alternatives are insufficient?",
+        "article": "Article 10.5",
+        "category": "Type of data feature"
+      },
+      {
+        "order": 90,
+        "text": "Are there technical limitations on reuse, and privacy‑preserving measures (pseudonymisation etc.) in place? For example, has personal data been non-reversibly anonymized?",
+        "article": "Article 10.5",
+        "category": "Type of data feature"
+      },
+      {
+        "order": 91,
+        "text": "Are access controls, documentation of access, and confidentiality obligations in place for this special category personal data feature?",
+        "article": "Article 10.5",
+        "category": "Type of data feature"
+      },
+      {
+        "order": 92,
+        "text": "Is there a deletion or retention plan for this special category personal data feature, to ensure it is removed once bias has been corrected or the retention period has expired?",
+        "article": "Article 10.5",
+        "category": "Type of data feature"
+      },
+      {
+        "order": 93,
+        "text": "Are there safeguards to ensure the data will not be transmitted or otherwise accessed by unauthorised parties?",
+        "article": "Article 10.5",
+        "category": "Type of data feature"
+      },
+      {
+        "order": 94,
+        "text": "Is the data variable/feature prohibited ground for discrimination (Art. 21 European Charter of Fundamental Rights)?",
+        "article": "Article 10.5",
+        "category": "Type of data feature"
+      },
+      {
+        "order": 95,
+        "text": "Could the data variable/feature infringe upon other equality, non-discrimination, fair treatment rights?",
+        "article": "Article 10.5",
+        "category": "Type of data feature"
+      },
+      {
+        "order": 96,
+        "text": "Could the data variable/feature be a proxy for a prohibited ground of discrimination, or lead to infringement of other equality, non-discrimination, and fair treatment rights? (Art. 21 European Charter of Fundamental Rights)",
+        "article": "Article 10.5",
+        "category": "Type of data feature"
+      }
+    ]
+  },
+  {
+    "name": "Data Dictionary (accompanying the Data and Data Governance Evaluation Tool)",
+    "slug": "data-dictionary-accompanying-the-data-and-data-governance-evaluation-tool",
+    "description": "Data dictionary checklist by EUSAiR (companion to the Data Governance Evaluation Tool)",
+    "licensing": "Open_Source",
+    "completion_status": "full",
+    "dimension_slug": "privacy-data-governance",
+    "controls_subdim_slugs": [
+      "metadata-versioning",
+      "lineage-tracking"
+    ],
+    "metadata": {
+      "provider": "EUSAiR",
+      "link": "https://eusair-project.eu/",
+      "project_maturity": "",
+      "control_topic": "Data Dictionary (accompanying the Data and Data Governance Evaluation Tool)",
+      "target_legal_requirements": ""
+    },
+    "questions": [
+      {
+        "order": 1,
+        "text": "Source of the Dataset and Data Repository",
+        "article": null,
+        "category": "Data Source Information"
+      },
+      {
+        "order": 2,
+        "text": "Data Owners",
+        "article": null,
+        "category": "Data Source Information"
+      },
+      {
+        "order": 3,
+        "text": "Contact details",
+        "article": null,
+        "category": "Data Source Information"
+      },
+      {
+        "order": 4,
+        "text": "Affiliated Institutions",
+        "article": null,
+        "category": "Data Source Information"
+      },
+      {
+        "order": 5,
+        "text": "Accessible to (who can access the dataset?)",
+        "article": null,
+        "category": "Data Source Information"
+      },
+      {
+        "order": 6,
+        "text": "Data sharing agreements",
+        "article": null,
+        "category": "Data Source Information"
+      },
+      {
+        "order": 7,
+        "text": "Privacy compliance",
+        "article": null,
+        "category": "Data Source Information"
+      },
+      {
+        "order": 8,
+        "text": "Purpose of data collection",
+        "article": null,
+        "category": "Purpose of data collection"
+      },
+      {
+        "order": 9,
+        "text": "Suitable use cases",
+        "article": null,
+        "category": "Purpose of data collection"
+      },
+      {
+        "order": 10,
+        "text": "Unsuitable use cases",
+        "article": null,
+        "category": "Purpose of data collection"
+      },
+      {
+        "order": 11,
+        "text": "Volume",
+        "article": null,
+        "category": "Dataset Characteristics"
+      },
+      {
+        "order": 12,
+        "text": "Velocity",
+        "article": null,
+        "category": "Dataset Characteristics"
+      },
+      {
+        "order": 13,
+        "text": "Variety",
+        "article": null,
+        "category": "Dataset Characteristics"
+      },
+      {
+        "order": 14,
+        "text": "Data Sample Size",
+        "article": null,
+        "category": "Dataset Characteristics"
+      },
+      {
+        "order": 15,
+        "text": "List of data features",
+        "article": null,
+        "category": "Dataset Characteristics"
+      },
+      {
+        "order": 16,
+        "text": "Unavailable parts of data set/ Missing data",
+        "article": null,
+        "category": "Dataset Characteristics"
+      },
+      {
+        "order": 17,
+        "text": "Transformation of raw data",
+        "article": null,
+        "category": "Dataset Characteristics"
+      },
+      {
+        "order": 18,
+        "text": "Data form (structured, unstructured, etc)",
+        "article": null,
+        "category": "Data Type"
+      },
+      {
+        "order": 19,
+        "text": "Data type (audio, video, text, etc)",
+        "article": null,
+        "category": "Data Type"
+      },
+      {
+        "order": 20,
+        "text": "Special Categories under GDPR",
+        "article": null,
+        "category": "Data Type"
+      },
+      {
+        "order": 21,
+        "text": "Gaps / Errors",
+        "article": null,
+        "category": "Gaps / Errors"
+      },
+      {
+        "order": 22,
+        "text": "Inconsistencies",
+        "article": null,
+        "category": "Gaps / Errors"
+      },
+      {
+        "order": 23,
+        "text": "Duplicate entries",
+        "article": null,
+        "category": "Gaps / Errors"
+      },
+      {
+        "order": 24,
+        "text": "Outliers and anomalies",
+        "article": null,
+        "category": "Gaps / Errors"
+      },
+      {
+        "order": 25,
+        "text": "Version consistency",
+        "article": null,
+        "category": "Gaps / Errors"
+      },
+      {
+        "order": 26,
+        "text": "Measurement consistency",
+        "article": null,
+        "category": "Gaps / Errors"
+      },
+      {
+        "order": 27,
+        "text": "Data format consistency",
+        "article": null,
+        "category": "Gaps / Errors"
+      },
+      {
+        "order": 28,
+        "text": "Missing values",
+        "article": null,
+        "category": "Gaps / Errors"
+      },
+      {
+        "order": 29,
+        "text": "Data Collection Date",
+        "article": null,
+        "category": "Data Collection"
+      },
+      {
+        "order": 30,
+        "text": "Data collection methods",
+        "article": null,
+        "category": "Data Collection"
+      },
+      {
+        "order": 31,
+        "text": "Sampling Methods",
+        "article": null,
+        "category": "Data Collection"
+      },
+      {
+        "order": 32,
+        "text": "Sampling Bias",
+        "article": null,
+        "category": "Data Collection"
+      },
+      {
+        "order": 33,
+        "text": "Inclusion criteria",
+        "article": null,
+        "category": "Data Collection"
+      },
+      {
+        "order": 34,
+        "text": "Exclusion criteria",
+        "article": null,
+        "category": "Data Collection"
+      },
+      {
+        "order": 35,
+        "text": "Demographic Representation",
+        "article": null,
+        "category": "Sufficiently Representative"
+      },
+      {
+        "order": 36,
+        "text": "Minimum sample size for representation",
+        "article": null,
+        "category": "Sufficiently Representative"
+      },
+      {
+        "order": 37,
+        "text": "Dataset sufficiently large?",
+        "article": null,
+        "category": "Sufficiently Representative"
+      },
+      {
+        "order": 38,
+        "text": "Samples from minority groups",
+        "article": null,
+        "category": "Sufficiently Representative"
+      },
+      {
+        "order": 39,
+        "text": "Temporal Changes",
+        "article": null,
+        "category": "Sufficiently Representative"
+      },
+      {
+        "order": 40,
+        "text": "Evolving trends",
+        "article": null,
+        "category": "Sufficiently Representative"
+      },
+      {
+        "order": 41,
+        "text": "Techniques used",
+        "article": null,
+        "category": "Data Processing"
+      },
+      {
+        "order": 42,
+        "text": "Data Labelling",
+        "article": null,
+        "category": "Data Processing"
+      },
+      {
+        "order": 43,
+        "text": "Appropriateness of processing techniques",
+        "article": null,
+        "category": "Data Processing"
+      },
+      {
+        "order": 44,
+        "text": "Data processing tools",
+        "article": null,
+        "category": "Data Processing"
+      },
+      {
+        "order": 45,
+        "text": "Data processing aligned with stated purpose?",
+        "article": null,
+        "category": "Data Processing"
+      },
+      {
+        "order": 46,
+        "text": "Inconsistencies in data processing",
+        "article": null,
+        "category": "Data Processing"
+      },
+      {
+        "order": 47,
+        "text": "Measures of central tendency",
+        "article": null,
+        "category": "Statistical Properties"
+      },
+      {
+        "order": 48,
+        "text": "Variability around central tendency",
+        "article": null,
+        "category": "Statistical Properties"
+      },
+      {
+        "order": 49,
+        "text": "Outliers",
+        "article": null,
+        "category": "Statistical Properties"
+      },
+      {
+        "order": 50,
+        "text": "Differences in statistical properties",
+        "article": null,
+        "category": "Statistical Properties"
+      },
+      {
+        "order": 51,
+        "text": "Assumptions Represented",
+        "article": null,
+        "category": "Relevance"
+      },
+      {
+        "order": 52,
+        "text": "Assumptions: fair, reasonable & appropriate?",
+        "article": null,
+        "category": "Relevance"
+      },
+      {
+        "order": 53,
+        "text": "Rationale Behind Assumptions",
+        "article": null,
+        "category": "Relevance"
+      },
+      {
+        "order": 54,
+        "text": "Assumptions about vulnerable groups",
+        "article": null,
+        "category": "Relevance"
+      },
+      {
+        "order": 55,
+        "text": "Full scope of scenarios",
+        "article": null,
+        "category": "Relevance"
+      },
+      {
+        "order": 56,
+        "text": "Meaningful insights",
+        "article": null,
+        "category": "Relevance"
+      },
+      {
+        "order": 57,
+        "text": "Outliers considered",
+        "article": null,
+        "category": "Relevance"
+      },
+      {
+        "order": 58,
+        "text": "Data disproportionately affects certain groups?",
+        "article": null,
+        "category": "Data Fairness"
+      },
+      {
+        "order": 59,
+        "text": "Protections against discrimination & bias",
+        "article": null,
+        "category": "Data Fairness"
+      },
+      {
+        "order": 60,
+        "text": "Guiding ethical principles",
+        "article": null,
+        "category": "Data Fairness"
+      },
+      {
+        "order": 61,
+        "text": "Inappropriate data elements",
+        "article": null,
+        "category": "Data Fairness"
+      },
+      {
+        "order": 62,
+        "text": "Steps to rectify inappropriate data elements",
+        "article": null,
+        "category": "Data Fairness"
+      },
+      {
+        "order": 63,
+        "text": "Fairness of dataset",
+        "article": null,
+        "category": "Data Fairness"
+      },
+      {
+        "order": 64,
+        "text": "Steps to rectify unfairness of dataset",
+        "article": null,
+        "category": "Data Fairness"
+      },
+      {
+        "order": 65,
+        "text": "Data type (Personal data must be non-reversibly anonymized)",
+        "article": null,
+        "category": "Data Features Dictionary - Information per data feature"
+      },
+      {
+        "order": 66,
+        "text": "Scale (value?)",
+        "article": null,
+        "category": "Data Features Dictionary - Information per data feature"
+      },
+      {
+        "order": 67,
+        "text": "Volume",
+        "article": null,
+        "category": "Data Features Dictionary - Information per data feature"
+      },
+      {
+        "order": 68,
+        "text": "Statistical property",
+        "article": null,
+        "category": "Data Features Dictionary - Information per data feature"
+      },
+      {
+        "order": 69,
+        "text": "Geographic elements",
+        "article": null,
+        "category": "Data Features Dictionary - Information per data feature"
+      },
+      {
+        "order": 70,
+        "text": "Proxy for prohibited grounds for discrimination",
+        "article": null,
+        "category": "Data Features Dictionary - Information per data feature"
+      },
+      {
+        "order": 71,
+        "text": "Relevance for intended purpose (include justification)",
+        "article": null,
+        "category": "Data Features Dictionary - Assessment of data feature"
+      },
+      {
+        "order": 72,
+        "text": "Errors / gaps",
+        "article": null,
+        "category": "Data Features Dictionary - Assessment of data feature"
+      },
+      {
+        "order": 73,
+        "text": "Complete",
+        "article": null,
+        "category": "Data Features Dictionary - Assessment of data feature"
+      },
+      {
+        "order": 74,
+        "text": "Reasonable and fair assumptions",
+        "article": null,
+        "category": "Data Features Dictionary - Assessment of data feature"
+      }
+    ]
+  },
+  {
+    "name": "Data Governance_Checklist",
+    "slug": "data-governance-checklist",
+    "description": "Data Governance checklist by AESIA",
+    "licensing": "Open_Source",
+    "completion_status": "full",
+    "dimension_slug": "privacy-data-governance",
+    "controls_subdim_slugs": [
+      "purpose-limitation",
+      "role-based-access-control"
+    ],
+    "metadata": {
+      "provider": "AESIA",
+      "link": "https://aesia.digital.gob.es/en/guides",
+      "project_maturity": "",
+      "control_topic": "Data Governance",
+      "target_legal_requirements": ""
+    },
+    "questions": [
+      {
+        "order": 1,
+        "text": "Has all the information necessary for the development and use of the AI system been identified?",
+        "article": null,
+        "category": "MG01 - Identifying the Necessary Information"
+      },
+      {
+        "order": 2,
+        "text": "Has the necessary information been documented?",
+        "article": null,
+        "category": "MG01 - Identifying the Necessary Information"
+      },
+      {
+        "order": 3,
+        "text": "Have the sources of the data used been identified?",
+        "article": null,
+        "category": "MG02 - Establishing the Data Collection Process"
+      },
+      {
+        "order": 4,
+        "text": "Has a data collection process been established?",
+        "article": null,
+        "category": "MG02 - Establishing the Data Collection Process"
+      },
+      {
+        "order": 5,
+        "text": "Have the dimensions of data quality to be evaluated been defined?",
+        "article": null,
+        "category": "MG03 - Determine the quality dimensions to be evaluated"
+      },
+      {
+        "order": 6,
+        "text": "Have specific quality controls been defined for each dimension identified?",
+        "article": null,
+        "category": "MG04 - Define the quality controls to implement for each dimension"
+      },
+      {
+        "order": 7,
+        "text": "Have the defined quality controls been implemented?",
+        "article": null,
+        "category": "MG05 - Implement defined quality controls"
+      },
+      {
+        "order": 8,
+        "text": "Have the results of the quality controls implemented been verified?",
+        "article": null,
+        "category": "MG05 - Implement defined quality controls"
+      },
+      {
+        "order": 9,
+        "text": "Have the results of quality controls been reported?",
+        "article": null,
+        "category": "MG06 - Report the results of quality controls"
+      },
+      {
+        "order": 10,
+        "text": "Have the deviations detected in the quality controls been documented?",
+        "article": null,
+        "category": "MG06 - Report the results of quality controls"
+      },
+      {
+        "order": 11,
+        "text": "Have improvement plans been developed based on quality results?",
+        "article": null,
+        "category": "MG07 - Develop data quality improvement measures"
+      },
+      {
+        "order": 12,
+        "text": "Have the improvement measures implemented been documented?",
+        "article": null,
+        "category": "MG07 - Develop data quality improvement measures"
+      },
+      {
+        "order": 13,
+        "text": "Has the data been transformed to suit the needs of the AI system?",
+        "article": null,
+        "category": "MG08 - Data transformation"
+      },
+      {
+        "order": 14,
+        "text": "Has data from different sources been added?",
+        "article": null,
+        "category": "MG09 - Data Aggregation"
+      },
+      {
+        "order": 15,
+        "text": "Have the data aggregation processes carried out been documented?",
+        "article": null,
+        "category": "MG09 - Data Aggregation"
+      },
+      {
+        "order": 16,
+        "text": "Is the data properly sampled?",
+        "article": null,
+        "category": "MG10 - Sampling the data"
+      },
+      {
+        "order": 17,
+        "text": "After the initial data collection process and subsequent processing, have you identified additional data needs or data characteristics?",
+        "article": null,
+        "category": "MG11 - Creating and selecting features"
+      },
+      {
+        "order": 18,
+        "text": "Have you considered increasing or reducing the dimensionality of the dataset to create features or discarding those that are redundant?",
+        "article": null,
+        "category": "MG11 - Creating and selecting features"
+      },
+      {
+        "order": 19,
+        "text": "Has the data been enriched and expanded?",
+        "article": null,
+        "category": "MG12 - Data Enrichment"
+      },
+      {
+        "order": 20,
+        "text": "Have identification labels been assigned to the data collected?",
+        "article": null,
+        "category": "MG13 - Data labeling"
+      },
+      {
+        "order": 21,
+        "text": "Have automatic data labeling tools been used? Has the process been overseen by some kind of human surveillance?",
+        "article": null,
+        "category": "MG13 - Data labeling"
+      },
+      {
+        "order": 22,
+        "text": "Has the potential bias of the data collected been analysed and assessed?",
+        "article": null,
+        "category": "MG14 - Analysis of the main sources of bias in the data"
+      },
+      {
+        "order": 23,
+        "text": "Has bias been identified in the data?",
+        "article": null,
+        "category": "MG15 - Assessing bias in data"
+      },
+      {
+        "order": 24,
+        "text": "If yes, has an analysis and evaluation been done to determine the need for treatment measures?",
+        "article": null,
+        "category": "MG15 - Assessing bias in data"
+      },
+      {
+        "order": 25,
+        "text": "Have measures been implemented to address the biases identified and assessed?",
+        "article": null,
+        "category": "MG16 - Addressing bias in data"
+      },
+      {
+        "order": 26,
+        "text": "If in the last phase of the data life cycle, the data will be transferred, has a report been generated with all the details of the data transfer process addressed?",
+        "article": null,
+        "category": "MG17 - Data transfer"
+      },
+      {
+        "order": 27,
+        "text": "Has it been verified that there is no user or actor involved in the development of the AI system that still requires access to the data for a specific reason or purpose?",
+        "article": null,
+        "category": "MG18 - Full or partial deletion of data"
+      },
+      {
+        "order": 28,
+        "text": "Has it been verified that the data deletion process to be carried out does not violate any legal, contractual or data retention obligations?",
+        "article": null,
+        "category": "MG18 - Full or partial deletion of data"
+      },
+      {
+        "order": 29,
+        "text": "Has it been verified that the data will be deleted from all locations where it may be stored?",
+        "article": null,
+        "category": "MG18 - Full or partial deletion of data"
+      },
+      {
+        "order": 30,
+        "text": "Has it been evaluated whether there is any possibility of restoring the data, partial or total, from the AI system trained on this data?",
+        "article": null,
+        "category": "MG18 - Full or partial deletion of data"
+      },
+      {
+        "order": 31,
+        "text": "Has the data been checked for any cultural, social or historical significance?",
+        "article": null,
+        "category": "MG18 - Full or partial deletion of data"
+      },
+      {
+        "order": 32,
+        "text": "Has a report been generated with all the details of the data deletion process?",
+        "article": null,
+        "category": "MG18 - Full or partial deletion of data"
+      },
+      {
+        "order": 33,
+        "text": "Have you been informed about the security and privacy protection measures in terms of anonymization that have been implemented?",
+        "article": null,
+        "category": "MG19 - Data anonymization"
+      },
+      {
+        "order": 34,
+        "text": "Have you been informed about the security and privacy protection measures in terms of pseudonymization that have been implemented?",
+        "article": null,
+        "category": "MG20 - Data pseudonymization"
+      },
+      {
+        "order": 35,
+        "text": "Have you been informed about the possible presence of personal data or special categories of personal data?",
+        "article": null,
+        "category": "MG21 - Guarantee measures derived from the regulations on the protection of personal data"
+      },
+      {
+        "order": 36,
+        "text": "Have you been informed about possible misuses and reasonably foreseeable uses of the data provided?",
+        "article": null,
+        "category": "MG21 - Guarantee measures derived from the regulations on the protection of personal data"
+      },
+      {
+        "order": 37,
+        "text": "Have additional details of the data and metadata necessary to facilitate the understanding of the data and its appropriate use for the development of the AI system been documented?",
+        "article": null,
+        "category": "MG21 - Guarantee measures derived from the regulations on the protection of personal data"
+      },
+      {
+        "order": 38,
+        "text": "Is special personal data processed at any stage of the AI system's lifecycle?",
+        "article": null,
+        "category": "MG21 - Guarantee measures derived from the regulations on the protection of personal data"
+      }
+    ]
+  },
+  {
+    "name": "Human Oversight_Checklist",
+    "slug": "human-oversight-checklist",
+    "description": "Human Oversight checklist by AESIA",
+    "licensing": "Open_Source",
+    "completion_status": "full",
+    "dimension_slug": "human-agency-oversight",
+    "controls_subdim_slugs": [
+      "supervisory-control",
+      "audit-trails"
+    ],
+    "metadata": {
+      "provider": "AESIA",
+      "link": "https://aesia.digital.gob.es/en/guides",
+      "project_maturity": "",
+      "control_topic": "Human Oversight",
+      "target_legal_requirements": ""
+    },
+    "questions": [
+      {
+        "order": 1,
+        "text": "Does the smart system have an associated risk management system in accordance with the requirements set out in Article 9 of the RIA?",
+        "article": "Article 14",
+        "category": "MG01 - Design and development measures for effective surveillance"
+      },
+      {
+        "order": 2,
+        "text": "Does the system have a governance model associated with its data in accordance with the requirements set out in Article 10 of the RIA?",
+        "article": "Article 14",
+        "category": "MG01 - Design and development measures for effective surveillance"
+      },
+      {
+        "order": 3,
+        "text": "Does the system have a Technical Documentation in accordance with the requirements set out in Article 11 of the RIA?",
+        "article": "Article 14",
+        "category": "MG01 - Design and development measures for effective surveillance"
+      },
+      {
+        "order": 4,
+        "text": "Does the system have a management of Records in accordance with the requirements set out in Article 12 of the RIA?",
+        "article": "Article 14",
+        "category": "MG01 - Design and development measures for effective surveillance"
+      },
+      {
+        "order": 5,
+        "text": "Does the system have transparency mechanisms in accordance with the requirements set out in Article 13 of the RIA?",
+        "article": "Article 14",
+        "category": "MG01 - Design and development measures for effective surveillance"
+      },
+      {
+        "order": 6,
+        "text": "Does the system have Accuracy mechanisms in accordance with the requirements set out in Article 15 of the RIA?",
+        "article": "Article 14",
+        "category": "MG01 - Design and development measures for effective surveillance"
+      },
+      {
+        "order": 7,
+        "text": "Does the system have Robustness mechanisms in accordance with the requirements set out in Article 15 of the RIA?",
+        "article": "Article 14",
+        "category": "MG01 - Design and development measures for effective surveillance"
+      },
+      {
+        "order": 8,
+        "text": "Does the system have cybersecurity mechanisms in accordance with the requirements set out in Article 15 of the RIA?",
+        "article": "Article 14",
+        "category": "MG01 - Design and development measures for effective surveillance"
+      },
+      {
+        "order": 9,
+        "text": "Does the intelligent system have an interface that allows it to manage its associated risk management system in accordance with the requirements set out in Article 9 of the RIA?",
+        "article": "Article 14",
+        "category": "MG02 - Enable a human-machine interface"
+      },
+      {
+        "order": 10,
+        "text": "Does the system have an interface that allows you to manage the governance model associated with the data in accordance with the requirements set out in Article 10 of the RIA?",
+        "article": "Article 14",
+        "category": "MG02 - Enable a human-machine interface"
+      },
+      {
+        "order": 11,
+        "text": "Does the system have an interface that allows you to manage your Technical Documentation?",
+        "article": "Article 14",
+        "category": "MG02 - Enable a human-machine interface"
+      },
+      {
+        "order": 12,
+        "text": "Does the system have an interface that allows you to manage the information in the system logs?",
+        "article": "Article 14",
+        "category": "MG02 - Enable a human-machine interface"
+      },
+      {
+        "order": 13,
+        "text": "Does the system have an interface that allows you to manage the Transparency of the system?",
+        "article": "Article 14",
+        "category": "MG02 - Enable a human-machine interface"
+      },
+      {
+        "order": 14,
+        "text": "Does the system have an interface that allows you to manage the accuracy of the system?",
+        "article": "Article 14",
+        "category": "MG02 - Enable a human-machine interface"
+      },
+      {
+        "order": 15,
+        "text": "Does the system have an interface that allows you to manage the robustness of the system?",
+        "article": "Article 14",
+        "category": "MG02 - Enable a human-machine interface"
+      },
+      {
+        "order": 16,
+        "text": "Does the system have an interface that allows you to manage its Cybersecurity?",
+        "article": "Article 14",
+        "category": "MG02 - Enable a human-machine interface"
+      },
+      {
+        "order": 17,
+        "text": "Does the system have an associated governance model that applies during the construction and use of the system and that includes, at least, an organizational structure, procedures, and training for its use?",
+        "article": "Article 14",
+        "category": "MG03 - Governance model"
+      },
+      {
+        "order": 18,
+        "text": "If it is a remote biometric identification system, does this governance model include the validation of the separate identification of at least two natural persons with the necessary competence, training and authority?",
+        "article": "Article 14.5",
+        "category": "MG03 - Governance model"
+      },
+      {
+        "order": 19,
+        "text": "Does the system provide \"forced error\" or equivalent functionality to avoid automation bias?",
+        "article": "Article 14",
+        "category": "MG04 - Awareness. Forced error"
+      },
+      {
+        "order": 20,
+        "text": "Has the system's governance model contemplated the level of autonomy of the system, detailing the moment of the process in which the responsible person(s) intervene?",
+        "article": "Article 14",
+        "category": "MG05 - Human in/on the loop"
+      },
+      {
+        "order": 21,
+        "text": "Does the system have agile mechanisms so that its responsible person can interrupt its operation?",
+        "article": "Article 14",
+        "category": "MG05 - Human in/on the loop"
+      },
+      {
+        "order": 22,
+        "text": "Does the system have an associated risk management plan?",
+        "article": "Article 14",
+        "category": "MG06 - Risk Management"
+      },
+      {
+        "order": 23,
+        "text": "Does the system have mechanisms for the management of Transparency that allow its correct Supervision?",
+        "article": "Article 14",
+        "category": "MG07 - Transparency"
+      },
+      {
+        "order": 24,
+        "text": "Does the system comply with the Registries' measures aimed at providing transparency about its operation?",
+        "article": "Article 14",
+        "category": "MG08 - Records"
+      }
+    ]
+  },
+  {
+    "name": "Human Oversight Evaluation Tool - Article 14 AI Act",
+    "slug": "human-oversight-evaluation-tool---article-14-ai-act",
+    "description": "Human Oversight checklist by EUSAiR (Article 14 AI Act)",
+    "licensing": "Open_Source",
+    "completion_status": "full",
+    "dimension_slug": "human-agency-oversight",
+    "controls_subdim_slugs": [
+      "supervisory-control"
+    ],
+    "metadata": {
+      "provider": "EUSAiR",
+      "link": "https://eusair-project.eu/",
+      "project_maturity": "",
+      "control_topic": "Human Oversight",
+      "target_legal_requirements": ""
+    },
+    "questions": [
+      {
+        "order": 1,
+        "text": "Have interpretable-by-design models (e.g., rule-based systems or decision trees) been prioritized over black-box systems for high-stakes decisions?",
+        "article": "Article 14",
+        "category": "Human oversight measures for risk mitigation"
+      },
+      {
+        "order": 2,
+        "text": "Have oversight functions such as monitoring, alarms, and intervention capabilities been integrated into the system architecture?",
+        "article": "Article 14",
+        "category": "Human oversight measures for risk mitigation"
+      },
+      {
+        "order": 3,
+        "text": "Can the system evaluate whether the conditions needed to reliably complete a task are met before proceeding?",
+        "article": "Article 14",
+        "category": "Human oversight measures for risk mitigation"
+      },
+      {
+        "order": 4,
+        "text": "Are guardrails implemented to halt or modify the system's actions when it operates under conditions for which it is ill-equipped, and are such situations clearly communicated to users?",
+        "article": "Article 14",
+        "category": "Human oversight measures for risk mitigation"
+      },
+      {
+        "order": 5,
+        "text": "Has the design considered risks to health, safety, or fundamental rights that may emerge during intended or foreseeable misuse conditions?",
+        "article": "Article 14",
+        "category": "Human oversight measures for risk mitigation"
+      },
+      {
+        "order": 6,
+        "text": "Has the system avoided prioritizing automation over manual input to ensure operators can act swiftly when intervention is needed?",
+        "article": "Article 14",
+        "category": "Human oversight measures for risk mitigation"
+      },
+      {
+        "order": 7,
+        "text": "What is the defined level of autonomy of the AI system?",
+        "article": "Article 14",
+        "category": "Human oversight measures for risk mitigation"
+      },
+      {
+        "order": 8,
+        "text": "Is this level of autonomy appropriate for the context in which the AI system will be used?",
+        "article": "Article 14",
+        "category": "Human oversight measures for risk mitigation"
+      },
+      {
+        "order": 9,
+        "text": "Have natural persons assigned human oversight roles been informed of the system's capacities, and through which mechanisms?",
+        "article": "Article 14",
+        "category": "Human oversight measures for risk mitigation"
+      },
+      {
+        "order": 10,
+        "text": "Have natural persons assigned human oversight roles been informed of the system's limitations, and through which mechanisms?",
+        "article": "Article 14",
+        "category": "Human oversight measures for risk mitigation"
+      },
+      {
+        "order": 11,
+        "text": "Have regular external audits been planned or implemented to evaluate both technical performance and human oversight effectiveness?",
+        "article": "Article 14",
+        "category": "Human oversight measures for risk mitigation"
+      },
+      {
+        "order": 12,
+        "text": "Is the allocation of roles and responsibilities between human operators and the AI system clearly defined?",
+        "article": "Article 14",
+        "category": "Human oversight measures for risk mitigation"
+      },
+      {
+        "order": 13,
+        "text": "Has a data retention period for oversight logs been defined that aligns with regulatory and risk requirements?",
+        "article": "Article 14",
+        "category": "Human oversight measures for risk mitigation"
+      },
+      {
+        "order": 14,
+        "text": "Are alarms and alert mechanisms implemented to detect anomalies, safety risks, or unexpected outputs?",
+        "article": "Article 14.3",
+        "category": "Information Mechanisms, Real-time and Retrospective"
+      },
+      {
+        "order": 15,
+        "text": "Have alarm thresholds and prioritization mechanisms been tested and validated for accuracy and reliability?",
+        "article": "Article 14.3",
+        "category": "Information Mechanisms, Real-time and Retrospective"
+      },
+      {
+        "order": 16,
+        "text": "Are oversight tools accessible and usable by designated personnel during critical system operations?",
+        "article": "Article 14.3",
+        "category": "Information Mechanisms, Real-time and Retrospective"
+      },
+      {
+        "order": 17,
+        "text": "Are all human interventions, overrides, and disregard actions logged with timestamps and operator identity?",
+        "article": "Article 14.3",
+        "category": "Information Mechanisms, Real-time and Retrospective"
+      },
+      {
+        "order": 18,
+        "text": "Do logs capture inputs, outputs, and context surrounding each intervention or anomaly detection?",
+        "article": "Article 14.3",
+        "category": "Information Mechanisms, Real-time and Retrospective"
+      },
+      {
+        "order": 19,
+        "text": "Are oversight logs integrated with the broader logging and risk-management framework?",
+        "article": "Article 14.3",
+        "category": "Information Mechanisms, Real-time and Retrospective"
+      },
+      {
+        "order": 20,
+        "text": "Are access controls applied to oversight logs specifying who can view, modify, or delete them?",
+        "article": "Article 14.3",
+        "category": "Information Mechanisms, Real-time and Retrospective"
+      },
+      {
+        "order": 21,
+        "text": "Does the logging process achieve adequate coverage of relevant system events?",
+        "article": "Article 14.3",
+        "category": "Information Mechanisms, Real-time and Retrospective"
+      },
+      {
+        "order": 22,
+        "text": "Do logs include complete metadata such as timestamps, inputs, and outputs?",
+        "article": "Article 14.3",
+        "category": "Information Mechanisms, Real-time and Retrospective"
+      },
+      {
+        "order": 23,
+        "text": "Are data retention and retrieval procedures compliant with retention rules and performance requirements?",
+        "article": "Article 14.3",
+        "category": "Information Mechanisms, Real-time and Retrospective"
+      },
+      {
+        "order": 24,
+        "text": "Are logged events auditable, consistent, reproducible, and verifiable?",
+        "article": "Article 14.3",
+        "category": "Information Mechanisms, Real-time and Retrospective"
+      },
+      {
+        "order": 25,
+        "text": "Has a sampling method been established for human review when real-time oversight of all outputs is not feasible?",
+        "article": "Article 14.3",
+        "category": "Information Mechanisms, Real-time and Retrospective"
+      },
+      {
+        "order": 26,
+        "text": "Is the sampling method periodically re-evaluated for fairness, accuracy, and governance quality?",
+        "article": "Article 14.3",
+        "category": "Information Mechanisms, Real-time and Retrospective"
+      },
+      {
+        "order": 27,
+        "text": "Has the \"two people approval\" mechanism been implemented for critical decisions, and is its effectiveness monitored?",
+        "article": "Article 14.3",
+        "category": "Information Mechanisms, Real-time and Retrospective"
+      },
+      {
+        "order": 28,
+        "text": "Is there a mechanism to measure the contestability rate (i.e., percentage of AI decisions reviewed or contested by humans)?",
+        "article": "Article 14.3",
+        "category": "Information Mechanisms, Real-time and Retrospective"
+      },
+      {
+        "order": 29,
+        "text": "Is override latency measured — the time it takes for a human operator to intervene once an AI output is flagged as problematic?",
+        "article": "Article 14.3",
+        "category": "Information Mechanisms, Real-time and Retrospective"
+      },
+      {
+        "order": 30,
+        "text": "Is there a system in place for oversight records and logs to be made available to competent authorities upon request for conformity assessments or audits?",
+        "article": "Article 14.3",
+        "category": "Information Mechanisms, Real-time and Retrospective"
+      },
+      {
+        "order": 31,
+        "text": "Are intervention functions such as pause, override, disregard, or reversal of system decisions implemented and tested?",
+        "article": "Article 14.4.a, 14.4.d",
+        "category": "Deployer-implemented oversight measures"
+      },
+      {
+        "order": 32,
+        "text": "Do oversight interfaces allow manual control and corrective action without causing cascading failures?",
+        "article": "Article 14.4.a, 14.4.d",
+        "category": "Deployer-implemented oversight measures"
+      },
+      {
+        "order": 33,
+        "text": "Have stress or degraded-condition tests confirmed that human intervention remains possible under adverse conditions?",
+        "article": "Article 14.4.a, 14.4.d",
+        "category": "Deployer-implemented oversight measures"
+      },
+      {
+        "order": 34,
+        "text": "Is a fallback interface available and functional under degraded or constrained operating conditions (e.g., low power or limited display)?",
+        "article": "Article 14.4.a, 14.4.d",
+        "category": "Deployer-implemented oversight measures"
+      },
+      {
+        "order": 35,
+        "text": "Does the interface provide real-time visibility of system status, alarms, and intervention options (e.g., override, stop, reset)?",
+        "article": "Article 14.4.a, 14.4.d",
+        "category": "Deployer-implemented oversight measures"
+      },
+      {
+        "order": 36,
+        "text": "Does the interface provide clear visibility of the system's operational state and decision rationale?",
+        "article": "Article 14.4.a, 14.4.d",
+        "category": "Deployer-implemented oversight measures"
+      },
+      {
+        "order": 37,
+        "text": "Have usability tests with representative users measured task-success rate, time-to-intervention, misinterpretation rate, and cognitive workload?",
+        "article": "Article 14.4.a, 14.4.d",
+        "category": "Deployer-implemented oversight measures"
+      },
+      {
+        "order": 38,
+        "text": "Have thresholds, alert refresh rates, and alarm mechanisms been validated to ensure timely perception and intervention?",
+        "article": "Article 14.4.a, 14.4.d",
+        "category": "Deployer-implemented oversight measures"
+      },
+      {
+        "order": 39,
+        "text": "Are vigilance or wake-up prompts implemented to verify sustained operator attention during continuous oversight?",
+        "article": "Article 14.4.a, 14.4.d",
+        "category": "Deployer-implemented oversight measures"
+      },
+      {
+        "order": 40,
+        "text": "Has a human-factors and usability assessment been performed?",
+        "article": "Article 14.4.a, 14.4.d",
+        "category": "Deployer-implemented oversight measures"
+      },
+      {
+        "order": 41,
+        "text": "Does the system include a clearly identifiable and functional stop button?",
+        "article": "Article 14.4.a, 14.4.d",
+        "category": "Deployer-implemented oversight measures"
+      },
+      {
+        "order": 42,
+        "text": "Have users been informed and trained on the mechanisms for overriding or stopping system outputs?",
+        "article": "Article 14.4.a, 14.4.d",
+        "category": "Deployer-implemented oversight measures"
+      },
+      {
+        "order": 43,
+        "text": "Have mechanisms been implemented to detect and mitigate automation bias in operator decisions? If so, which mechanisms?",
+        "article": "Article 14.4.b",
+        "category": "Mitigating automation bias and human factors"
+      },
+      {
+        "order": 44,
+        "text": "To what extent do operators rely uncritically on system outputs (percentage of accepted outputs in final decisions)?",
+        "article": "Article 14.4.b",
+        "category": "Mitigating automation bias and human factors"
+      },
+      {
+        "order": 45,
+        "text": "Is the interface design tested for the risk of over-trust or blind acceptance of automated results?",
+        "article": "Article 14.4.b",
+        "category": "Mitigating automation bias and human factors"
+      },
+      {
+        "order": 46,
+        "text": "Have training programs been implemented to promote critical thinking and reduce automation bias?",
+        "article": "Article 14.4.b",
+        "category": "Mitigating automation bias and human factors"
+      },
+      {
+        "order": 47,
+        "text": "Does the organisational culture encourage challenge and questioning of automated outputs?",
+        "article": "Article 14.4.b",
+        "category": "Mitigating automation bias and human factors"
+      },
+      {
+        "order": 48,
+        "text": "Have developers received adequate ethical and oversight training relevant to system risk?",
+        "article": "Article 14.4.b",
+        "category": "Mitigating automation bias and human factors"
+      },
+      {
+        "order": 49,
+        "text": "Have affected individuals been meaningfully involved in the design and deployment of the AI system?",
+        "article": "Article 14.4.b",
+        "category": "Mitigating automation bias and human factors"
+      },
+      {
+        "order": 50,
+        "text": "Are explainable AI (XAI) techniques such as SHAP and LIME implemented for complex models?",
+        "article": "Article 14.4.c",
+        "category": "Interpretation of outputs and interpretation tools"
+      },
+      {
+        "order": 51,
+        "text": "Are feature-importance scores available to rank input features by their contribution to the model's output?",
+        "article": "Article 14.4.c",
+        "category": "Interpretation of outputs and interpretation tools"
+      },
+      {
+        "order": 52,
+        "text": "Do the explanations provide consistent instance-level interpretation of feature contributions?",
+        "article": "Article 14.4.c",
+        "category": "Interpretation of outputs and interpretation tools"
+      },
+      {
+        "order": 53,
+        "text": "Do the explanations provide understandable local approximations of model behaviour for specific predictions?",
+        "article": "Article 14.4.c",
+        "category": "Interpretation of outputs and interpretation tools"
+      },
+      {
+        "order": 54,
+        "text": "Are confidence scores provided to help operators assess the reliability of system outputs?",
+        "article": "Article 14.4.c",
+        "category": "Interpretation of outputs and interpretation tools"
+      },
+      {
+        "order": 55,
+        "text": "Does the system provide a clear rationale for each decision made?",
+        "article": "Article 14.4.c",
+        "category": "Interpretation of outputs and interpretation tools"
+      },
+      {
+        "order": 56,
+        "text": "Does the system notify users when operating under conditions for which it is ill-equipped?",
+        "article": "Article 14.4.c",
+        "category": "Interpretation of outputs and interpretation tools"
+      },
+      {
+        "order": 57,
+        "text": "Are guidelines provided to users for interpreting confidence measures and uncertainty indicators?",
+        "article": "Article 14.4.c",
+        "category": "Interpretation of outputs and interpretation tools"
+      },
+      {
+        "order": 58,
+        "text": "Are XAI tools used to clarify routine decision-making processes in an interpretable way?",
+        "article": "Article 14.4.c",
+        "category": "Interpretation of outputs and interpretation tools"
+      },
+      {
+        "order": 59,
+        "text": "Do oversight interfaces enable manual control without introducing cascading system failures?",
+        "article": "Article 14.4.c",
+        "category": "Interpretation of outputs and interpretation tools"
+      },
+      {
+        "order": 60,
+        "text": "Are designated oversight personnel provided with appropriate tools, access, and authority to intervene during critical operations?",
+        "article": "Article 14.4.c",
+        "category": "Interpretation of outputs and interpretation tools"
+      },
+      {
+        "order": 61,
+        "text": "Does the interface design ensure operators have sufficient time and information to intervene meaningfully?",
+        "article": "Article 14.4.c",
+        "category": "Interpretation of outputs and interpretation tools"
+      },
+      {
+        "order": 62,
+        "text": "Have degraded-condition or stress tests verified that human intervention remains possible in all conditions?",
+        "article": "Article 14.4.c",
+        "category": "Interpretation of outputs and interpretation tools"
+      },
+      {
+        "order": 63,
+        "text": "Do interfaces minimize alert fatigue and provide clear, intuitive feedback supporting situational awareness?",
+        "article": "Article 14.4.c",
+        "category": "Interpretation of outputs and interpretation tools"
+      },
+      {
+        "order": 64,
+        "text": "Does the interface balance information clarity with avoidance of cognitive overload for the operator?",
+        "article": "Article 14.4.c",
+        "category": "Interpretation of outputs and interpretation tools"
+      },
+      {
+        "order": 65,
+        "text": "Is there a \"safe state\" or fallback mode that can be triggered by human intervention?",
+        "article": "Article 14.4.e",
+        "category": "Safe state(s) transition"
+      },
+      {
+        "order": 66,
+        "text": "Can the system transition to a defined safe state upon human or automatic trigger?",
+        "article": "Article 14.4.e",
+        "category": "Safe state(s) transition"
+      },
+      {
+        "order": 67,
+        "text": "Has the safe-state transition process been tested for stability and effectiveness?",
+        "article": "Article 14.4.e",
+        "category": "Safe state(s) transition"
+      },
+      {
+        "order": 68,
+        "text": "Is the fallback interface functional and accessible during low-resource or degraded conditions?",
+        "article": "Article 14.4.e",
+        "category": "Safe state(s) transition"
+      },
+      {
+        "order": 69,
+        "text": "Are all safe-state activations and transitions logged and auditable?",
+        "article": "Article 14.4.e",
+        "category": "Safe state(s) transition"
+      },
+      {
+        "order": 70,
+        "text": "Are users clearly notified when the system enters a safe state or operates under degraded conditions?",
+        "article": "Article 14.4.e",
+        "category": "Safe state(s) transition"
+      },
+      {
+        "order": 71,
+        "text": "Are log retention and access-control measures applied consistently to safe-state transition events?",
+        "article": "Article 14.4.e",
+        "category": "Safe state(s) transition"
+      }
+    ]
+  },
+  {
+    "name": "Incidents Management_Checklist",
+    "slug": "incidents-management-checklist",
+    "description": "Incidents Management checklist by AESIA",
+    "licensing": "Open_Source",
+    "completion_status": "full",
+    "dimension_slug": "risk-management",
+    "controls_subdim_slugs": [
+      "compliant-incident-reporting"
+    ],
+    "metadata": {
+      "provider": "AESIA",
+      "link": "https://aesia.digital.gob.es/en/guides",
+      "project_maturity": "",
+      "control_topic": "Incidents Management",
+      "target_legal_requirements": ""
+    },
+    "questions": [
+      {
+        "order": 1,
+        "text": "Does the system have documentation that explains in detail its category according to those defined in the AI Act?",
+        "article": "Article 73",
+        "category": "Knowledge of AI system categorization (MG01)"
+      },
+      {
+        "order": 2,
+        "text": "Do the management systems (quality, risk or human supervision) of the smart system have training procedures to ensure that those responsible for the system are aware of the EU's fundamental rights?",
+        "article": "Article 73",
+        "category": "Knowledge of fundamental rights (MG02)"
+      },
+      {
+        "order": 3,
+        "text": "Do the management systems (quality, risk and/or human supervision) of the intelligent system have procedures that allow the notification of serious incidents to be managed?",
+        "article": "Article 73",
+        "category": "Frame the notification of major incidents in management systems (MG03)"
+      },
+      {
+        "order": 4,
+        "text": "Does the information associated with the system include contact information for your corresponding MSA?",
+        "article": "Article 73",
+        "category": "Contact the Market Surveillance Authority (MG04)"
+      },
+      {
+        "order": 5,
+        "text": "Has the Provider provided the Deployer with a contact channel to report major incidents in this case?",
+        "article": "Article 73",
+        "category": "Contact the provider (MG05)"
+      }
+    ]
+  },
+  {
+    "name": "Logging Evaluation Tool - Article 12 AI Act",
+    "slug": "logging-evaluation-tool---article-12-ai-act",
+    "description": "Logging checklist by EUSAiR (Article 12 AI Act)",
+    "licensing": "Open_Source",
+    "completion_status": "full",
+    "dimension_slug": "record-keeping",
+    "controls_subdim_slugs": [
+      "operational-logging-system"
+    ],
+    "metadata": {
+      "provider": "EUSAiR",
+      "link": "https://eusair-project.eu/",
+      "project_maturity": "",
+      "control_topic": "Logging",
+      "target_legal_requirements": ""
+    },
+    "questions": [
+      {
+        "order": 1,
+        "text": "Has the provider defined a governance policy for logging and traceability?",
+        "article": "Article 12, Article 16, Article 19",
+        "category": "Governance & Design Stage"
+      },
+      {
+        "order": 2,
+        "text": "Are roles and responsibilities for logging oversight clearly assigned (who maintains, audits, and reviews logs)?",
+        "article": "Article 12, Article 16, Article 19",
+        "category": "Governance & Design Stage"
+      },
+      {
+        "order": 3,
+        "text": "Are access rules and authorization levels documented and aligned with security and data protection requirements?",
+        "article": "Article 12, Article 16, Article 19",
+        "category": "Governance & Design Stage"
+      },
+      {
+        "order": 4,
+        "text": "Has a logging plan been approved by the responsible compliance or risk officer?",
+        "article": "Article 12, Article 16, Article 19",
+        "category": "Governance & Design Stage"
+      },
+      {
+        "order": 5,
+        "text": "Are logging requirements integrated into the system architecture from the design phase (including interfaces and data flows)?",
+        "article": "Article 12, Article 16, Article 19",
+        "category": "Governance & Design Stage"
+      },
+      {
+        "order": 6,
+        "text": "Are procedures in place to ensure logs remain comprehensive and tamper-resistant as the system evolves or updates?",
+        "article": "Article 12, Article 16, Article 19",
+        "category": "Governance & Design Stage"
+      },
+      {
+        "order": 7,
+        "text": "Has the provider documented which events are logged (e.g., performance, cybersecurity, modifications, anomalies)?",
+        "article": "Article 12.3, ISO/IEC 24970",
+        "category": "Development Stage"
+      },
+      {
+        "order": 8,
+        "text": "Does the provider maintain an information model for log fields (event type, timestamp, user ID, action, outcome, etc.)?",
+        "article": "Article 12.3, ISO/IEC 24970",
+        "category": "Development Stage"
+      },
+      {
+        "order": 9,
+        "text": "Is logging implemented across all lifecycle stages (development, training, validation, testing, deployment)?",
+        "article": "Article 12.3, ISO/IEC 24970",
+        "category": "Development Stage"
+      },
+      {
+        "order": 10,
+        "text": "Are logs technically protected (e.g., integrity checks, secure storage, controlled access)?",
+        "article": "Article 12.3, ISO/IEC 24970",
+        "category": "Development Stage"
+      },
+      {
+        "order": 11,
+        "text": "Are privacy and data protection considerations integrated into the logging design (especially for sensitive data)?",
+        "article": "Article 12.3, ISO/IEC 24970",
+        "category": "Development Stage"
+      },
+      {
+        "order": 12,
+        "text": "Are justification and rationale for logged events documented in the technical file, especially for safety- or rights-relevant events?",
+        "article": "Article 12.3, ISO/IEC 24970",
+        "category": "Development Stage"
+      },
+      {
+        "order": 13,
+        "text": "Has the logging mechanism been tested for accuracy, completeness, and resilience against tampering?",
+        "article": "Article 12.2, 12.3, Article 13.3.b",
+        "category": "Validation & Testing Stage"
+      },
+      {
+        "order": 14,
+        "text": "Are procedures in place to verify log accessibility by authorized personnel under controlled conditions?",
+        "article": "Article 12.2, 12.3, Article 13.3.b",
+        "category": "Validation & Testing Stage"
+      },
+      {
+        "order": 15,
+        "text": "Are logs reviewed during validation to confirm they support incident reconstruction and risk assessment?",
+        "article": "Article 12.2, 12.3, Article 13.3.b",
+        "category": "Validation & Testing Stage"
+      },
+      {
+        "order": 16,
+        "text": "Are log analysis tools documented and validated for usability and interpretability?",
+        "article": "Article 12.2, 12.3, Article 13.3.b",
+        "category": "Validation & Testing Stage"
+      },
+      {
+        "order": 17,
+        "text": "Have cybersecurity event logging and alert mechanisms been tested for reliability?",
+        "article": "Article 12.2, 12.3, Article 13.3.b",
+        "category": "Validation & Testing Stage"
+      },
+      {
+        "order": 18,
+        "text": "Is there a process for testing log retention and retrieval?",
+        "article": "Article 12.2, 12.3, Article 13.3.b",
+        "category": "Validation & Testing Stage"
+      },
+      {
+        "order": 19,
+        "text": "Do validation records demonstrate that logging supports monitoring, explainability, and traceability requirements?",
+        "article": "Article 12.2, 12.3, Article 13.3.b",
+        "category": "Validation & Testing Stage"
+      },
+      {
+        "order": 20,
+        "text": "Is there a procedure for periodic review of logs to detect anomalies, errors, or security events?",
+        "article": "Article 12.2, Article 9",
+        "category": "Deployment & Operation Stage"
+      },
+      {
+        "order": 21,
+        "text": "Are designated investigators or auditors able to access logs promptly in case of significant incidents?",
+        "article": "Article 12.2, Article 9",
+        "category": "Deployment & Operation Stage"
+      },
+      {
+        "order": 22,
+        "text": "Are logs integrated with the risk management and incident reporting workflows?",
+        "article": "Article 12.2, Article 9",
+        "category": "Deployment & Operation Stage"
+      },
+      {
+        "order": 23,
+        "text": "Are changes to system configurations, models, or parameters automatically logged?",
+        "article": "Article 12.2, Article 9",
+        "category": "Deployment & Operation Stage"
+      },
+      {
+        "order": 24,
+        "text": "Is user feedback captured in logs to support ongoing risk monitoring?",
+        "article": "Article 12.2, Article 9",
+        "category": "Deployment & Operation Stage"
+      },
+      {
+        "order": 25,
+        "text": "Are logging mechanisms updated and revalidated when system modifications occur?",
+        "article": "Article 12.2, Article 13.3.c",
+        "category": "Change Management & Continuous Improvement Stage"
+      },
+      {
+        "order": 26,
+        "text": "Are update and rollback procedures logged to maintain traceability of software or model versions?",
+        "article": "Article 12.2, Article 13.3.c",
+        "category": "Change Management & Continuous Improvement Stage"
+      },
+      {
+        "order": 27,
+        "text": "Are procedures in place to ensure continuity of logs across version updates or infrastructure migrations?",
+        "article": "Article 12.2, Article 13.3.c",
+        "category": "Change Management & Continuous Improvement Stage"
+      },
+      {
+        "order": 28,
+        "text": "Are lessons learned from incident investigations used to refine logging practices?",
+        "article": "Article 12.2, Article 13.3.c",
+        "category": "Change Management & Continuous Improvement Stage"
+      }
+    ]
+  },
+  {
+    "name": "Post-Market Monitoring_Checklist",
+    "slug": "post-market-monitoring-checklist",
+    "description": "Post-Market Monitoring checklist by AESIA",
+    "licensing": "Open_Source",
+    "completion_status": "full",
+    "dimension_slug": "risk-management",
+    "controls_subdim_slugs": [
+      "establishing-pmm-plan"
+    ],
+    "metadata": {
+      "provider": "AESIA",
+      "link": "https://aesia.digital.gob.es/en/guides",
+      "project_maturity": "",
+      "control_topic": "Post-Market Monitoring",
+      "target_legal_requirements": ""
+    },
+    "questions": [
+      {
+        "order": 1,
+        "text": "Have all relevant risks associated with the production environment and the use of the system been identified and thoroughly documented?",
+        "article": "Article 72",
+        "category": "MG01 - Design the post-market surveillance system considering all the highlighted risks"
+      },
+      {
+        "order": 2,
+        "text": "Does the design of the surveillance system integrate specific measures that address each of the identified risks?",
+        "article": "Article 72",
+        "category": "MG01 - Design the post-market surveillance system considering all the highlighted risks"
+      },
+      {
+        "order": 3,
+        "text": "Have key indicators been defined that comprehensively cover the critical aspects of the operational environment (intelligent system, infrastructure, cybersecurity, users)?",
+        "article": "Article 72",
+        "category": "MG02 - Create indicators on all aspects of the environment"
+      },
+      {
+        "order": 4,
+        "text": "Is the selection of indicators based on criteria of relevance and the criticality of the environment, with due documented justification?",
+        "article": "Article 72",
+        "category": "MG02 - Create indicators on all aspects of the environment"
+      },
+      {
+        "order": 5,
+        "text": "Have the effectiveness and relevance of these indicators been validated in tests in real or simulated scenarios?",
+        "article": "Article 72",
+        "category": "MG02 - Create indicators on all aspects of the environment"
+      },
+      {
+        "order": 6,
+        "text": "Have normal scales or ranges of acceptable values been set for each indicator, based on historical analysis and expected scenarios?",
+        "article": "Article 72",
+        "category": "MG03 - Establish the normality scales for each indicator"
+      },
+      {
+        "order": 7,
+        "text": "Is the determination of these scales adequately justified and aligned with the real operating conditions of the environment?",
+        "article": "Article 72",
+        "category": "MG03 - Establish the normality scales for each indicator"
+      },
+      {
+        "order": 8,
+        "text": "Is there a mechanism in place to regularly update the scales based on the evolution of the environment or new data collected?",
+        "article": "Article 72",
+        "category": "MG03 - Establish the normality scales for each indicator"
+      },
+      {
+        "order": 9,
+        "text": "Does the system incorporate a real-time alerting mechanism that continuously monitors key indicators?",
+        "article": "Article 72",
+        "category": "MG04 - Integrate a real-time alert system"
+      },
+      {
+        "order": 10,
+        "text": "Have critical thresholds been set up that, when exceeded by default or excess, trigger immediate alerts to those responsible?",
+        "article": "Article 72",
+        "category": "MG04 - Integrate a real-time alert system"
+      },
+      {
+        "order": 11,
+        "text": "Have tests been carried out in both simulated and real environments to ensure reliability and speed in activating alerts?",
+        "article": "Article 72",
+        "category": "MG04 - Integrate a real-time alert system"
+      },
+      {
+        "order": 12,
+        "text": "Has a controlled process for implementing the surveillance system in the production environment been planned and documented?",
+        "article": "Article 72",
+        "category": "MG05 - Implement the post-marketing surveillance system in production"
+      },
+      {
+        "order": 13,
+        "text": "Has the surveillance system been implemented in production?",
+        "article": "Article 72",
+        "category": "MG05 - Implement the post-marketing surveillance system in production"
+      },
+      {
+        "order": 14,
+        "text": "Have tests been carried out in the production environment to validate the operability and robustness of the surveillance system?",
+        "article": "Article 72",
+        "category": "MG06 - Conduct production testing of the post-market surveillance system"
+      },
+      {
+        "order": 15,
+        "text": "Is there a formal policy that contemplates both continuous monitoring and periodic reviews of the surveillance system?",
+        "article": "Article 72",
+        "category": "MG07 - Establish the policy of continuous and periodic surveillance"
+      },
+      {
+        "order": 16,
+        "text": "Are the roles and responsibilities related to oversight clearly defined and supported by management?",
+        "article": "Article 72",
+        "category": "MG07 - Establish the policy of continuous and periodic surveillance"
+      },
+      {
+        "order": 17,
+        "text": "Is the policy reviewed and updated on a regular basis to adapt to changes in the environment or the emergence of new risks?",
+        "article": "Article 72",
+        "category": "MG07 - Establish the policy of continuous and periodic surveillance"
+      },
+      {
+        "order": 18,
+        "text": "Have potential anomalous scenarios that may compromise the performance of the surveillance system been identified and documented?",
+        "article": "Article 72",
+        "category": "MG08 - Consider anomalous scenarios that may affect the performance of the surveillance system itself"
+      },
+      {
+        "order": 19,
+        "text": "Are there contingency plans and specific measures to manage each of these scenarios?",
+        "article": "Article 72",
+        "category": "MG08 - Consider anomalous scenarios that may affect the performance of the surveillance system itself"
+      },
+      {
+        "order": 20,
+        "text": "Has a leader or person responsible for the management of the post-market surveillance system been appointed, with the necessary authority?",
+        "article": "Article 72",
+        "category": "MG09 - Formalize leadership and commitment to the management of the surveillance system in the organization"
+      },
+      {
+        "order": 21,
+        "text": "Is the commitment of senior management in the management of the system reflected in the allocation of resources and internal communication?",
+        "article": "Article 72",
+        "category": "MG09 - Formalize leadership and commitment to the management of the surveillance system in the organization"
+      },
+      {
+        "order": 22,
+        "text": "Is there documentation of the monitoring plan that evidences the leadership and coordination of surveillance activities in the organization?",
+        "article": "Article 72",
+        "category": "MG09 - Formalize leadership and commitment to the management of the surveillance system in the organization"
+      },
+      {
+        "order": 23,
+        "text": "Has a specific team, duly trained, been formed to respond to alerts and incidents detected by the surveillance system?",
+        "article": "Article 72",
+        "category": "MG10 - Assign a response team"
+      },
+      {
+        "order": 24,
+        "text": "Are the roles and responsibilities of the response team clearly defined and communicated?",
+        "article": "Article 72",
+        "category": "MG10 - Assign a response team"
+      },
+      {
+        "order": 25,
+        "text": "Is there a formal and documented response protocol that details the actions to be taken in the event of incident detection?",
+        "article": "Article 72",
+        "category": "MG11 - Define the response protocol"
+      },
+      {
+        "order": 26,
+        "text": "Has the incident report template been generated?",
+        "article": "Article 72",
+        "category": "MG11 - Define the response protocol"
+      },
+      {
+        "order": 27,
+        "text": "Have training needs been identified for all staff involved in post-market surveillance?",
+        "article": "Article 72",
+        "category": "MG12 - Carry out the necessary training tasks"
+      },
+      {
+        "order": 28,
+        "text": "Are there training and response drills to evaluate the effectiveness and improve the coordination of the team?",
+        "article": "Article 72",
+        "category": "MG12 - Carry out the necessary training tasks"
+      },
+      {
+        "order": 29,
+        "text": "Have regular periods been defined and documented for the review of the operation and effectiveness of the surveillance system?",
+        "article": "Article 72",
+        "category": "MG13 - Establish review and follow-up periods"
+      }
+    ]
+  },
+  {
+    "name": "Quality System Management_Checklist",
+    "slug": "quality-system-management-checklist",
+    "description": "Quality System Management checklist by AESIA",
+    "licensing": "Open_Source",
+    "completion_status": "full",
+    "dimension_slug": "quality-management",
+    "controls_subdim_slugs": [
+      "quality-policy-declaration",
+      "internal-auditing"
+    ],
+    "metadata": {
+      "provider": "AESIA",
+      "link": "https://aesia.digital.gob.es/en/guides",
+      "project_maturity": "",
+      "control_topic": "Quality System Management",
+      "target_legal_requirements": ""
+    },
+    "questions": [
+      {
+        "order": 1,
+        "text": "Has a quality management system been established and implemented to ensure compliance with the AI Regulation?",
+        "article": "Article 17.1",
+        "category": "Implement a QMS (MG01)"
+      },
+      {
+        "order": 2,
+        "text": "Does the QMS collect policies, procedures and instructions in a systematic and orderly manner?",
+        "article": "Article 17.1",
+        "category": "Implement a QMS (MG01)"
+      },
+      {
+        "order": 3,
+        "text": "Has a strategy for compliance been established?",
+        "article": "Article 17.1.a",
+        "category": "Establish a compliance strategy (MG02)"
+      },
+      {
+        "order": 4,
+        "text": "Has a strategy been established for compliance with high-risk AI system modification management procedures?",
+        "article": "Article 17.1.a",
+        "category": "Establish a compliance strategy (MG02)"
+      },
+      {
+        "order": 5,
+        "text": "Has a strategy been established for compliance with conformity assessment procedures?",
+        "article": "Article 17.1.a",
+        "category": "Strategy for compliance with the conformity assessment procedure (MG03)"
+      },
+      {
+        "order": 6,
+        "text": "Are the measures specified in Article 15 complied with in terms of accuracy, robustness and cybersecurity when establishing design, development and validation procedures?",
+        "article": "Article 15",
+        "category": "Article 15. Accuracy, robustness and cybersecurity (MG04)"
+      },
+      {
+        "order": 7,
+        "text": "Does the design of the AI system arise, not only from the technical and functional requirements of the system itself, but also from the risk mitigation mechanisms identified in the risk management plan?",
+        "article": "Article 17.1.b",
+        "category": "Establish design procedures (MG05)"
+      },
+      {
+        "order": 8,
+        "text": "Is the relationship between risks and design considered?",
+        "article": "Article 17.1.b",
+        "category": "Establish design procedures (MG05)"
+      },
+      {
+        "order": 9,
+        "text": "Are systematic procedures proposed for the three aspects related to the technical requirements related to cybersecurity, accuracy and robustness, within the framework of the development process of the AI system?",
+        "article": "Article 17.1.c",
+        "category": "Establish the development procedures (MG06)"
+      },
+      {
+        "order": 10,
+        "text": "Are the specifications established in the design tracked, traced, and complied with?",
+        "article": "Article 17.1.c",
+        "category": "Establish the development procedures (MG06)"
+      },
+      {
+        "order": 11,
+        "text": "Have the examination, testing, and validation measures that apply to AI systems been specified?",
+        "article": "Article 17.1.d",
+        "category": "Establish validation procedures (MG07)"
+      },
+      {
+        "order": 12,
+        "text": "Are the technical specifications to be applied recorded?",
+        "article": "Article 17.1.e",
+        "category": "Record the standards or technical specifications applied (MG08)"
+      },
+      {
+        "order": 13,
+        "text": "Are the rules to be applied recorded?",
+        "article": "Article 17.1.e",
+        "category": "Record the standards or technical specifications applied (MG08)"
+      },
+      {
+        "order": 14,
+        "text": "Where the relevant harmonised standards are not fully implemented or do not cover all requirements, are the means to be used to ensure compliance with the requirements recorded?",
+        "article": "Article 17.1.e",
+        "category": "Record the standards or technical specifications applied (MG08)"
+      },
+      {
+        "order": 15,
+        "text": "Are training, validation and testing datasets subject to governance and data management practices in accordance with Article 9 of the Regulation?",
+        "article": "Article 10",
+        "category": "Article 10 (MG09)"
+      },
+      {
+        "order": 16,
+        "text": "Has a risk management system been established in accordance with Article 9 of the Regulation?",
+        "article": "Article 9",
+        "category": "Article 9 (MG10)"
+      },
+      {
+        "order": 17,
+        "text": "Does the risk management system pay special attention to mitigating risks that may affect people's health, safety and fundamental rights?",
+        "article": "Article 9",
+        "category": "Article 9 (MG10)"
+      },
+      {
+        "order": 18,
+        "text": "Has a post-market surveillance system for high-risk AI systems been defined in accordance with Article 72 of the Regulation?",
+        "article": "Article 72",
+        "category": "Article 72 (MG11)"
+      },
+      {
+        "order": 19,
+        "text": "Has the chain of responsibility for the notification of the incident been established, which includes the figure of the DPO, as well as other figures of relevance at the compliance level that are applicable?",
+        "article": "Article 73",
+        "category": "Article 73 (MG12)"
+      },
+      {
+        "order": 20,
+        "text": "Has an incident recording mechanism been established, as well as a mechanism for generating and preserving evidence?",
+        "article": "Article 73",
+        "category": "Article 73 (MG12)"
+      },
+      {
+        "order": 21,
+        "text": "Has the incident resolution chain been defined, including those responsible for the application?",
+        "article": "Article 73",
+        "category": "Article 73 (MG12)"
+      },
+      {
+        "order": 22,
+        "text": "In the case of the provider, and the incident affects multiple AI system deployment managers, has the chain of responsibility for communication, channel and format been defined, in which clear instructions should be provided to the deployment manager on how to proceed for that particular incident and whether they should, in any case, those responsible for the deployment in turn notify the authorities, natural persons affected by the incident in their own systems?",
+        "article": "Article 73",
+        "category": "Article 73 (MG12)"
+      },
+      {
+        "order": 23,
+        "text": "Has a procedure been established to monitor the changes that are reflected in the update of the documentation?",
+        "article": "Article 17.1.j",
+        "category": "Establish a document management procedure (MG13)"
+      },
+      {
+        "order": 24,
+        "text": "Has a chain of responsibility been generated in order to update the documentation according to the changes?",
+        "article": "Article 17.1.j",
+        "category": "Establish a document management procedure (MG13)"
+      },
+      {
+        "order": 25,
+        "text": "Does the documentation of changes to the system maintain the level of completeness of the rest of the technical documentation?",
+        "article": "Article 17.1.j",
+        "category": "Establish a document management procedure (MG13)"
+      },
+      {
+        "order": 26,
+        "text": "Has a document management system been established, defined and sized to guarantee its conservation and changes?",
+        "article": "Article 17.1.j",
+        "category": "Establish a document management procedure (MG13)"
+      },
+      {
+        "order": 27,
+        "text": "Has the communication channel(s) that will be used for each of the communications arising from the different obligations been indicated and described?",
+        "article": "Article 17.1.k",
+        "category": "Establish the communication procedure with ANCs (MG14)"
+      },
+      {
+        "order": 28,
+        "text": "Has the format or formats in which the documents that are required will be provided have been contemplated?",
+        "article": "Article 17.1.k",
+        "category": "Establish the communication procedure with ANCs (MG14)"
+      },
+      {
+        "order": 29,
+        "text": "Has the person or persons responsible for managing the different communications been appointed?",
+        "article": "Article 17.1.k",
+        "category": "Establish the communication procedure with ANCs (MG14)"
+      },
+      {
+        "order": 30,
+        "text": "Have the tools that allow access to data, records, source code and other actions arising from the obligations of the Regulation been implemented and described?",
+        "article": "Article 17.1.k",
+        "category": "Establish the communication procedure with ANCs (MG14)"
+      },
+      {
+        "order": 31,
+        "text": "Have the necessary people been identified and provided for the effective implementation of the QMS and for the operation and control of its processes?",
+        "article": "Article 17.1.l",
+        "category": "Perform an analysis of available resources (MG15)"
+      },
+      {
+        "order": 32,
+        "text": "Has the infrastructure necessary for the operation of processes and achieving system compliance been determined, provided, and maintained?",
+        "article": "Article 17.1.l",
+        "category": "Perform an analysis of available resources (MG15)"
+      },
+      {
+        "order": 33,
+        "text": "Has the necessary environment been determined, provided and maintained for the operation of the processes and achieving the conformity of the system?",
+        "article": "Article 17.1.l",
+        "category": "Perform an analysis of available resources (MG15)"
+      },
+      {
+        "order": 34,
+        "text": "Have the necessary resources been established and provided to ensure the validity and reliability of the results when monitoring or measurement is carried out to verify conformity?",
+        "article": "Article 17.1.l",
+        "category": "Perform an analysis of available resources (MG15)"
+      },
+      {
+        "order": 35,
+        "text": "Do you have the necessary knowledge for process operation and compliance, as well as acquiring or accessing the necessary additional knowledge?",
+        "article": "Article 17.1.l",
+        "category": "Perform an analysis of available resources (MG15)"
+      },
+      {
+        "order": 36,
+        "text": "Have the responsibilities and authorizations been established around the different elements that make up the quality management system?",
+        "article": "Article 17.1.m",
+        "category": "Establish and document the responsibilities of the personnel involved in the processes (MG16)"
+      },
+      {
+        "order": 37,
+        "text": "Have responsibilities been assigned to all the personnel involved and has it been reflected and documented in the list of jobs or equivalent?",
+        "article": "Article 17.1.m",
+        "category": "Establish and document the responsibilities of the personnel involved in the processes (MG16)"
+      },
+      {
+        "order": 38,
+        "text": "Are the assigned responsibilities properly documented and reflected in the QMS?",
+        "article": "Article 17.1.m",
+        "category": "Establish and document the responsibilities of the personnel involved in the processes (MG16)"
+      }
+    ]
+  },
+  {
+    "name": "Records_Checklist",
+    "slug": "records-checklist",
+    "description": "Records checklist by AESIA",
+    "licensing": "Open_Source",
+    "completion_status": "full",
+    "dimension_slug": "record-keeping",
+    "controls_subdim_slugs": [
+      "version-control",
+      "retention-deletion-policies"
+    ],
+    "metadata": {
+      "provider": "AESIA",
+      "link": "https://aesia.digital.gob.es/en/guides",
+      "project_maturity": "",
+      "control_topic": "Records",
+      "target_legal_requirements": ""
+    },
+    "questions": [
+      {
+        "order": 1,
+        "text": "Has a process of analysis of the needs that motivate the generation of records and establish the information to be collected been developed?",
+        "article": "Article 12",
+        "category": "MG01 - Identification, analysis and evaluation of needs that motivate the generation of records and information to be included"
+      },
+      {
+        "order": 2,
+        "text": "Has a needs assessment process been developed that motivates the generation of records and establishes the information to be collected?",
+        "article": "Article 12",
+        "category": "MG01 - Identification, analysis and evaluation of needs that motivate the generation of records and information to be included"
+      },
+      {
+        "order": 3,
+        "text": "Have the needs that motivate the generation of the records been adequately identified?",
+        "article": "Article 12",
+        "category": "MG01 - Identification, analysis and evaluation of needs that motivate the generation of records and information to be included"
+      },
+      {
+        "order": 4,
+        "text": "Have the specific objectives of the registry been identified?",
+        "article": "Article 12",
+        "category": "MG02 - Identification of specific registration objectives"
+      },
+      {
+        "order": 5,
+        "text": "Has it been clearly identified what is expected to be achieved with its collection?",
+        "article": "Article 12",
+        "category": "MG02 - Identification of specific registration objectives"
+      },
+      {
+        "order": 6,
+        "text": "Has the scope of the record been defined, understood as the information to be recorded and the time for which the record will be maintained?",
+        "article": "Article 12.3",
+        "category": "MG03 - Identify the scope of the records, with the information to be recorded and the time to be kept in the system"
+      },
+      {
+        "order": 7,
+        "text": "Have the retention and deletion periods of the records been determined taking into account the defined information disposition needs and applicable regulations, such as data protection regulations (GDPR)?",
+        "article": "Article 12.3",
+        "category": "MG03 - Identify the scope of the records, with the information to be recorded and the time to be kept in the system"
+      },
+      {
+        "order": 8,
+        "text": "Have the pre-existing special needs of the specific regulations aimed at the financial sector that need to be met been taken into account?",
+        "article": "Article 12.3",
+        "category": "MG03 - Identify the scope of the records, with the information to be recorded and the time to be kept in the system"
+      },
+      {
+        "order": 9,
+        "text": "Have the necessary records been generated to ensure that the information determined in the process of implementing the risk management system is collected?",
+        "article": "Article 9",
+        "category": "MG04 - Identify the records necessary to evidence that the information determined in Article 9: Risk management systems is collected"
+      },
+      {
+        "order": 10,
+        "text": "Have the controls of the risk management system been taken into account with its associated evidence in order to obtain records where appropriate?",
+        "article": "Article 9",
+        "category": "MG04 - Identify the records necessary to evidence that the information determined in Article 9: Risk management systems is collected"
+      },
+      {
+        "order": 11,
+        "text": "Have the necessary records been generated to ensure that the information determined in the process of implementing the post-market surveillance system is collected?",
+        "article": "Article 72",
+        "category": "MG05 - Identify the records necessary to evidence that the information determined in Article 72 necessary for the post-market surveillance system is collected"
+      },
+      {
+        "order": 12,
+        "text": "Have the frequencies with which these records should be collected been properly documented and implemented?",
+        "article": "Article 72",
+        "category": "MG05 - Identify the records necessary to evidence that the information determined in Article 72 necessary for the post-market surveillance system is collected"
+      },
+      {
+        "order": 13,
+        "text": "Have the necessary records been generated to ensure that the information determined to implement the defined human oversight mechanisms is collected?",
+        "article": "Article 14",
+        "category": "MG06 - Identify the records necessary to evidence that the information determined in Article 14 necessary for an effective human oversight is collected"
+      },
+      {
+        "order": 14,
+        "text": "Has the need for these records been adequately documented and how to interpret their results for their contribution to the human oversight process?",
+        "article": "Article 14",
+        "category": "MG06 - Identify the records necessary to evidence that the information determined in Article 14 necessary for an effective human oversight is collected"
+      },
+      {
+        "order": 15,
+        "text": "Has a log capture process been implemented to ensure that information is collected according to the criteria set out in the design phase?",
+        "article": "Article 19",
+        "category": "MG07 - Implement the record capture process"
+      },
+      {
+        "order": 16,
+        "text": "Have tests been carried out to validate these procedures?",
+        "article": "Article 19",
+        "category": "MG07 - Implement the record capture process"
+      },
+      {
+        "order": 17,
+        "text": "Have stress tests been carried out on the record capture system to ensure its smooth operation even in times of high demand?",
+        "article": "Article 19",
+        "category": "MG07 - Implement the record capture process"
+      },
+      {
+        "order": 18,
+        "text": "Have the appropriate storage media and protective materials been selected and implemented to ensure the security and availability of the records?",
+        "article": "Article 19",
+        "category": "MG08 - Implement storage media to ensure availability of records"
+      },
+      {
+        "order": 19,
+        "text": "Have storage media monitoring and review periods been established?",
+        "article": "Article 19",
+        "category": "MG08 - Implement storage media to ensure availability of records"
+      },
+      {
+        "order": 20,
+        "text": "Have appropriate cybersecurity measures been selected and implemented to ensure the security and availability of records?",
+        "article": "Article 19",
+        "category": "MG09 - Implement security and cybersecurity means to ensure the protection of records"
+      },
+      {
+        "order": 21,
+        "text": "Have periods of supervision and review of the cybersecurity and access control measures implemented been established?",
+        "article": "Article 19",
+        "category": "MG09 - Implement security and cybersecurity means to ensure the protection of records"
+      },
+      {
+        "order": 22,
+        "text": "Are training and training processes developed for the personnel involved in the management of the registries?",
+        "article": "Article 12.3.d",
+        "category": "MG10 - Development of training and training of personnel involved in the management of registrations"
+      },
+      {
+        "order": 23,
+        "text": "Are these training needs contemplated in the response to Article 4 of Literacy around AI?",
+        "article": "Article 4",
+        "category": "MG10 - Development of training and training of personnel involved in the management of registrations"
+      },
+      {
+        "order": 24,
+        "text": "Has the impact of other applicable regulations or laws that may affect the registration process been analyzed and evaluated?",
+        "article": "Article 19",
+        "category": "MG11 - Analysis of the impact of other applicable regulations or laws such as GDPR data protection regulations that need to be considered in the generation of logs"
+      },
+      {
+        "order": 25,
+        "text": "Specifically, has the impact of data protection regulations (GDPR) on the log generation process been analyzed and evaluated?",
+        "article": "Article 19",
+        "category": "MG11 - Analysis of the impact of other applicable regulations or laws such as GDPR data protection regulations that need to be considered in the generation of logs"
+      },
+      {
+        "order": 26,
+        "text": "Have monitoring periods been established for storage media and the cybersecurity and access control measures implemented?",
+        "article": "Article 19",
+        "category": "MG12 - Establish periods of supervision and review of storage media and its cybersecurity"
+      },
+      {
+        "order": 27,
+        "text": "Have review periods been established for the storage media and the cybersecurity and access control measures implemented?",
+        "article": "Article 19",
+        "category": "MG12 - Establish periods of supervision and review of storage media and its cybersecurity"
+      },
+      {
+        "order": 28,
+        "text": "Have monitoring periods been established for storage media and the cybersecurity and access control measures implemented?",
+        "article": "Article 19",
+        "category": "MG13 - Establish a process for monitoring and continuous improvement of the records management system"
+      },
+      {
+        "order": 29,
+        "text": "Have review periods been established for the storage media and the cybersecurity and access control measures implemented?",
+        "article": "Article 19",
+        "category": "MG13 - Establish a process for monitoring and continuous improvement of the records management system"
+      },
+      {
+        "order": 30,
+        "text": "Has a process for monitoring and continuous improvement of the records management system been established?",
+        "article": "Article 19",
+        "category": "MG14 - Implement a process that ensures proper technical documentation of the records management system"
+      },
+      {
+        "order": 31,
+        "text": "In the established monitoring and continuous improvement process, are possible errors monitored and identified and the data recorded for the implementation and continuous improvement of the proposed solutions evaluated?",
+        "article": "Article 19",
+        "category": "MG14 - Implement a process that ensures proper technical documentation of the records management system"
+      }
+    ]
+  },
+  {
+    "name": "Risk Management_Checklist",
+    "slug": "risk-management-checklist",
+    "description": "Risk Management checklist by AESIA",
+    "licensing": "Open_Source",
+    "completion_status": "full",
+    "dimension_slug": "risk-management",
+    "controls_subdim_slugs": [
+      "structured-risk-identification",
+      "core-classification-step"
+    ],
+    "metadata": {
+      "provider": "AESIA",
+      "link": "https://aesia.digital.gob.es/en/guides",
+      "project_maturity": "",
+      "control_topic": "Risk Management",
+      "target_legal_requirements": ""
+    },
+    "questions": [
+      {
+        "order": 1,
+        "text": "Has a risk management system associated with high-risk AI systems been defined throughout the entire lifecycle?",
+        "article": "Article 9",
+        "category": "MG01 - Analysis and definition of the internal and external context"
+      },
+      {
+        "order": 2,
+        "text": "Have elements of the organization's internal and external context around high-risk AI systems been identified and documented?",
+        "article": "Article 9",
+        "category": "MG01 - Analysis and definition of the internal and external context"
+      },
+      {
+        "order": 3,
+        "text": "Has leadership and commitment to risk management been formalized in the organization (publication of policies, procedures, ensuring that there are sufficient resources, assignment of authority, responsibility and accountability, etc.)?",
+        "article": "Article 9",
+        "category": "MG01 - Analysis and definition of the internal and external context"
+      },
+      {
+        "order": 4,
+        "text": "Has risk appetite been defined and constantly updated (in relation to the risk that the AI system may pose to people's health, safety and fundamental rights)?",
+        "article": "Article 9",
+        "category": "MG02 - Definition and updating of risk appetite"
+      },
+      {
+        "order": 5,
+        "text": "Have all components of the AI system (key actors, data, tools, etc.) been identified, inventoried, and documented?",
+        "article": "Article 9",
+        "category": "MG03 - Inventory of AI system components"
+      },
+      {
+        "order": 6,
+        "text": "Have all risks associated with AI systems (especially those risks that may affect the health, safety and fundamental rights of individuals) been identified, inventoried and documented?",
+        "article": "Article 9",
+        "category": "MG04 - Identification of the main sources of risk"
+      },
+      {
+        "order": 7,
+        "text": "Have all the identified risks been analysed and evaluated (assigning a probability of occurrence and an impact)?",
+        "article": "Article 9",
+        "category": "MG05 - Assessment of sources of risk"
+      },
+      {
+        "order": 8,
+        "text": "Have the possible risks related to the use or impact of the AI system on children under 18 years of age been taken into account (identification of these risks, analysis, evaluation and implementation of treatment measures)?",
+        "article": "Article 9",
+        "category": "MG06 - Identification and analysis of the impact of the effects and their probability of occurrence"
+      },
+      {
+        "order": 9,
+        "text": "Have mechanisms been defined and implemented for communication and consultation around the risk management system of high-risk AI systems?",
+        "article": "Article 9",
+        "category": "MG07 - Reporting of the results"
+      },
+      {
+        "order": 10,
+        "text": "Have the potential risks related to the post-market surveillance system (identification of these risks, analysis, evaluation and implementation of treatment measures) been taken into account?",
+        "article": "Article 9",
+        "category": "MG08 - Analysis of data collected post-marketing"
+      },
+      {
+        "order": 11,
+        "text": "Have risk treatment options been defined and prioritized based on efficacy and feasibility criteria?",
+        "article": "Article 9",
+        "category": "MG09 - Identification of new possible risks"
+      },
+      {
+        "order": 12,
+        "text": "Have appropriate mitigation measures and safeguards been assessed for each identified risk?",
+        "article": "Article 9",
+        "category": "MG09 - Identification of new possible risks"
+      },
+      {
+        "order": 13,
+        "text": "Have all risk management options identified, analysed and assessed been identified?",
+        "article": "Article 9",
+        "category": "MG10 - Definition and selection of risk management options"
+      },
+      {
+        "order": 14,
+        "text": "If defined, has the risk management system associated with high-risk AI systems been implemented throughout the lifecycle?",
+        "article": "Article 9",
+        "category": "MG11 - Plan and implement risk treatment"
+      },
+      {
+        "order": 15,
+        "text": "If implemented, is the risk management system associated with high-risk AI systems maintained continuously throughout the lifecycle?",
+        "article": "Article 9",
+        "category": "MG11 - Plan and implement risk treatment"
+      },
+      {
+        "order": 16,
+        "text": "Have the implementation of the defined treatment measures been planned?",
+        "article": "Article 9",
+        "category": "MG11 - Plan and implement risk treatment"
+      },
+      {
+        "order": 17,
+        "text": "Has a monitoring and continuous improvement process been defined and implemented around the risk management system of high-risk AI systems?",
+        "article": "Article 9",
+        "category": "MG12 - Evaluate the effectiveness of each treatment"
+      },
+      {
+        "order": 18,
+        "text": "Are test procedures in place to ensure that the system serves its purpose (intended purpose)?",
+        "article": "Article 9",
+        "category": "MG12 - Evaluate the effectiveness of each treatment"
+      },
+      {
+        "order": 19,
+        "text": "Are testing procedures in place to ensure that the requirements set out for HRAIS are met?",
+        "article": "Article 9",
+        "category": "MG12 - Evaluate the effectiveness of each treatment"
+      },
+      {
+        "order": 20,
+        "text": "Have real-world tests been defined and implemented?",
+        "article": "Article 9",
+        "category": "MG12 - Evaluate the effectiveness of each treatment"
+      },
+      {
+        "order": 21,
+        "text": "Have the risk management system review and monitoring periods been established?",
+        "article": "Article 9",
+        "category": "MG13 - Determine if the residual risk is acceptable"
+      },
+      {
+        "order": 22,
+        "text": "If defined, has the risk management system associated with high-risk AI systems been documented throughout the lifecycle?",
+        "article": "Article 9",
+        "category": "MG14 - Document and report residual risks"
+      },
+      {
+        "order": 23,
+        "text": "Have the residual risks after the implementation of the treatment measures been documented for communication to those responsible for deploying the AI system?",
+        "article": "Article 9",
+        "category": "MG14 - Document and report residual risks"
+      },
+      {
+        "order": 24,
+        "text": "Has the entire risk management process been documented?",
+        "article": "Article 9",
+        "category": "MG14 - Document and report residual risks"
+      }
+    ]
+  },
+  {
+    "name": "Robustness_Checklist",
+    "slug": "robustness-checklist",
+    "description": "Robustness checklist by AESIA",
+    "licensing": "Open_Source",
+    "completion_status": "full",
+    "dimension_slug": "technical-robustness-safety",
+    "controls_subdim_slugs": [
+      "fail-over-architecture",
+      "human-fallback"
+    ],
+    "metadata": {
+      "provider": "AESIA",
+      "link": "https://aesia.digital.gob.es/en/guides",
+      "project_maturity": "",
+      "control_topic": "Robustness",
+      "target_legal_requirements": ""
+    },
+    "questions": [
+      {
+        "order": 1,
+        "text": "Has adequate training of the personnel involved in the development and implementation been ensured in key aspects of the robustness of the AI system?",
+        "article": "Article 15",
+        "category": "Guideline Measures - MG01: Gain basic knowledge of robustness"
+      },
+      {
+        "order": 2,
+        "text": "Have the properties and metrics of the system's robustness been established and the requirements that must be met according to the intended purpose and the risk analysis carried out, with evidence?",
+        "article": "Article 15",
+        "category": "Guideline Measures - MG02: Set clear objectives for robustness, define associated metrics"
+      },
+      {
+        "order": 3,
+        "text": "During the design of the system, have the characteristics recognized for the robustness measurement been identified and their separability (possibility of being measured separately) identified?",
+        "article": "Article 15",
+        "category": "Guideline Measures - MG03: Identify critical system features"
+      },
+      {
+        "order": 4,
+        "text": "Do the different environments through which the system evolves in its life cycle (development, integration, pre-production and production) have equivalent characteristics according to the defined robustness objectives?",
+        "article": "Article 15",
+        "category": "Guideline Measures - MG04: Standardization of validation and production environments"
+      },
+      {
+        "order": 5,
+        "text": "Has the verification and validation of the chosen metrics been carried out in hardware environments that exactly replicate the final capabilities to which the AI system will have access?",
+        "article": "Article 15",
+        "category": "Guideline Measures - MG05: Validation in hardware environments that replicate the final capabilities of the system"
+      },
+      {
+        "order": 6,
+        "text": "Have several robustness metrics related to the performance (FLOPS, efficiency, FLOPY, Latency, etc.) of the system been defined in the hardware established for its operation?",
+        "article": "Article 15",
+        "category": "Guideline Measures - MG06: Measurement of performance and computational complexity"
+      },
+      {
+        "order": 7,
+        "text": "Is there a plan of experiments to demonstrate the robustness of the system based on at least one of the following methods: statistical, formal, empirical, or practical tests?",
+        "article": "Article 15",
+        "category": "Guideline Measures - MG07: Design experiments to assess robustness"
+      },
+      {
+        "order": 8,
+        "text": "Is there evidence of such experiments conducted, their analysis and interpretation, and their impact on the robustness parameters of the AI system?",
+        "article": "Article 15",
+        "category": "Guideline Measures - MG08: Conduct experiments with real data, analyze and interpret its results"
+      },
+      {
+        "order": 9,
+        "text": "Have procedures and technical measures been defined to monitor robustness, such as system interfaces showing the selected robustness metrics in an aggregated manner and in histories and transaction records?",
+        "article": "Article 15",
+        "category": "Guideline Measures - MG09: Implement capabilities to observe, monitor, and report degradation"
+      },
+      {
+        "order": 10,
+        "text": "Are there warning mechanisms when the robustness of the system is not within the established parameters?",
+        "article": "Article 15",
+        "category": "Guideline Measures - MG10: Configure alert techniques and safe failure protocols"
+      },
+      {
+        "order": 11,
+        "text": "Have specific committees or teams been established to proactively assess inconsistencies or potential failures in the robustness of the system?",
+        "article": "Article 15",
+        "category": "Guideline Measures - MG11: Establish evaluation committees to anticipate inconsistencies or failures"
+      },
+      {
+        "order": 12,
+        "text": "Are there automatic mechanisms designed and implemented to ensure system recovery in the event of a failure?",
+        "article": "Article 15",
+        "category": "Guideline Measures - MG12: Implement automatic mechanisms for disaster recovery"
+      },
+      {
+        "order": 13,
+        "text": "Have specific tools or procedures been implemented to ensure geographic redundancy, proper versioning management, and system scalability?",
+        "article": "Article 15",
+        "category": "Guideline Measures - MG13: Implement tools to ensure geo-redundancy, versioning, and scalability"
+      },
+      {
+        "order": 14,
+        "text": "Is it monitored for systems that continue to learn all the established metrics (also related to accuracy and cybersecurity) and that allow us to know if the system is still within the design parameters?",
+        "article": "Article 15",
+        "category": "Guideline Measures - MG14: For systems that are still learning: Ensure that the robustness, accuracy, and performance of the system is not degraded"
+      },
+      {
+        "order": 15,
+        "text": "Have monitoring and control plans been established, with their action measures for the degradation of the model based on model deviation, concept drift, data drift, etc.?",
+        "article": "Article 15",
+        "category": "Guideline Measures - MG15: For systems that are still learning: Adopt mitigation strategies that minimize deviation from the model and prevent the accumulation of bias"
+      },
+      {
+        "order": 16,
+        "text": "Are interactions, interoperability, and feedback received during the system lifecycle formally recorded, especially in systems that continue to learn, to ensure traceability and improve robustness?",
+        "article": "Article 15",
+        "category": "Guideline Measures - MG16: For systems that are still learning: Formally record instances of interaction and interoperability with other systems or humans, along with feedback received"
+      }
+    ]
+  },
+  {
+    "name": "Technical Documentation",
+    "slug": "technical-documentation",
+    "description": "Technical documentation checklist by AESIA",
+    "licensing": "Open_Source",
+    "completion_status": "full",
+    "dimension_slug": "technical-documentation",
+    "controls_subdim_slugs": [
+      "system-overview-and-intended-purpose",
+      "architecture-and-design-specifications"
+    ],
+    "metadata": {
+      "provider": "AESIA",
+      "link": "https://aesia.digital.gob.es/en/guides",
+      "project_maturity": "",
+      "control_topic": "Technical Documentation",
+      "target_legal_requirements": ""
+    },
+    "questions": [
+      {
+        "order": 1,
+        "text": "Has a documentation strategy been defined from the early stages of the AI system design to provide appropriate coverage?",
+        "article": "Article 11",
+        "category": "Plan from design and conception, to commissioning, preparation of technical documentation"
+      },
+      {
+        "order": 2,
+        "text": "Does the planning include clear milestones and responsible parties to guarantee the traceability of the technical documentation process?",
+        "article": "Article 11",
+        "category": "Plan from design and conception, to commissioning, preparation of technical documentation"
+      },
+      {
+        "order": 3,
+        "text": "¿Existe un calendario establecido para revisar y actualizar la documentación técnica?",
+        "article": "Article 11",
+        "category": "Have a periodic update plan for updating technical documentation"
+      },
+      {
+        "order": 4,
+        "text": "¿El plan de actualización tiene en cuenta cambios regulatorios, técnicos o de contexto operativo del sistema que producirán adicionales actualizaciones cuando surjan?",
+        "article": "Article 11",
+        "category": "Have a periodic update plan for updating technical documentation"
+      },
+      {
+        "order": 5,
+        "text": "Is there a set schedule for reviewing and updating the technical documentation?",
+        "article": "Article 11",
+        "category": "Establish a procedure for tracking AI system changes that allows documentation to be updated continuously and consistently"
+      },
+      {
+        "order": 6,
+        "text": "Does the upgrade plan take into account regulatory, technical, or operational context changes to the system that will result in additional updates when they arise?",
+        "article": "Article 11",
+        "category": "Establish a procedure for tracking AI system changes that allows documentation to be updated continuously and consistently"
+      },
+      {
+        "order": 7,
+        "text": "Has an internal communication plan been designed to share the key content of the technical documentation between the different areas involved?",
+        "article": "Article 11",
+        "category": "Plan the communication to the different areas, and in a transversal way, of the content and objective of the technical documentation"
+      },
+      {
+        "order": 8,
+        "text": "Has it been verified that all areas understand the purpose of the technical documentation in relation to their functions?",
+        "article": "Article 11",
+        "category": "Plan the communication to the different areas, and in a transversal way, of the content and objective of the technical documentation"
+      },
+      {
+        "order": 9,
+        "text": "Has a person in charge of technical documentation been formally appointed with cross-cutting authority to coordinate its preparation and supervision?",
+        "article": "Article 11",
+        "category": "Designate a person responsible for the technical documentation"
+      },
+      {
+        "order": 10,
+        "text": "Does the manager have the resources and knowledge to carry out this task effectively?",
+        "article": "Article 11",
+        "category": "Designate a person responsible for the technical documentation"
+      },
+      {
+        "order": 11,
+        "text": "Have specific documentation managers been assigned for each key area (data, security, risks, etc.)?",
+        "article": "Article 11",
+        "category": "Define specific responsible persons for each relevant area"
+      },
+      {
+        "order": 12,
+        "text": "Do the designated managers have the technical skills to correctly document their scope?",
+        "article": "Article 11",
+        "category": "Define specific responsible persons for each relevant area"
+      },
+      {
+        "order": 13,
+        "text": "Is there a single, secure, and accessible repository to store the system's technical documentation?",
+        "article": "Article 11",
+        "category": "Implement a document management system or centralized repository for technical documentation"
+      },
+      {
+        "order": 14,
+        "text": "Does the document management system allow version control, access permissions and audits?",
+        "article": "Article 11",
+        "category": "Implement a document management system or centralized repository for technical documentation"
+      },
+      {
+        "order": 15,
+        "text": "Has it been verified that all managers have adequate access to the document management system?",
+        "article": "Article 11",
+        "category": "Ensure that those responsible for technical documentation have access to the document management system"
+      },
+      {
+        "order": 16,
+        "text": "Are there differentiated access policies according to roles and responsibilities?",
+        "article": "Article 11",
+        "category": "Ensure that those responsible for technical documentation have access to the document management system"
+      },
+      {
+        "order": 17,
+        "text": "Have security and backup measures (backups, redundancy, etc.) been implemented to preserve the integrity of the technical documentation?",
+        "article": "Article 11",
+        "category": "Ensure that the document management system has mechanisms that guarantee the conservation of documentation"
+      },
+      {
+        "order": 18,
+        "text": "Are periodic audits carried out to verify that these mechanisms are active and functioning correctly?",
+        "article": "Article 11",
+        "category": "Ensure that the document management system has mechanisms that guarantee the conservation of documentation"
+      },
+      {
+        "order": 19,
+        "text": "Do those responsible for the deployment have clear and direct access to the instructions and documentation necessary for their task?",
+        "article": "Article 11",
+        "category": "Ensure that instructions for those responsible for system deployment are accessible to them"
+      },
+      {
+        "order": 20,
+        "text": "Is it regularly validated that this documentation is up-to-date, understandable and complete from an operational point of view?",
+        "article": "Article 11",
+        "category": "Ensure that instructions for those responsible for system deployment are accessible to them"
+      },
+      {
+        "order": 21,
+        "text": "Is there a procedure for regularly updating the deployment instructions for the AI system?",
+        "article": "Article 11",
+        "category": "Keep system deployment instructions up to date"
+      },
+      {
+        "order": 22,
+        "text": "Are those responsible for deployment notified when instructions have been modified or updated?",
+        "article": "Article 11",
+        "category": "Keep system deployment instructions up to date"
+      },
+      {
+        "order": 23,
+        "text": "Have you defined a frequency and evaluation criteria for auditing the system's technical documentation?",
+        "article": "Article 11",
+        "category": "Plan and execute regular audits on the status of technical documentation"
+      },
+      {
+        "order": 24,
+        "text": "Do the audits include verifications on the traceability, updating and accessibility of the documentation?",
+        "article": "Article 11",
+        "category": "Plan and execute regular audits on the status of technical documentation"
+      },
+      {
+        "order": 25,
+        "text": "Has an identification of relevant harmonised standards (CEN/CENELEC, ISO, NIST, etc.) applicable to the system been carried out?",
+        "article": "Article 11",
+        "category": "Identify the available and relevant approved harmonised standards"
+      },
+      {
+        "order": 26,
+        "text": "Is there regular monitoring of regulatory changes that may affect compliance with the system?",
+        "article": "Article 11",
+        "category": "Identify the available and relevant approved harmonised standards"
+      },
+      {
+        "order": 27,
+        "text": "Has the possibility of applying recognized quality seals or certifications for the type of AI system developed been evaluated?",
+        "article": "Article 11",
+        "category": "Apply existing quality seals that are relevant to the system"
+      },
+      {
+        "order": 28,
+        "text": "Is there evidence of compliance with the criteria required by these quality seals?",
+        "article": "Article 11",
+        "category": "Apply existing quality seals that are relevant to the system"
+      },
+      {
+        "order": 29,
+        "text": "Does the repository used ensure the secure and durable storage of the technical documentation for at least 10 years?",
+        "article": "Article 18",
+        "category": "Keep the technical documentation in a repository for at least 10 years"
+      },
+      {
+        "order": 30,
+        "text": "Does the system allow immediate access by the competent national authorities to such documentation when required?",
+        "article": "Article 18",
+        "category": "Keep the technical documentation in a repository for at least 10 years"
+      },
+      {
+        "order": 31,
+        "text": "Has the quality management system documentation been included in the official conservation repository?",
+        "article": "Article 18",
+        "category": "Keep the documentation relating to the quality management system in a repository"
+      },
+      {
+        "order": 32,
+        "text": "Is it guaranteed to be available for at least 10 years and to be accessible to competent authorities?",
+        "article": "Article 18",
+        "category": "Keep the documentation relating to the quality management system in a repository"
+      },
+      {
+        "order": 33,
+        "text": "Are approvals and evidence of changes by notified bodies retained in a centralized, secure repository?",
+        "article": "Article 18",
+        "category": "Establish a conservation plan for documentation relating to changes approved by notified bodies"
+      },
+      {
+        "order": 34,
+        "text": "Does the plan contemplate conservation for at least 10 years, guaranteeing the solidity of the solution (technological or not) that is decided to be used for such conservation?",
+        "article": "Article 18",
+        "category": "Establish a conservation plan for documentation relating to changes approved by notified bodies"
+      },
+      {
+        "order": 35,
+        "text": "Does the system provide for the retention of decisions and documents issued by notified bodies?",
+        "article": "Article 18",
+        "category": "Establish a conservation plan for decisions and other documents issued by notified bodies"
+      },
+      {
+        "order": 36,
+        "text": "Is its conservation and access for at least 10 years in a suitable repository ensured?",
+        "article": "Article 18",
+        "category": "Establish a conservation plan for decisions and other documents issued by notified bodies"
+      },
+      {
+        "order": 37,
+        "text": "Is the declaration of conformity archived in a repository that ensures the availability and retention of the declaration of conformity for at least 10 years?",
+        "article": "Article 18",
+        "category": "Conservation plan for declaration of conformity"
+      },
+      {
+        "order": 38,
+        "text": "Have regular audits of the Documentation Retention Mechanism been established?",
+        "article": "Article 18",
+        "category": "Regularly audit the retention mechanism and repository"
+      },
+      {
+        "order": 39,
+        "text": "Is its correct functioning and compliance with conservation obligations checked?",
+        "article": "Article 18",
+        "category": "Regularly audit the retention mechanism and repository"
+      },
+      {
+        "order": 40,
+        "text": "Does the retention mechanism ensure continued access to technical documentation even if the supplier ceases operations?",
+        "article": "Article 18",
+        "category": "Ensure that the retention mechanism and repository ensure access even if the provider disappears"
+      },
+      {
+        "order": 41,
+        "text": "Have legal and technical measures been taken to ensure this future availability?",
+        "article": "Article 18",
+        "category": "Ensure that the retention mechanism and repository ensure access even if the provider disappears"
+      },
+      {
+        "order": 42,
+        "text": "Does the technical documentation clearly include the purpose of the system, the name of the supplier and the corresponding version?",
+        "article": "Annex IV.1.a",
+        "category": "Minimum documentary content of purpose and version of the system"
+      },
+      {
+        "order": 43,
+        "text": "Is traceability indicated between previous versions and the current version of the documented system?",
+        "article": "Annex IV.1.a",
+        "category": "Minimum documentary content of purpose and version of the system"
+      },
+      {
+        "order": 44,
+        "text": "Has it been properly documented how the system communicates or can interoperate with other external systems?",
+        "article": "Annex IV.1.b",
+        "category": "Minimum documentary content of interaction with other systems"
+      },
+      {
+        "order": 45,
+        "text": "Have the compatibility requirements necessary to ensure such interoperability also been documented?",
+        "article": "Annex IV.1.b",
+        "category": "Minimum documentary content of interaction with other systems"
+      },
+      {
+        "order": 46,
+        "text": "Does the documentation include the versions used and the procedures required for updates or patches?",
+        "article": "Annex IV.1.c",
+        "category": "Minimum documentary content of versions and updates"
+      },
+      {
+        "order": 47,
+        "text": "Is the planned upgrade policy indicated to maintain the security and functionality of the system?",
+        "article": "Annex IV.1.c",
+        "category": "Minimum documentary content of versions and updates"
+      },
+      {
+        "order": 48,
+        "text": "Is the way the system is distributed and deployed (e.g., API, download, embedded software) detailed?",
+        "article": "Annex IV.1.d",
+        "category": "Minimum documentary content of forms of distribution"
+      },
+      {
+        "order": 49,
+        "text": "Is clear documentation provided for each mode of commissioning of the system?",
+        "article": "Annex IV.1.d",
+        "category": "Minimum documentary content of forms of distribution"
+      },
+      {
+        "order": 50,
+        "text": "Has the type of hardware required or recommended for the proper operation of the system been documented?",
+        "article": "Annex IV.1.e",
+        "category": "Minimum documentary content of hardware foreseen"
+      },
+      {
+        "order": 51,
+        "text": "Are possible limitations or incompatibilities of the system specified with certain hardware (power requirements, need for refueling, etc.)?",
+        "article": "Annex IV.1.e",
+        "category": "Minimum documentary content of hardware foreseen"
+      },
+      {
+        "order": 52,
+        "text": "Are visual elements such as product images, markup, or internal settings included, if applicable?",
+        "article": "Annex IV.1.f",
+        "category": "Minimum documentary content of appearance and physical integration"
+      },
+      {
+        "order": 53,
+        "text": "Are the illustrations correctly associated with relevant technical descriptions within the documentation?",
+        "article": "Annex IV.1.f",
+        "category": "Minimum documentary content of appearance and physical integration"
+      },
+      {
+        "order": 54,
+        "text": "Does the documentation contain a comprehensible and sufficient description of the user interface for the system operator?",
+        "article": "Annex IV.1.g",
+        "category": "Minimum documentary content of the interface for deployment"
+      },
+      {
+        "order": 55,
+        "text": "Have visual examples or diagrams been included that allow the deployment manager to familiarize themselves with the interface before use?",
+        "article": "Annex IV.1.g",
+        "category": "Minimum documentary content of the interface for deployment"
+      },
+      {
+        "order": 56,
+        "text": "Have the third-party tools and models used in the development of the system been documented, as well as their integration or modification?",
+        "article": "Annex IV.1.h",
+        "category": "Minimum documentary content of use and interface for deployment"
+      },
+      {
+        "order": 57,
+        "text": "Have the risks arising from the use of third-party tools or models been assessed and documented?",
+        "article": "Annex IV.2.a",
+        "category": "Minimum documentary content of methods and tools used"
+      },
+      {
+        "order": 58,
+        "text": "Have all the technical design elements of the system, including the algorithms used, been clearly and accessibly documented?",
+        "article": "Annex IV.2.b",
+        "category": "Minimum documentary content of design, logic and objectives"
+      },
+      {
+        "order": 59,
+        "text": "Does the documentation include the technical concessions made and how they affect the performance or security of the system?",
+        "article": "Annex IV.2.b",
+        "category": "Minimum documentary content of design, logic and objectives"
+      },
+      {
+        "order": 60,
+        "text": "Does the documentation include a comprehensive schematic of the system's architecture and the interaction between its components?",
+        "article": "Annex IV.2.c",
+        "category": "Minimum documentary content of architecture and resources used"
+      },
+      {
+        "order": 61,
+        "text": "Are the computational resources used and the platforms used in each phase of the development cycle described?",
+        "article": "Annex IV.2.c",
+        "category": "Minimum documentary content of architecture and resources used"
+      },
+      {
+        "order": 62,
+        "text": "Have the data and methodologies used in the training, testing and validation of the system been documented?",
+        "article": "Annex IV.2.d",
+        "category": "Minimum documentary content of data and training"
+      },
+      {
+        "order": 63,
+        "text": "Is there evidence of data quality control and labelling and cleaning processes carried out?",
+        "article": "Annex IV.2.d",
+        "category": "Minimum documentary content of data and training"
+      },
+      {
+        "order": 64,
+        "text": "Have the measures that allow human supervision of the system during its use been evaluated?",
+        "article": "Annex IV.2.e",
+        "category": "Minimum documentary content of human supervision and interpretation"
+      },
+      {
+        "order": 65,
+        "text": "Does the documentation include tools or mechanisms designed for users to correctly interpret the results?",
+        "article": "Annex IV.2.e",
+        "category": "Minimum documentary content of human supervision and interpretation"
+      },
+      {
+        "order": 66,
+        "text": "Have the planned changes that could be applied to the system and their technical impact been documented?",
+        "article": "Annex IV.2.f",
+        "category": "Minimum documentary content of predetermined changes and compliance"
+      },
+      {
+        "order": 67,
+        "text": "Are validation procedures specified to ensure that these changes do not compromise the conformity of the system?",
+        "article": "Annex IV.2.f",
+        "category": "Minimum documentary content of predetermined changes and compliance"
+      },
+      {
+        "order": 68,
+        "text": "Are the protection measures applied to guarantee the cybersecurity of the AI system detailed?",
+        "article": "Annex IV.2.h",
+        "category": "Minimum cybersecurity documentary content"
+      },
+      {
+        "order": 69,
+        "text": "Does the documentation include vulnerability assessments and mechanisms for managing security incidents?",
+        "article": "Annex IV.2.h",
+        "category": "Minimum cybersecurity documentary content"
+      },
+      {
+        "order": 70,
+        "text": "Are potential adverse outcomes and risks associated with the system adequately identified and documented?",
+        "article": "Annex IV.3",
+        "category": "Minimum documentary content of human operation and supervision"
+      },
+      {
+        "order": 71,
+        "text": "Does the documentation include mechanisms to mitigate and monitor these risks throughout the system lifecycle?",
+        "article": "Annex IV.3",
+        "category": "Minimum documentary content of human operation and supervision"
+      },
+      {
+        "order": 72,
+        "text": "Have the roles and responsibilities of the deployment manager been clearly specified with respect to monitoring the system?",
+        "article": "Annex IV.3",
+        "category": "Human oversight measures"
+      },
+      {
+        "order": 73,
+        "text": "Has the training or training necessary for this profile to understand and correctly interpret the results been described?",
+        "article": "Annex IV.3",
+        "category": "Human oversight measures"
+      },
+      {
+        "order": 74,
+        "text": "Does the documentation justify the established performance parameters and their alignment with the purpose of the system?",
+        "article": "Annex IV.4",
+        "category": "Minimum documentary content of performance parameters"
+      },
+      {
+        "order": 75,
+        "text": "Have these parameters been validated in documented tests?",
+        "article": "Annex IV.4",
+        "category": "Minimum documentary content of performance parameters"
+      },
+      {
+        "order": 76,
+        "text": "Has a risk management system been documented that complies with the provisions of Article 9 of the regulation?",
+        "article": "Annex IV.5",
+        "category": "Minimum documentary content of risk management system"
+      },
+      {
+        "order": 77,
+        "text": "Is it specified how this system is updated in the face of relevant changes in the life cycle of the AI system?",
+        "article": "Annex IV.5",
+        "category": "Minimum documentary content of risk management system"
+      },
+      {
+        "order": 78,
+        "text": "Does the documentation clearly specify which harmonized norms or technical standards have been followed for the development of the system?",
+        "article": "Annex IV.7",
+        "category": "Minimum documentary content of applied and alternative standards"
+      },
+      {
+        "order": 79,
+        "text": "Have the solutions adopted in cases where harmonised standards have not been applied adequately justified?",
+        "article": "Annex IV.7",
+        "category": "Minimum documentary content of applied and alternative standards"
+      },
+      {
+        "order": 80,
+        "text": "Has a valid copy of the system's declaration of conformity with the applicable regulation been included in the documentation?",
+        "article": "Annex IV.8",
+        "category": "Minimum documentary content of the EU declaration of conformity"
+      },
+      {
+        "order": 81,
+        "text": "Is it verified that this declaration is signed by the authorised supplier and makes explicit reference to Article 47?",
+        "article": "Annex IV.8",
+        "category": "Minimum documentary content of the EU declaration of conformity"
+      },
+      {
+        "order": 82,
+        "text": "Has an AI system been defined for evaluating the performance of the AI system after commercial deployment?",
+        "article": "Annex IV.9",
+        "category": "Minimum documentary content of post-market surveillance"
+      },
+      {
+        "order": 83,
+        "text": "Does the post-marketing surveillance plan include mechanisms for collecting information, audits and continuous improvements?",
+        "article": "Annex IV.9",
+        "category": "Minimum documentary content of post-market surveillance"
+      }
+    ]
+  },
+  {
+    "name": "Transparency_Checklist",
+    "slug": "transparency-checklist",
+    "description": "Transparency checklist by AESIA",
+    "licensing": "Open_Source",
+    "completion_status": "full",
+    "dimension_slug": "transparency",
+    "controls_subdim_slugs": [
+      "ai-identity-notices",
+      "disclaimers"
+    ],
+    "metadata": {
+      "provider": "AESIA",
+      "link": "https://aesia.digital.gob.es/en/guides",
+      "project_maturity": "",
+      "control_topic": "Transparency",
+      "target_legal_requirements": ""
+    },
+    "questions": [
+      {
+        "order": 1,
+        "text": "Is the system accompanied by a channel that allows the management of requests and incidents online?",
+        "article": "Article 13",
+        "category": "MG01 - Provide provider contact"
+      },
+      {
+        "order": 2,
+        "text": "Does the governance model associated with the system have within its organizational structure a clear point of contact for the supplier available to those deployers?",
+        "article": "Article 13",
+        "category": "MG01 - Provide provider contact"
+      },
+      {
+        "order": 3,
+        "text": "Does the system meet the transparency-related requirements that apply to the use cases supported by the system?",
+        "article": "Article 13",
+        "category": "MG02 - Catering to the business domain"
+      },
+      {
+        "order": 4,
+        "text": "Does the system provide detailed information on its functional scope, also specifying the possible risks due to unforeseen uses of it?",
+        "article": "Article 13",
+        "category": "MG02 - Catering to the business domain"
+      },
+      {
+        "order": 5,
+        "text": "Does the system provide information about foreseeable circumstances where it could be used for purposes other than the one for which it was designed?",
+        "article": "Article 13",
+        "category": "MG03 - Ensure the functional objective of the system"
+      },
+      {
+        "order": 6,
+        "text": "Is the system accompanied by a risk plan for such uses?",
+        "article": "Article 13",
+        "category": "MG03 - Ensure the functional objective of the system"
+      },
+      {
+        "order": 7,
+        "text": "Does the system have an associated procedure to be able to monitor that such uses do not occur during the operation of the system?",
+        "article": "Article 13",
+        "category": "MG03 - Ensure the functional objective of the system"
+      },
+      {
+        "order": 8,
+        "text": "Does the system identify the data sources used both in its learning and in its use, also providing the meaning of these sources and data, their usefulness and the implication in their use?",
+        "article": "Article 13",
+        "category": "MG04 - Transparency about the data used"
+      },
+      {
+        "order": 9,
+        "text": "Is the system accompanied by tools that allow a detailed exploratory analysis of data (EDA) of these sources, to know their essence, their associated meta-information, their critical or atypical values, etc.?",
+        "article": "Article 13",
+        "category": "MG04 - Transparency about the data used"
+      },
+      {
+        "order": 10,
+        "text": "Does the system provide technical mechanisms that facilitate the understanding of its global reasoning mechanism?",
+        "article": "Article 13",
+        "category": "MG05 - Detailing from the most global to the most particular"
+      },
+      {
+        "order": 11,
+        "text": "Does the system provide technical mechanisms that facilitate the understanding of its actions on a subset of information with similar characteristics to ensure the homogeneity of its operation?",
+        "article": "Article 13",
+        "category": "MG05 - Detailing from the most global to the most particular"
+      },
+      {
+        "order": 12,
+        "text": "Does the system provide technical mechanisms that facilitate the understanding of each of these actions?",
+        "article": "Article 13",
+        "category": "MG05 - Detailing from the most global to the most particular"
+      },
+      {
+        "order": 13,
+        "text": "Does the system provide mechanisms that facilitate the understanding of its global reasoning under a language understandable by all the actors that interact with the system throughout its life cycle?",
+        "article": "Article 13",
+        "category": "MG06 - Adapting the language"
+      },
+      {
+        "order": 14,
+        "text": "Does the system provide technical mechanisms that facilitate the understanding of its actions on a subset of information with similar characteristics to ensure the homogeneity of its operation, in a language understandable by all the actors that interact with the system throughout its life cycle?",
+        "article": "Article 13",
+        "category": "MG06 - Adapting the language"
+      },
+      {
+        "order": 15,
+        "text": "Does the system provide technical mechanisms that facilitate the understanding of your individual actions of the AI system in a language understandable by all actors interacting with the system throughout its entire life cycle?",
+        "article": "Article 13",
+        "category": "MG06 - Adapting the language"
+      },
+      {
+        "order": 16,
+        "text": "Can the technical complexity of the AI system become a barrier to the needs of Transparency in any circumstance?",
+        "article": "Article 13",
+        "category": "MG07 - Manage complexity"
+      },
+      {
+        "order": 17,
+        "text": "In case of using black box models, does the Provider provide tools that allow transparency about the system?",
+        "article": "Article 13",
+        "category": "MG07 - Manage complexity"
+      },
+      {
+        "order": 18,
+        "text": "Does the system provide the metrics to be used on data, the model, the quality of the results and the performance of the AI system, specifying the minimum acceptable values for these metrics from which it is necessary to retrain the system or even stop its execution?",
+        "article": "Article 13",
+        "category": "MG08 - Use built-in metrics in the system lifecycle"
+      },
+      {
+        "order": 19,
+        "text": "Is the system accompanied by a continuous integration system (MLOps) that allows identifying how changes in these metrics affect the different versions/releases of the system?",
+        "article": "Article 13",
+        "category": "MG08 - Use built-in metrics in the system lifecycle"
+      },
+      {
+        "order": 20,
+        "text": "Does the system have the relevant technical mechanisms so that it does not provide sensitive information, either because, for example, it is confidential information, or because it even reveals relevant information about the supported business process, putting its operation at risk?",
+        "article": "Article 13",
+        "category": "MG09 - Apply prudence"
+      },
+      {
+        "order": 21,
+        "text": "Does the system provide tools that allow identifying and analyzing correlations, as well as explicitly unwanted ones that could lead to difficulty for the transparency of the system or impact its accuracy?",
+        "article": "Article 13",
+        "category": "MG10 - Use causation, minimize correlations"
+      },
+      {
+        "order": 22,
+        "text": "Does the system provide technical mechanisms that allow obtaining counterfactualities that facilitate their understanding?",
+        "article": "Article 13",
+        "category": "MG11 - Use counterfactuality"
+      },
+      {
+        "order": 23,
+        "text": "Is the system accompanied by a medium (web/wiki/doc page) that collects information about it and that is aimed at facilitating transparency about its operation, being accessible among people who have some level of responsibility for it?",
+        "article": "Article 13",
+        "category": "MG12 - Enable a channel with system usage information"
+      },
+      {
+        "order": 24,
+        "text": "Does the system have an associated risk management plan?",
+        "article": "Article 13",
+        "category": "MG13 - Article 09. Risk Management System"
+      },
+      {
+        "order": 25,
+        "text": "Does the system comply with Human Supervision measures?",
+        "article": "Article 13",
+        "category": "MG14 - Article 14. Human oversight"
+      },
+      {
+        "order": 26,
+        "text": "Does the system comply with the Precision, robustness and cybersecurity measures aimed at providing Transparency on its operation?",
+        "article": "Article 13",
+        "category": "MG15 - Article 15. Accuracy, robustness and cybersecurity"
+      },
+      {
+        "order": 27,
+        "text": "Does the system comply with the measures of Registries aimed at providing Transparency on its operation?",
+        "article": "Article 13",
+        "category": "MG16 - Article 12. Records"
+      }
+    ]
+  },
+  {
+    "name": "Transparency Evaluation Tool - Article 13 AI Act",
+    "slug": "transparency-evaluation-tool---article-13-ai-act",
+    "description": "Transparency checklist by EUSAiR (Article 13 AI Act)",
+    "licensing": "Open_Source",
+    "completion_status": "full",
+    "dimension_slug": "transparency",
+    "controls_subdim_slugs": [
+      "model-cards",
+      "risk-communication"
+    ],
+    "metadata": {
+      "provider": "EUSAiR",
+      "link": "https://eusair-project.eu/",
+      "project_maturity": "",
+      "control_topic": "Transparency",
+      "target_legal_requirements": ""
+    },
+    "questions": [
+      {
+        "order": 1,
+        "text": "Is the IFU available in both machine-readable and human-readable formats?",
+        "article": "Article 13.2",
+        "category": "Instructions for Use (IFU)"
+      },
+      {
+        "order": 2,
+        "text": "Is the human-readable IFU concise, correct, clear, and accessible to target users?",
+        "article": "Article 13.2",
+        "category": "Instructions for Use (IFU)"
+      },
+      {
+        "order": 3,
+        "text": "Does the IFU include instructions and examples for correctly interpreting system outputs?",
+        "article": "Article 13.2",
+        "category": "Instructions for Use (IFU)"
+      },
+      {
+        "order": 4,
+        "text": "Are contact details and legal identity of the provider (and EU representative, if applicable) disclosed?",
+        "article": "Article 13.2",
+        "category": "Instructions for Use (IFU)"
+      },
+      {
+        "order": 5,
+        "text": "Does the IFU describe limitations on system use in different operational contexts (e.g., demographic, environmental, or task-based)?",
+        "article": "Article 13.2",
+        "category": "Instructions for Use (IFU)"
+      },
+      {
+        "order": 6,
+        "text": "Is the intended purpose, scope, and deployment context clearly stated?",
+        "article": "Article 13.3.a, 13.b.i, 13.b.iii",
+        "category": "System Description and Intended Purpose"
+      },
+      {
+        "order": 7,
+        "text": "Are criteria for substantial modifications and re-assessment defined?",
+        "article": "Article 13.3.a, 13.b.i, 13.b.iii",
+        "category": "System Description and Intended Purpose"
+      },
+      {
+        "order": 8,
+        "text": "Are forbidden uses described and what risks or limitations they pose?",
+        "article": "Article 13.3.a, 13.b.i, 13.b.iii",
+        "category": "System Description and Intended Purpose"
+      },
+      {
+        "order": 9,
+        "text": "Are interactions between components (including third-party modules) explained?",
+        "article": "Article 13.3.a, 13.b.i, 13.b.iii",
+        "category": "System Description and Intended Purpose"
+      },
+      {
+        "order": 10,
+        "text": "Are potential risks from foreseeable misuse identified and communicated to deployers?",
+        "article": "Article 13.3.a, 13.b.i, 13.b.iii",
+        "category": "System Description and Intended Purpose"
+      },
+      {
+        "order": 11,
+        "text": "Are performance metrics (accuracy, precision, recall, etc.) reported with test results?",
+        "article": "Article 13(3)(b)(ii), 13(3)(b)(v), 13(3)(b)(vi)",
+        "category": "Performance, Warnings & Robustness"
+      },
+      {
+        "order": 12,
+        "text": "Are verification and validation methods documented, with supporting test results?",
+        "article": "Article 13(3)(b)(ii), 13(3)(b)(v), 13(3)(b)(vi)",
+        "category": "Performance, Warnings & Robustness"
+      },
+      {
+        "order": 13,
+        "text": "Are subgroup performance differences (including protected groups) analyzed and documented?",
+        "article": "Article 13(3)(b)(ii), 13(3)(b)(v), 13(3)(b)(vi)",
+        "category": "Performance, Warnings & Robustness"
+      },
+      {
+        "order": 14,
+        "text": "Is robustness tested and documented against faults, attacks, and dependency failures?",
+        "article": "Article 13(3)(b)(ii), 13(3)(b)(v), 13(3)(b)(vi)",
+        "category": "Performance, Warnings & Robustness"
+      },
+      {
+        "order": 15,
+        "text": "Are cybersecurity specifications in place and constant updating of these systems documented?",
+        "article": "Article 13(3)(b)(ii), 13(3)(b)(v), 13(3)(b)(vi)",
+        "category": "Performance, Warnings & Robustness"
+      },
+      {
+        "order": 16,
+        "text": "Are robustness specifications included, covering documented events, attributes, assessment results, and incident reporting processes?",
+        "article": "Article 13(3)(b)(ii), 13(3)(b)(v), 13(3)(b)(vi)",
+        "category": "Performance, Warnings & Robustness"
+      },
+      {
+        "order": 17,
+        "text": "Are hardware and software dependencies that affect robustness documented?",
+        "article": "Article 13(3)(b)(ii), 13(3)(b)(v), 13(3)(b)(vi)",
+        "category": "Performance, Warnings & Robustness"
+      },
+      {
+        "order": 18,
+        "text": "Are requirements for input data quality defined (format, completeness, acceptable ranges)?",
+        "article": "Article 13(3)(b)(ii), 13(3)(b)(v), 13(3)(b)(vi)",
+        "category": "Performance, Warnings & Robustness"
+      },
+      {
+        "order": 19,
+        "text": "Is information provided about training, validation, and test datasets (including sources, representativeness, and coverage)?",
+        "article": "Article 13(3)(b)(ii), 13(3)(b)(v), 13(3)(b)(vi)",
+        "category": "Performance, Warnings & Robustness"
+      },
+      {
+        "order": 20,
+        "text": "Are data preparation and preprocessing steps required for operation described and validated?",
+        "article": "Article 13(3)(b)(ii), 13(3)(b)(v), 13(3)(b)(vi)",
+        "category": "Performance, Warnings & Robustness"
+      },
+      {
+        "order": 21,
+        "text": "Are foreseeable risk scenarios documented where the system could produce unreliable or harmful outputs?",
+        "article": "Article 13(3)(b)(ii), 13(3)(b)(v), 13(3)(b)(vi)",
+        "category": "Performance, Warnings & Robustness"
+      },
+      {
+        "order": 22,
+        "text": "Are specific warning indicators or system behaviors that may signal unsafe or degraded performance defined for deployers to monitor?",
+        "article": "Article 13(3)(b)(ii), 13(3)(b)(v), 13(3)(b)(vi)",
+        "category": "Performance, Warnings & Robustness"
+      },
+      {
+        "order": 23,
+        "text": "Are supplemental information types (e.g., uncertainty, attributions, outlier flags) documented?",
+        "article": "Article 13(3)(b)(iv), 13(3)(b)(vii), 13(3)(d)",
+        "category": "Output Interpretation & Interpretability Tools"
+      },
+      {
+        "order": 24,
+        "text": "Are interpretability tools (e.g., SHAP, LIME) described with their limitations?",
+        "article": "Article 13(3)(b)(iv), 13(3)(b)(vii), 13(3)(d)",
+        "category": "Output Interpretation & Interpretability Tools"
+      },
+      {
+        "order": 25,
+        "text": "Are there clear instructions on how to act on interpretability outputs?",
+        "article": "Article 13(3)(b)(iv), 13(3)(b)(vii), 13(3)(d)",
+        "category": "Output Interpretation & Interpretability Tools"
+      },
+      {
+        "order": 26,
+        "text": "Is a risk assessment for potential misinterpretation documented and mitigations in place?",
+        "article": "Article 13(3)(b)(iv), 13(3)(b)(vii), 13(3)(d)",
+        "category": "Output Interpretation & Interpretability Tools"
+      },
+      {
+        "order": 27,
+        "text": "Are planned automatic or manual updates documented with scope and frequency?",
+        "article": "Article 13(3)(c)",
+        "category": "System Changes, Updates & Continuous Learning"
+      },
+      {
+        "order": 28,
+        "text": "Are continuous learning mechanisms defined, with monitoring and rollback boundaries?",
+        "article": "Article 13(3)(c)",
+        "category": "System Changes, Updates & Continuous Learning"
+      },
+      {
+        "order": 29,
+        "text": "Are deployers notified promptly of significant changes or model updates?",
+        "article": "Article 13(3)(c)",
+        "category": "System Changes, Updates & Continuous Learning"
+      },
+      {
+        "order": 30,
+        "text": "Is there guidance for update validation, rollback, and reversion in case of failure or regression?",
+        "article": "Article 13(3)(c)",
+        "category": "System Changes, Updates & Continuous Learning"
+      },
+      {
+        "order": 31,
+        "text": "Are the computational resource requirements for operating the AI system clearly documented (GPU/CPU models, memory, performance benchmarks, RAM specifications, storage capacity, network bandwidth)?",
+        "article": "Article 13(3)(e), 13(3)(f)",
+        "category": "Computational Resources, Maintenance & Lifecycle"
+      },
+      {
+        "order": 32,
+        "text": "Is the expected operational lifetime of the AI system described?",
+        "article": "Article 13(3)(e), 13(3)(f)",
+        "category": "Computational Resources, Maintenance & Lifecycle"
+      },
+      {
+        "order": 33,
+        "text": "Does the documentation include an obsolescence plan and describe migration pathways for replacement or transition?",
+        "article": "Article 13(3)(e), 13(3)(f)",
+        "category": "Computational Resources, Maintenance & Lifecycle"
+      },
+      {
+        "order": 34,
+        "text": "Are expected performance degradation trends over time described, with indicators for when the system requires renewal or reassessment?",
+        "article": "Article 13(3)(e), 13(3)(f)",
+        "category": "Computational Resources, Maintenance & Lifecycle"
+      },
+      {
+        "order": 35,
+        "text": "Is there a detailed maintenance schedule?",
+        "article": "Article 13(3)(e), 13(3)(f)",
+        "category": "Computational Resources, Maintenance & Lifecycle"
+      },
+      {
+        "order": 36,
+        "text": "Are performance monitoring thresholds established for detecting abnormal drift or degradation?",
+        "article": "Article 13(3)(e), 13(3)(f)",
+        "category": "Computational Resources, Maintenance & Lifecycle"
+      },
+      {
+        "order": 37,
+        "text": "Are maintenance activities traceable (logs, versioning, audit records)?",
+        "article": "Article 13(3)(e), 13(3)(f)",
+        "category": "Computational Resources, Maintenance & Lifecycle"
+      },
+      {
+        "order": 38,
+        "text": "Are expected downtime windows, fallback modes, and user notification procedures defined?",
+        "article": "Article 13(3)(e), 13(3)(f)",
+        "category": "Computational Resources, Maintenance & Lifecycle"
+      }
+    ]
+  }
+]
