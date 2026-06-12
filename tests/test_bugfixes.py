@@ -1,78 +1,16 @@
 """Regression tests for the code-review findings (one class per finding)."""
 
-import json
-from pathlib import Path
-
 import pytest
+from helpers import QueueProposer, QueueReviewer, make_item
 from pydantic import ValidationError
 
 from wizard.agents.orchestrator import Orchestrator
-from wizard.config import GuardsConfig, RunConfig
+from wizard.config import RunConfig
 from wizard.matching.evidence import find_quote
 from wizard.matching.prefilter import prefilter_checklists, prefilter_tools
 from wizard.matching.tag_map import map_ai_type
-from wizard.models.catalogue import CatalogueTool, ChecklistDoc
-from wizard.models.plan import ItemVerdict, Proposal, ProposedItem, Review
+from wizard.models.plan import ItemVerdict, Proposal, Review
 from wizard.models.system_card import SystemCard
-
-FIXTURES = Path(__file__).parent / "fixtures"
-
-REAL_QUOTE = "Quarterly fairness audits compare approval, default, and override rates"
-
-
-@pytest.fixture(scope="module")
-def mcas_raw() -> dict:
-    return json.loads((FIXTURES / "mcas_system_card.json").read_text())
-
-
-@pytest.fixture(scope="module")
-def mcas(mcas_raw) -> SystemCard:
-    return SystemCard.from_card_json(mcas_raw)
-
-
-@pytest.fixture(scope="module")
-def world(mcas):
-    tools = [
-        CatalogueTool.from_seed(t)
-        for t in json.loads((FIXTURES / "tools_seed.json").read_text())
-    ]
-    checklists = [
-        ChecklistDoc.from_seed(c)
-        for c in json.loads((FIXTURES / "controls_seed.json").read_text())
-    ]
-    return prefilter_tools(mcas, tools), prefilter_checklists(mcas, checklists)
-
-
-def make_item(item_id, item_type="test", covers=("article-10",), paired=None, evidence=None):
-    return ProposedItem(
-        item_id=item_id,
-        item_type=item_type,
-        priority="must",
-        rationale="r",
-        evidence=[REAL_QUOTE] if evidence is None else evidence,
-        covers=list(covers),
-        paired_test_id=paired,
-    )
-
-
-class StaticProposer:
-    def __init__(self, proposal):
-        self.proposal = proposal
-        self.received_notes = []
-
-    def propose(self, card, candidates, revision_notes=None, prior=None):
-        self.received_notes.append(revision_notes)
-        return self.proposal
-
-
-class QueueReviewer:
-    def __init__(self, *reviews):
-        self.reviews = list(reviews)
-        self.calls = 0
-
-    def review(self, card, proposal):
-        self.calls += 1
-        return self.reviews[min(self.calls - 1, len(self.reviews) - 1)]
 
 
 class TestFuzzyEvidenceSlack:
@@ -156,8 +94,8 @@ class TestArticlelessOpenIssues:
             verdicts=[ItemVerdict(item_id=tid, verdict="accept")], coverage_ok=True
         )
         plan = Orchestrator(
-            test_proposer=StaticProposer(proposal),
-            checklist_proposer=StaticProposer(Proposal()),
+            test_proposer=QueueProposer(proposal),
+            checklist_proposer=QueueProposer(Proposal()),
             reviewer=QueueReviewer(accept),
         ).run(card, test_cands, checklist_cands)
         assert any("open-issue-2" in g for g in plan.gaps)
@@ -170,8 +108,8 @@ class TestArticlelessOpenIssues:
             verdicts=[ItemVerdict(item_id=tid, verdict="accept")], coverage_ok=True
         )
         plan = Orchestrator(
-            test_proposer=StaticProposer(proposal),
-            checklist_proposer=StaticProposer(Proposal()),
+            test_proposer=QueueProposer(proposal),
+            checklist_proposer=QueueProposer(Proposal()),
             reviewer=QueueReviewer(accept),
         ).run(card, test_cands, checklist_cands)
         assert not any("open-issue-2" in g for g in plan.gaps)
@@ -181,12 +119,12 @@ class TestArticlelessOpenIssues:
 class TestPostReviewDatasetCascade:
     """Finding 5: reviewer rejecting a test must cascade to its dataset."""
 
-    def test_orphan_dataset_dropped_after_review(self, mcas, world):
+    def test_orphan_dataset_dropped_after_review(self, mcas_card, world):
         test_cands, checklist_cands = world
         tid = test_cands[0].item.slug
         did = test_cands[1].item.slug
         proposal = Proposal(
-            items=[make_item(tid), make_item(did, item_type="dataset", paired=tid)]
+            items=[make_item(tid), make_item(did, item_type="dataset", paired_test_id=tid)]
         )
         review = Review(
             verdicts=[
@@ -196,11 +134,11 @@ class TestPostReviewDatasetCascade:
             coverage_ok=True,
         )
         plan = Orchestrator(
-            test_proposer=StaticProposer(proposal),
-            checklist_proposer=StaticProposer(Proposal()),
+            test_proposer=QueueProposer(proposal),
+            checklist_proposer=QueueProposer(Proposal()),
             reviewer=QueueReviewer(review),
             max_rounds=1,
-        ).run(mcas, test_cands, checklist_cands)
+        ).run(mcas_card, test_cands, checklist_cands)
         assert plan.datasets == []
         assert any("dataset-unpaired" in w for w in plan.warnings)
 
@@ -208,7 +146,7 @@ class TestPostReviewDatasetCascade:
 class TestDuplicateVerdicts:
     """Finding 6: worst verdict must win within a single review."""
 
-    def test_reject_then_accept_does_not_flip(self, mcas, world):
+    def test_reject_then_accept_does_not_flip(self, mcas_card, world):
         test_cands, checklist_cands = world
         tid = test_cands[0].item.slug
         proposal = Proposal(items=[make_item(tid)])
@@ -221,11 +159,11 @@ class TestDuplicateVerdicts:
             notes_for_revision="remove it",
         )
         plan = Orchestrator(
-            test_proposer=StaticProposer(proposal),
-            checklist_proposer=StaticProposer(Proposal()),
+            test_proposer=QueueProposer(proposal),
+            checklist_proposer=QueueProposer(Proposal()),
             reviewer=QueueReviewer(duplicate),
             max_rounds=1,
-        ).run(mcas, test_cands, checklist_cands)
+        ).run(mcas_card, test_cands, checklist_cands)
         # the reject row must win over the later accept row for the same id
         assert tid not in [i.item_id for i in plan.tests]
         # and the loop must agree: the run did not converge
@@ -235,17 +173,17 @@ class TestDuplicateVerdicts:
 class TestStallNotesFallback:
     """Finding 10: non-convergence without notes must still change the prompt."""
 
-    def test_synthesized_notes_on_empty_reviewer_notes(self, mcas, world):
+    def test_synthesized_notes_on_empty_reviewer_notes(self, mcas_card, world):
         test_cands, checklist_cands = world
         tid = test_cands[0].item.slug
-        proposer = StaticProposer(Proposal(items=[make_item(tid)]))
+        proposer = QueueProposer(Proposal(items=[make_item(tid)]))
         stall = Review(verdicts=[], coverage_ok=False, notes_for_revision="")
         Orchestrator(
             test_proposer=proposer,
-            checklist_proposer=StaticProposer(Proposal()),
+            checklist_proposer=QueueProposer(Proposal()),
             reviewer=QueueReviewer(stall),
             max_rounds=2,
-        ).run(mcas, test_cands, checklist_cands)
+        ).run(mcas_card, test_cands, checklist_cands)
         assert proposer.received_notes[1]  # round 2 received a non-empty nudge
 
 
@@ -260,7 +198,9 @@ class TestConfigEnvErrors:
 class TestUnmappedTagsSurface:
     """Finding 8: unmapped categories must reach plan warnings."""
 
-    def test_unknown_category_warned_on_plan(self, mcas_raw, world):
+    def test_unknown_category_warned_on_plan(self, mcas_raw, seed_tools, seed_checklists):
+        from helpers import ScriptedClient
+
         from wizard.agents.runner import WizardPlanRunner
 
         raw = dict(mcas_raw)
@@ -273,24 +213,9 @@ class TestUnmappedTagsSurface:
         }
         card = SystemCard.from_card_json(raw)
 
-        class Client:
-            def __init__(self):
-                self.messages = self
-                self.outputs = [Proposal(), Proposal(), Review(coverage_ok=True)]
-
-            def parse(self, **kwargs):
-                return type("P", (), {"parsed_output": self.outputs.pop(0)})()
-
-        tools = [
-            CatalogueTool.from_seed(t)
-            for t in json.loads((FIXTURES / "tools_seed.json").read_text())
-        ]
-        checklists = [
-            ChecklistDoc.from_seed(c)
-            for c in json.loads((FIXTURES / "controls_seed.json").read_text())
-        ]
+        client = ScriptedClient([Proposal(), Proposal(), Review(coverage_ok=True)])
         plan = WizardPlanRunner(
-            client=Client(), tools=tools, checklists=checklists, config=RunConfig()
+            client=client, tools=seed_tools, checklists=seed_checklists, config=RunConfig()
         ).run(card)
         assert any("tag-unmapped" in w and "quantum-computing" in w for w in plan.warnings)
 
@@ -348,7 +273,7 @@ class TestFailedPlanAPI:
 class TestRunFailurePolicy:
     """Finding 4b (A4): agent exceptions become a failed plan, not a 500."""
 
-    def test_runner_returns_failed_plan(self, mcas, world):
+    def test_runner_returns_failed_plan(self, mcas_card, seed_tools):
         from wizard.agents.runner import WizardPlanRunner
 
         class ExplodingClient:
@@ -358,13 +283,9 @@ class TestRunFailurePolicy:
             def parse(self, **kwargs):
                 raise RuntimeError("api down")
 
-        tools = [
-            CatalogueTool.from_seed(t)
-            for t in json.loads((FIXTURES / "tools_seed.json").read_text())
-        ]
         plan = WizardPlanRunner(
-            client=ExplodingClient(), tools=tools, checklists=[], config=RunConfig()
-        ).run(mcas)
+            client=ExplodingClient(), tools=seed_tools, checklists=[], config=RunConfig()
+        ).run(mcas_card)
         assert plan.status == "failed"
         assert plan.tests == plan.datasets == plan.checklists == []
         assert any(w.startswith("run-failed: RuntimeError") for w in plan.warnings)

@@ -1,8 +1,6 @@
 """Finding 1: finalize must keep the plan internally consistent."""
 
-import json
 from datetime import datetime, timezone
-from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -10,8 +8,6 @@ from fastapi.testclient import TestClient
 from wizard.api.app import create_app
 from wizard.models.plan import AssessmentPlan, ProposedItem
 from wizard.models.system_card import SystemCard
-
-FIXTURES = Path(__file__).parent / "fixtures"
 
 
 def rich_plan(qid: str, name: str) -> AssessmentPlan:
@@ -62,11 +58,10 @@ class Runner:
 
 
 @pytest.fixture()
-def client():
-    raw = json.loads((FIXTURES / "mcas_system_card.json").read_text())
-    plan = rich_plan(raw["qualification_id"], raw["system_name"])
-    app = create_app(qualification_provider=Provider(raw), plan_runner=Runner(plan))
-    return TestClient(app), raw["qualification_id"]
+def client(mcas_raw):
+    plan = rich_plan(mcas_raw["qualification_id"], mcas_raw["system_name"])
+    app = create_app(qualification_provider=Provider(mcas_raw), plan_runner=Runner(plan))
+    return TestClient(app), mcas_raw["qualification_id"]
 
 
 def _create_and_finalize(client, qid, deselect):

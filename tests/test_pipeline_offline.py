@@ -2,53 +2,15 @@
 orchestrator → plan. Proves the adapters satisfy the orchestrator protocols
 and the whole chain holds together without any network access."""
 
-import json
-from pathlib import Path
-
-import pytest
+from helpers import ScriptedClient
 
 from wizard.agents.llm import LLMChecklistProposer, LLMReviewer, LLMTestProposer
 from wizard.agents.orchestrator import Orchestrator
-from wizard.matching.prefilter import prefilter_checklists, prefilter_tools
-from wizard.models.catalogue import CatalogueTool, ChecklistDoc
 from wizard.models.plan import ItemVerdict, Proposal, ProposedItem, Review
-from wizard.models.system_card import SystemCard
-
-FIXTURES = Path(__file__).parent / "fixtures"
 
 
-class ScriptedClient:
-    """messages.parse stub returning queued outputs in call order."""
-
-    def __init__(self, outputs):
-        self._outputs = list(outputs)
-        self.calls = []
-        self.messages = self
-
-    def parse(self, **kwargs):
-        self.calls.append(kwargs)
-        out = self._outputs.pop(0)
-        return type("P", (), {"parsed_output": out})()
-
-
-@pytest.fixture(scope="module")
-def world():
-    card = SystemCard.from_card_json(
-        json.loads((FIXTURES / "mcas_system_card.json").read_text())
-    )
-    tools = [
-        CatalogueTool.from_seed(t)
-        for t in json.loads((FIXTURES / "tools_seed.json").read_text())
-    ]
-    checklists = [
-        ChecklistDoc.from_seed(c)
-        for c in json.loads((FIXTURES / "controls_seed.json").read_text())
-    ]
-    return card, prefilter_tools(card, tools), prefilter_checklists(card, checklists)
-
-
-def test_full_offline_run(world):
-    card, test_cands, checklist_cands = world
+def test_full_offline_run(mcas_card, world):
+    test_cands, checklist_cands = world
 
     fairness = next(c.item.slug for c in test_cands if c.item.name == "AI Fairness 360")
     transparency = next(
@@ -99,7 +61,7 @@ def test_full_offline_run(world):
         test_proposer=test_proposer,
         checklist_proposer=checklist_proposer,
         reviewer=reviewer,
-    ).run(card, test_cands, checklist_cands)
+    ).run(mcas_card, test_cands, checklist_cands)
 
     assert plan.status == "reviewed"
     assert [i.item_id for i in plan.tests] == [fairness]

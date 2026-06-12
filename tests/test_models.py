@@ -1,22 +1,10 @@
 """Domain models: system card, catalogue entries, checklists, agent I/O."""
 
-import json
-from pathlib import Path
-
 import pytest
 from pydantic import ValidationError
 
 from wizard.models.catalogue import CatalogueTool, ChecklistDoc
 from wizard.models.plan import ItemVerdict, Proposal, ProposedItem, Review
-from wizard.models.system_card import SystemCard
-
-FIXTURES = Path(__file__).parent / "fixtures"
-
-
-@pytest.fixture(scope="module")
-def mcas_card() -> SystemCard:
-    raw = json.loads((FIXTURES / "mcas_system_card.json").read_text())
-    return SystemCard.from_card_json(raw)
 
 
 class TestSystemCard:
@@ -64,9 +52,8 @@ class TestSystemCard:
 
 
 class TestCatalogueTool:
-    def test_from_seed_entry(self):
-        tools = json.loads((FIXTURES / "tools_seed.json").read_text())
-        fairness = next(t for t in tools if t["name"] == "AI Fairness 360")
+    def test_from_seed_entry(self, seed_tools_raw):
+        fairness = next(t for t in seed_tools_raw if t["name"] == "AI Fairness 360")
         tool = CatalogueTool.from_seed(fairness)
         assert tool.slug
         assert "finance-and-insurance" in tool.tag_slugs
@@ -74,25 +61,22 @@ class TestCatalogueTool:
         # article keys extracted from metadata.target_legal_requirements
         assert isinstance(tool.article_keys(), set)
 
-    def test_all_seed_entries_parse(self):
-        tools = json.loads((FIXTURES / "tools_seed.json").read_text())
-        parsed = [CatalogueTool.from_seed(t) for t in tools]
-        assert len(parsed) == len(tools)
+    def test_all_seed_entries_parse(self, seed_tools_raw):
+        parsed = [CatalogueTool.from_seed(t) for t in seed_tools_raw]
+        assert len(parsed) == len(seed_tools_raw)
 
 
 class TestChecklistDoc:
-    def test_from_seed_entry(self):
-        controls = json.loads((FIXTURES / "controls_seed.json").read_text())
-        accuracy = next(c for c in controls if c["name"] == "Accuracy_Checklist")
+    def test_from_seed_entry(self, seed_checklists_raw):
+        accuracy = next(c for c in seed_checklists_raw if c["name"] == "Accuracy_Checklist")
         doc = ChecklistDoc.from_seed(accuracy)
         assert doc.control_topic == "Accuracy"
         # question articles ("Article 15") aggregate into article keys
         assert "article-15" in doc.article_keys()
 
-    def test_all_seed_entries_parse(self):
-        controls = json.loads((FIXTURES / "controls_seed.json").read_text())
-        parsed = [ChecklistDoc.from_seed(c) for c in controls]
-        assert len(parsed) == len(controls)
+    def test_all_seed_entries_parse(self, seed_checklists_raw):
+        parsed = [ChecklistDoc.from_seed(c) for c in seed_checklists_raw]
+        assert len(parsed) == len(seed_checklists_raw)
 
 
 class TestAgentSchemas:

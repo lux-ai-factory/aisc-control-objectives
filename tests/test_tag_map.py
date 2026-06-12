@@ -6,14 +6,9 @@ catalogue tags them at category level with slightly different slugs
 (e.g. "tabular-and-structured-data"). Sector slugs are already identical.
 """
 
-import json
-from pathlib import Path
-
 import pytest
 
 from wizard.matching.tag_map import map_ai_type, map_system_card_tags
-
-FIXTURES = Path(__file__).parent / "fixtures"
 
 
 class TestMapAiType:
@@ -43,10 +38,9 @@ class TestMapSystemCardTags:
         result = map_system_card_tags([], ["finance-and-insurance", "health"])
         assert result.sector_slugs == {"finance-and-insurance", "health"}
 
-    def test_mcas_card_maps_fully(self):
+    def test_mcas_card_maps_fully(self, seed_tools_raw):
         """Every MCAS tag must resolve to a slug present in the seed vocabulary."""
-        tools = json.loads((FIXTURES / "tools_seed.json").read_text())
-        vocabulary = {slug for tool in tools for slug in tool["tag_slugs"]}
+        vocabulary = {slug for tool in seed_tools_raw for slug in tool["tag_slugs"]}
 
         mcas_target_tags = [
             "tabular-structured-data:tabular-classification-regression",

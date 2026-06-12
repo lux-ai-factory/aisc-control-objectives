@@ -4,28 +4,15 @@ Quotes must be verbatim-ish: exact after normalization, or fuzzy ≥ 0.90
 (survives punctuation drift, rejects paraphrase).
 """
 
-import json
-from pathlib import Path
-
 import pytest
 
 from wizard.matching.evidence import card_corpus, find_quote, verify_evidence
 from wizard.models.plan import ProposedItem
-from wizard.models.system_card import SystemCard
-
-FIXTURES = Path(__file__).parent / "fixtures"
 
 
 @pytest.fixture(scope="module")
-def mcas() -> SystemCard:
-    return SystemCard.from_card_json(
-        json.loads((FIXTURES / "mcas_system_card.json").read_text())
-    )
-
-
-@pytest.fixture(scope="module")
-def corpus(mcas) -> str:
-    return card_corpus(mcas)
+def corpus(mcas_card) -> str:
+    return card_corpus(mcas_card)
 
 
 class TestFindQuote:
@@ -75,16 +62,16 @@ class TestVerifyEvidence:
             covers=[],
         )
 
-    def test_keeps_only_verifiable_quotes(self, mcas):
+    def test_keeps_only_verifiable_quotes(self, mcas_card):
         item = self._item(
             [
                 "Quarterly fairness audits compare approval, default, and override rates",
                 "completely invented claim about certification",
             ]
         )
-        verified = verify_evidence(item, mcas)
+        verified = verify_evidence(item, mcas_card)
         assert len(verified) == 1
         assert "fairness audits" in verified[0]
 
-    def test_all_invented_returns_empty(self, mcas):
-        assert verify_evidence(self._item(["made up", "also made up"]), mcas) == []
+    def test_all_invented_returns_empty(self, mcas_card):
+        assert verify_evidence(self._item(["made up", "also made up"]), mcas_card) == []

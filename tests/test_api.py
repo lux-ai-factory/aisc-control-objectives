@@ -6,24 +6,15 @@ The app is a factory taking two injected dependencies:
 so these tests run without any live service, network, or LLM.
 """
 
-import json
 from datetime import datetime, timezone
-from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
 from wizard.api.app import create_app
+from wizard.config import DEFAULT_MODEL
 from wizard.models.plan import AssessmentPlan, ProposedItem
 from wizard.models.system_card import SystemCard
-
-FIXTURES = Path(__file__).parent / "fixtures"
-
-
-@pytest.fixture(scope="module")
-def mcas_raw() -> dict:
-    return json.loads((FIXTURES / "mcas_system_card.json").read_text())
-
 
 class FakeQualificationProvider:
     def __init__(self, cards: dict[str, dict]):
@@ -87,7 +78,7 @@ class TestConfig:
         resp = client.get("/api/config")
         assert resp.status_code == 200
         body = resp.json()
-        assert body["model"] == "claude-opus-4-8"
+        assert body["model"] == DEFAULT_MODEL
         assert body["guards"]["evidence"] == "drop"
         assert body["review"]["lenses"] == []
 
