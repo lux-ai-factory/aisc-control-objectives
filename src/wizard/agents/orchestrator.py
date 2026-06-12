@@ -45,6 +45,92 @@ class Reviewer(Protocol):
     def review(self, card: SystemCard, proposal: Proposal) -> Review: ...
 
 
+def _drop_unknown_ids(
+    items: list[ProposedItem], known_ids: set[str], report: list[str]
+) -> list[ProposedItem]:
+    """Hallucination guard: only candidate-set ids may be proposed."""
+    kept = []
+    for item in items:
+        if item.item_id in known_ids:
+            kept.append(item)
+        else:
+            report.append(
+                f"id-not-found: proposed item '{item.item_id}' is not in the candidate set; dropped"
+            )
+    return kept
+
+
+def _check_evidence(
+    items: list[ProposedItem],
+    card: SystemCard,
+    policy: str,  # "drop" | "demote" (caller skips when "off")
+    report: list[str],
+) -> list[ProposedItem]:
+    """G1: evidence quotes must occur in the card; unverifiable ones are
+    stripped, and items left with none are dropped or demoted per policy."""
+    corpus = card_corpus(card)  # built once; identical for every item
+    kept = []
+    for item in items:
+        verified = [q for q in item.evidence if find_quote(q, corpus)]
+        for quote in item.evidence:
+            if quote not in verified:
+                report.append(f'evidence-not-found: {item.item_id}: "{quote[:80]}"')
+        if verified:
+            kept.append(item.model_copy(update={"evidence": verified}))
+        elif policy == "demote":
+            report.append(f"evidence-empty(demoted): {item.item_id}")
+            kept.append(item.model_copy(update={"evidence": [], "priority": "optional"}))
+        else:  # drop
+            report.append(f"evidence-empty: {item.item_id}")
+    return kept
+
+
+def _check_coverage_claims(
+    items: list[ProposedItem],
+    card: SystemCard,
+    checklist_lookup: dict[str, ChecklistDoc],
+    report: list[str],
+) -> list[ProposedItem]:
+    """G2: cover claims must reference card-known keys, and a checklist can
+    only claim articles its own questions cite."""
+    known_keys = card.article_keys()
+    kept = []
+    for item in items:
+        checklist = checklist_lookup.get(item.item_id)
+        supported = checklist.article_keys() if checklist is not None else None
+        keys = []
+        for key in item.covers:
+            if key not in known_keys:
+                report.append(f"coverage-claim-unknown-key: {item.item_id}: {key}")
+            elif (
+                item.item_type == "checklist"
+                and supported is not None
+                and key not in supported
+            ):
+                report.append(f"coverage-claim-unsupported: {item.item_id}: {key}")
+            else:
+                keys.append(key)
+        kept.append(item.model_copy(update={"covers": keys}))
+    return kept
+
+
+def _drop_unpaired_datasets(
+    items: list[ProposedItem], report: list[str]
+) -> list[ProposedItem]:
+    """G3: a dataset must be paired with a test present in the same proposal."""
+    present_tests = {i.item_id for i in items if i.item_type == "test"}
+    kept = []
+    for item in items:
+        if item.item_type == "dataset" and item.paired_test_id not in present_tests:
+            report.append(
+                f"dataset-unpaired: {item.item_id} (paired test "
+                f"'{item.paired_test_id}' not in the proposal)"
+            )
+        else:
+            kept.append(item)
+    return kept
+
+
 class Orchestrator:
     def __init__(
         self,
@@ -74,75 +160,13 @@ class Orchestrator:
         Findings land in guard_report, which the reviewer sees.
         """
         report: list[str] = []
-
-        items = []
-        for item in proposal.items:
-            if item.item_id in known_ids:
-                items.append(item)
-            else:
-                report.append(
-                    f"id-not-found: proposed item '{item.item_id}' is not in the candidate set; dropped"
-                )
-
+        items = _drop_unknown_ids(proposal.items, known_ids, report)
         if self.guards.evidence != "off":
-            corpus = card_corpus(card)  # built once; identical for every item
-            checked = []
-            for item in items:
-                verified = [q for q in item.evidence if find_quote(q, corpus)]
-                for quote in item.evidence:
-                    if quote not in verified:
-                        report.append(
-                            f"evidence-not-found: {item.item_id}: \"{quote[:80]}\""
-                        )
-                if verified:
-                    checked.append(item.model_copy(update={"evidence": verified}))
-                elif self.guards.evidence == "demote":
-                    report.append(f"evidence-empty(demoted): {item.item_id}")
-                    checked.append(
-                        item.model_copy(update={"evidence": [], "priority": "optional"})
-                    )
-                else:  # drop
-                    report.append(f"evidence-empty: {item.item_id}")
-            items = checked
-
+            items = _check_evidence(items, card, self.guards.evidence, report)
         if self.guards.coverage_claims != "off":
-            known_keys = card.article_keys()
-            claimed = []
-            for item in items:
-                keys = []
-                for key in item.covers:
-                    if key not in known_keys:
-                        report.append(
-                            f"coverage-claim-unknown-key: {item.item_id}: {key}"
-                        )
-                        continue
-                    checklist = checklist_lookup.get(item.item_id)
-                    if (
-                        item.item_type == "checklist"
-                        and checklist is not None
-                        and key not in checklist.article_keys()
-                    ):
-                        report.append(
-                            f"coverage-claim-unsupported: {item.item_id}: {key}"
-                        )
-                        continue
-                    keys.append(key)
-                claimed.append(item.model_copy(update={"covers": keys}))
-            items = claimed
-
+            items = _check_coverage_claims(items, card, checklist_lookup, report)
         if self.guards.dataset_pairing != "off":
-            present_tests = {i.item_id for i in items if i.item_type == "test"}
-            paired = []
-            for item in items:
-                if item.item_type == "dataset" and item.paired_test_id not in present_tests:
-                    report.append(
-                        f"dataset-unpaired: {item.item_id} (paired test "
-                        f"'{item.paired_test_id}' not in the proposal)"
-                    )
-                else:
-                    paired.append(item)
-            items = paired
-
+            items = _drop_unpaired_datasets(items, report)
         return Proposal(
             items=items,
             coverage_gaps=proposal.coverage_gaps,

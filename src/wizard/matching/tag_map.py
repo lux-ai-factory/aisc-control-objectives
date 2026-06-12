@@ -42,11 +42,6 @@ def map_ai_type(qual_tag: str) -> str | None:
     return None
 
 
-def map_sector(sector_tag: str) -> str:
-    """Sector slugs are shared verbatim between qualification and catalogue."""
-    return sector_tag
-
-
 @dataclass
 class MappedTags:
     ai_type_slugs: set[str] = field(default_factory=set)
@@ -65,5 +60,6 @@ def map_system_card_tags(
             result.unmapped.append(tag)
         else:
             result.ai_type_slugs.add(slug)
-    result.sector_slugs = {map_sector(t) for t in sector_tags}
+    # sector slugs are shared verbatim between the two taxonomies
+    result.sector_slugs = set(sector_tags)
     return result

@@ -36,8 +36,8 @@ def card_corpus(card: SystemCard) -> str:
         parts.append(finding.summary)
         parts.extend(finding.points)
     parts.extend(card.open_issues)
-    # WP2-M3: qualification answers join the corpus once SystemCard carries them
-    parts.extend(getattr(card, "answer_texts", lambda: [])())
+    # WP2-M3 will extend this with the qualification answers once SystemCard
+    # carries them
     return "\n".join(p for p in parts if p)
 
 

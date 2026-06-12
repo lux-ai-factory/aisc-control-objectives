@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from wizard.matching.tag_map import map_ai_type, map_sector, map_system_card_tags
+from wizard.matching.tag_map import map_ai_type, map_system_card_tags
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -38,13 +38,11 @@ class TestMapAiType:
         assert map_ai_type("natural-language-processing") == "natural-language-processing"
 
 
-class TestMapSector:
-    def test_identity(self):
-        assert map_sector("finance-and-insurance") == "finance-and-insurance"
-        assert map_sector("health") == "health"
-
-
 class TestMapSystemCardTags:
+    def test_sector_slugs_pass_through_verbatim(self):
+        result = map_system_card_tags([], ["finance-and-insurance", "health"])
+        assert result.sector_slugs == {"finance-and-insurance", "health"}
+
     def test_mcas_card_maps_fully(self):
         """Every MCAS tag must resolve to a slug present in the seed vocabulary."""
         tools = json.loads((FIXTURES / "tools_seed.json").read_text())
