@@ -42,6 +42,48 @@ class ItemVerdict(BaseModel):
 VERDICT_SEVERITY = {"accept": 0, "revise": 1, "reject": 2}
 
 
+def merge_verdicts(verdicts: list[ItemVerdict]) -> dict[str, ItemVerdict]:
+    """Merge verdicts by item id: the worst verdict wins, reasons are unioned
+    on equal severity. The single definition of this policy — used both for
+    duplicate rows within one review and across multi-lens reviews."""
+    merged: dict[str, ItemVerdict] = {}
+    for verdict in verdicts:
+        current = merged.get(verdict.item_id)
+        if current is None or VERDICT_SEVERITY[verdict.verdict] > VERDICT_SEVERITY[current.verdict]:
+            merged[verdict.item_id] = verdict.model_copy()
+        elif VERDICT_SEVERITY[verdict.verdict] == VERDICT_SEVERITY[current.verdict]:
+            current.reasons = list(dict.fromkeys(current.reasons + verdict.reasons))
+    return merged
+
+
+def build_coverage(items: list["ProposedItem"]) -> dict[str, list[str]]:
+    """Derive the coverage matrix (key -> covering item ids) from items.
+    The single definition of 'coverage' — used at plan assembly and finalize."""
+    coverage: dict[str, list[str]] = {}
+    for item in items:
+        for key in item.covers:
+            coverage.setdefault(key, []).append(item.item_id)
+    return coverage
+
+
+def drop_unpaired_datasets(
+    items: list["ProposedItem"], warning_template: str
+) -> tuple[list["ProposedItem"], list[str]]:
+    """Enforce the pairing invariant: a dataset survives only if its paired
+    test is among the items. `warning_template` is formatted with
+    {item_id} and {paired}. Returns (kept items, warnings)."""
+    present_tests = {i.item_id for i in items if i.item_type == "test"}
+    kept, warnings = [], []
+    for item in items:
+        if item.item_type == "dataset" and item.paired_test_id not in present_tests:
+            warnings.append(
+                warning_template.format(item_id=item.item_id, paired=item.paired_test_id)
+            )
+        else:
+            kept.append(item)
+    return kept, warnings
+
+
 class Review(BaseModel):
     verdicts: list[ItemVerdict] = Field(default_factory=list)
     coverage_ok: bool = False
@@ -71,24 +113,16 @@ class AssessmentPlan(BaseModel):
         lose their last covering item are recorded as gaps."""
         tests = [i for i in self.tests if i.item_id not in deselect]
         checklists = [i for i in self.checklists if i.item_id not in deselect]
-        present_tests = {i.item_id for i in tests}
-        warnings = list(self.warnings)
-        datasets = []
-        for dataset in self.datasets:
-            if dataset.item_id in deselect:
-                continue
-            if dataset.paired_test_id not in present_tests:
-                warnings.append(
-                    f"dataset-unpaired: {dataset.item_id} removed at finalize "
-                    f"(paired test '{dataset.paired_test_id}' was deselected)"
-                )
-                continue
-            datasets.append(dataset)
+        remaining_datasets = [i for i in self.datasets if i.item_id not in deselect]
+        datasets, pairing_warnings = drop_unpaired_datasets(
+            tests + remaining_datasets,
+            "dataset-unpaired: {item_id} removed at finalize "
+            "(paired test '{paired}' was deselected)",
+        )
+        datasets = [i for i in datasets if i.item_type == "dataset"]
+        warnings = self.warnings + pairing_warnings
 
-        coverage: dict[str, list[str]] = {}
-        for item in tests + datasets + checklists:
-            for key in item.covers:
-                coverage.setdefault(key, []).append(item.item_id)
+        coverage = build_coverage(tests + datasets + checklists)
 
         gaps = list(self.gaps)
         for key in self.coverage:

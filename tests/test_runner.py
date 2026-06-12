@@ -7,40 +7,21 @@ selection and the effective-config echo on the plan.
 
 import json
 
-from helpers import ScriptedClient
+from helpers import FULL_COVERS, ScriptedClient, accept_all, make_item
 
 from wizard.agents.runner import WizardPlanRunner
 from wizard.config import DEFAULT_MODEL, ReviewConfig, RunConfig
-from wizard.models.plan import ItemVerdict, Proposal, ProposedItem, Review
+from wizard.models.plan import Proposal, Review
 
 
 def fairness_proposal():
-    return Proposal(
-        items=[
-            ProposedItem(
-                item_id="ai-fairness-360",
-                item_type="test",
-                priority="must",
-                rationale="r",
-                evidence=[
-                    "Quarterly fairness audits compare approval, default, and override rates"
-                ],
-                covers=["article-10", "article-12", "article-13", "article-14"],
-            )
-        ]
-    )
-
-
-def accept_fairness():
-    return Review(
-        verdicts=[ItemVerdict(item_id="ai-fairness-360", verdict="accept")],
-        coverage_ok=True,
-    )
+    return Proposal(items=[make_item("ai-fairness-360", covers=FULL_COVERS)])
 
 
 def test_runner_end_to_end(mcas_card, seed_tools, seed_checklists):
+    proposal = fairness_proposal()
     # call order: test proposer, checklist proposer, reviewer
-    client = ScriptedClient([fairness_proposal(), Proposal(), accept_fairness()])
+    client = ScriptedClient([proposal, Proposal(), accept_all(proposal)])
 
     runner = WizardPlanRunner(client=client, tools=seed_tools, checklists=seed_checklists)
     plan = runner.run(mcas_card)

@@ -18,7 +18,6 @@ class CatalogueTool(BaseModel):
     description: str = ""
     tag_slugs: set[str] = Field(default_factory=set)
     target_legal_requirements: str = ""
-    control_topic: str = ""
 
     @classmethod
     def from_seed(cls, entry: dict) -> "CatalogueTool":
@@ -29,7 +28,6 @@ class CatalogueTool(BaseModel):
             description=entry.get("description") or "",
             tag_slugs=set(entry.get("tag_slugs") or []),
             target_legal_requirements=metadata.get("target_legal_requirements") or "",
-            control_topic=metadata.get("control_topic") or "",
         )
 
     def article_keys(self) -> set[str]:

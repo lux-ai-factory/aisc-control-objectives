@@ -62,16 +62,16 @@ class TestVerifyEvidence:
             covers=[],
         )
 
-    def test_keeps_only_verifiable_quotes(self, mcas_card):
+    def test_keeps_only_verifiable_quotes(self, corpus):
         item = self._item(
             [
                 "Quarterly fairness audits compare approval, default, and override rates",
                 "completely invented claim about certification",
             ]
         )
-        verified = verify_evidence(item, mcas_card)
+        verified = verify_evidence(item, corpus)
         assert len(verified) == 1
         assert "fairness audits" in verified[0]
 
-    def test_all_invented_returns_empty(self, mcas_card):
-        assert verify_evidence(self._item(["made up", "also made up"]), mcas_card) == []
+    def test_all_invented_returns_empty(self, corpus):
+        assert verify_evidence(self._item(["made up", "also made up"]), corpus) == []

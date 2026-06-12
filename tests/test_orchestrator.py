@@ -9,7 +9,14 @@ Invariants under test:
 - open issues not covered by accepted items surface as gaps/warnings
 """
 
-from helpers import FULL_COVERS, QueueProposer, QueueReviewer, accept_all, make_item
+from helpers import (
+    FULL_COVERS,
+    QueueProposer,
+    QueueReviewer,
+    SpyAcceptReviewer,
+    accept_all,
+    make_item,
+)
 
 from wizard.agents.orchestrator import Orchestrator
 from wizard.models.plan import ItemVerdict, Proposal, Review
@@ -69,22 +76,16 @@ class TestHallucinatedIds:
             items=[make_item(good_id, "test", FULL_COVERS), make_item("made-up-tool-9000")]
         )
 
-        seen_by_reviewer: list[list[str]] = []
-
-        class SpyReviewer:
-            def review(self, card, p):
-                seen_by_reviewer.append([i.item_id for i in p.items])
-                return accept_all(p)
-
+        reviewer = SpyAcceptReviewer()
         orch = Orchestrator(
             test_proposer=QueueProposer(proposal),
             checklist_proposer=QueueProposer(),
-            reviewer=SpyReviewer(),
+            reviewer=reviewer,
         )
         plan = orch.run(mcas_card, test_cands, checklist_cands)
 
         assert "made-up-tool-9000" not in [i.item_id for i in plan.tests]
-        assert "made-up-tool-9000" not in seen_by_reviewer[0]
+        assert "made-up-tool-9000" not in [i.item_id for i in reviewer.seen[0].items]
         assert any("made-up-tool-9000" in w for w in plan.warnings)
 
 

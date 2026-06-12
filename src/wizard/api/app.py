@@ -12,7 +12,6 @@ import os
 from typing import Protocol
 
 from fastapi import Body, FastAPI, HTTPException
-from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ValidationError
 
@@ -84,9 +83,8 @@ def create_app(
         plan = plan_runner.run(card, config=effective)
         store.save(plan)  # failed plans are stored too — they are audit records
         if plan.status == "failed":
-            return JSONResponse(
-                status_code=502, content=jsonable_encoder(plan.model_dump(mode="json"))
-            )
+            # model_dump(mode="json") already yields JSON-safe primitives
+            return JSONResponse(status_code=502, content=plan.model_dump(mode="json"))
         return plan
 
     @app.get("/api/plans")

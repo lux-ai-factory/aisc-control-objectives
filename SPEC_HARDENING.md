@@ -232,7 +232,9 @@ and not the proposers'.
 New `MultiLensReviewer` in `wizard/agents/llm.py` implementing the `Reviewer`
 protocol:
 
-- Lenses, each a system-prompt suffix on the existing reviewer prompt:
+- Lenses, each an instruction appended to the *volatile tail* of the reviewer
+  payload (not the system prompt — system and stable block stay byte-identical
+  across lenses, so the three calls share one cached prefix):
   - `relevance` — "is each item genuinely warranted by this card, this sector?"
   - `coverage` — "is every open issue and finding article addressed; what's missing?"
   - `parsimony` — "is anything redundant, overlapping, or disproportionate to

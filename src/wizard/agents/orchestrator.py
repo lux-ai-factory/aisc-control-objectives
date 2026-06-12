@@ -2,31 +2,38 @@
 
 The orchestrator is deterministic plain Python; proposers and the reviewer are
 injected behind small protocols so the loop is testable with fakes and the
-LLM-backed adapters stay thin. Two deterministic guards run regardless of what
-the agents say:
+LLM-backed adapters stay thin. Four deterministic guards run after the
+proposers and before the reviewer — the ID guard unconditionally, the rest
+per GuardsConfig policy:
 
-- items citing an item_id outside the candidate set are dropped *before*
-  review (hallucinated-ID defense, in addition to the reviewer's own check);
-- open issues not covered by any accepted item are recorded as gaps.
+- _drop_unknown_ids: hallucinated item ids never reach the reviewer
+- _check_evidence (G1): evidence quotes must occur in the card
+- _check_coverage_claims (G2): cover claims must be card-known and, for
+  checklists, supported by the checklist's own questions
+- _drop_unpaired_datasets (G3): datasets cascade out with their tests
+
+Independently of the reviewer, open issues not covered by any accepted item
+are recorded as gaps.
 """
 
 from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from typing import Protocol
+from typing import Literal, Protocol
 
 from wizard.config import GuardsConfig
-from wizard.matching.evidence import card_corpus, find_quote
-from wizard.matching.prefilter import ScoredCandidate
+from wizard.matching.evidence import card_corpus, verify_evidence
+from wizard.matching.prefilter import ScoredCandidate, known_candidate_ids
 from wizard.models.catalogue import ChecklistDoc
 from wizard.models.plan import (
-    VERDICT_SEVERITY,
     AssessmentPlan,
-    ItemVerdict,
     Proposal,
     ProposedItem,
     Review,
+    build_coverage,
+    drop_unpaired_datasets,
+    merge_verdicts,
 )
 from wizard.models.system_card import SystemCard
 
@@ -63,7 +70,7 @@ def _drop_unknown_ids(
 def _check_evidence(
     items: list[ProposedItem],
     card: SystemCard,
-    policy: str,  # "drop" | "demote" (caller skips when "off")
+    policy: Literal["drop", "demote"],  # caller skips when "off"
     report: list[str],
 ) -> list[ProposedItem]:
     """G1: evidence quotes must occur in the card; unverifiable ones are
@@ -71,7 +78,7 @@ def _check_evidence(
     corpus = card_corpus(card)  # built once; identical for every item
     kept = []
     for item in items:
-        verified = [q for q in item.evidence if find_quote(q, corpus)]
+        verified = verify_evidence(item, corpus)
         for quote in item.evidence:
             if quote not in verified:
                 report.append(f'evidence-not-found: {item.item_id}: "{quote[:80]}"')
@@ -118,16 +125,10 @@ def _drop_unpaired_datasets(
     items: list[ProposedItem], report: list[str]
 ) -> list[ProposedItem]:
     """G3: a dataset must be paired with a test present in the same proposal."""
-    present_tests = {i.item_id for i in items if i.item_type == "test"}
-    kept = []
-    for item in items:
-        if item.item_type == "dataset" and item.paired_test_id not in present_tests:
-            report.append(
-                f"dataset-unpaired: {item.item_id} (paired test "
-                f"'{item.paired_test_id}' not in the proposal)"
-            )
-        else:
-            kept.append(item)
+    kept, warnings = drop_unpaired_datasets(
+        items, "dataset-unpaired: {item_id} (paired test '{paired}' not in the proposal)"
+    )
+    report.extend(warnings)
     return kept
 
 
@@ -179,9 +180,7 @@ class Orchestrator:
         test_candidates: list[ScoredCandidate],
         checklist_candidates: list[ScoredCandidate],
     ) -> AssessmentPlan:
-        known_ids = {c.item.slug for c in test_candidates} | {
-            c.item.slug for c in checklist_candidates
-        }
+        known_ids = known_candidate_ids(test_candidates, checklist_candidates)
         checklist_lookup = {
             c.item.slug: c.item
             for c in checklist_candidates
@@ -213,14 +212,7 @@ class Orchestrator:
             review = self.reviewer.review(card, merged)
             # worst verdict wins on duplicate item_ids — an LLM emitting
             # reject-then-accept rows for one item must not flip it to accepted
-            verdict_by_id: dict[str, ItemVerdict] = {}
-            for verdict in review.verdicts:
-                current = verdict_by_id.get(verdict.item_id)
-                if (
-                    current is None
-                    or VERDICT_SEVERITY[verdict.verdict] > VERDICT_SEVERITY[current.verdict]
-                ):
-                    verdict_by_id[verdict.item_id] = verdict
+            verdict_by_id = merge_verdicts(review.verdicts)
             accepted = [
                 i
                 for i in merged.items
@@ -230,20 +222,12 @@ class Orchestrator:
             # re-check pairing post-review: a dataset whose test the reviewer
             # rejected must cascade out (the pre-review guard couldn't see this)
             if self.guards.dataset_pairing != "off":
-                accepted_tests = {i.item_id for i in accepted if i.item_type == "test"}
-                kept = []
-                for item in accepted:
-                    if (
-                        item.item_type == "dataset"
-                        and item.paired_test_id not in accepted_tests
-                    ):
-                        warnings.append(
-                            f"dataset-unpaired: {item.item_id} dropped after review "
-                            f"(paired test '{item.paired_test_id}' was not accepted)"
-                        )
-                    else:
-                        kept.append(item)
-                accepted = kept
+                accepted, pairing_warnings = drop_unpaired_datasets(
+                    accepted,
+                    "dataset-unpaired: {item_id} dropped after review "
+                    "(paired test '{paired}' was not accepted)",
+                )
+                warnings.extend(pairing_warnings)
             declared_gaps = list(merged.coverage_gaps)
 
             outstanding = [
@@ -269,10 +253,7 @@ class Orchestrator:
                 f"review not converged after {rounds} round(s); last reviewer notes: {notes or 'n/a'}"
             )
 
-        coverage: dict[str, list[str]] = {}
-        for item in accepted:
-            for key in item.covers:
-                coverage.setdefault(key, []).append(item.item_id)
+        coverage = build_coverage(accepted)
 
         # open issues with no accepted coverage become gaps
         gaps = list(declared_gaps)

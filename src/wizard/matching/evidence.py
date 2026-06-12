@@ -67,7 +67,10 @@ def find_quote(quote: str, corpus: str) -> bool:
     return False
 
 
-def verify_evidence(item: ProposedItem, card: SystemCard) -> list[str]:
-    """Return the subset of the item's evidence quotes found in the card."""
-    corpus = card_corpus(card)
+def verify_evidence(item: ProposedItem, corpus: str) -> list[str]:
+    """Return the subset of the item's evidence quotes found in the corpus.
+
+    Takes a prebuilt corpus (see card_corpus) so callers checking many items
+    build it once.
+    """
     return [quote for quote in item.evidence if find_quote(quote, corpus)]

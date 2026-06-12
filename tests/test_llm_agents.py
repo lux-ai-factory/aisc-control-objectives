@@ -47,8 +47,29 @@ class TestLLMTestProposer:
         call = client.calls[0]
         assert call["model"] == "claude-opus-4-8"
         assert call["thinking"] == {"type": "adaptive"}
+        assert call["output_config"] == {"effort": "high"}
         assert call["output_format"] is Proposal
         assert call["max_tokens"] >= 16000
+
+    def test_stable_prefix_cached_and_identical_across_rounds(self, mcas_card, world):
+        """SPEC §5.4: card+candidates sit in a cache_control block whose bytes
+        do not change between rounds; per-round material goes in the tail."""
+        client = ScriptedClient([SAMPLE_PROPOSAL, SAMPLE_PROPOSAL])
+        proposer = LLMTestProposer(client=client)
+        proposer.propose(mcas_card, world[0])
+        proposer.propose(
+            mcas_card, world[0], revision_notes="Cover Article 14.", prior=SAMPLE_PROPOSAL
+        )
+
+        def blocks(call):
+            return call["messages"][0]["content"]
+
+        round1, round2 = blocks(client.calls[0]), blocks(client.calls[1])
+        assert round1[0]["cache_control"] == {"type": "ephemeral"}
+        # stable block byte-identical across rounds → cache hit on round 2
+        assert round1[0]["text"] == round2[0]["text"]
+        # volatile tail carries the revision material
+        assert "Cover Article 14." in round2[-1]["text"]
 
     def test_prompt_contains_candidates_and_open_issues(self, mcas_card, world):
         client = ScriptedClient([SAMPLE_PROPOSAL])
@@ -120,7 +141,10 @@ class TestMultiLensReviewer:
         parsimony = Review(verdicts=[], coverage_ok=True)  # omits item x → accept
         return relevance, coverage, parsimony
 
-    def test_one_call_per_lens_with_distinct_prompts(self, mcas_card):
+    def test_one_call_per_lens_sharing_one_cached_prefix(self, mcas_card):
+        """The lens instruction lives in the volatile user tail, NOT the system
+        prompt — so all three lens calls share one cached prefix (system and
+        stable block identical) instead of each paying full price."""
         client = ScriptedClient(list(self._reviews()))
         MultiLensReviewer(
             client=client,
@@ -129,7 +153,13 @@ class TestMultiLensReviewer:
         ).review(mcas_card, SAMPLE_PROPOSAL)
         assert len(client.calls) == 3
         systems = [c["system"] for c in client.calls]
-        assert len(set(systems)) == 3  # each lens gets its own framing
+        assert len(set(systems)) == 1  # byte-identical → shared cache prefix
+        stable_blocks = [c["messages"][0]["content"][0]["text"] for c in client.calls]
+        assert len(set(stable_blocks)) == 1
+        tails = [c["messages"][0]["content"][-1]["text"] for c in client.calls]
+        assert "RELEVANCE" in tails[0]
+        assert "COVERAGE" in tails[1]
+        assert "PARSIMONY" in tails[2]
 
     def test_merge_worst_verdict_and_anded_coverage(self, mcas_card):
         client = ScriptedClient(list(self._reviews()))

@@ -21,7 +21,11 @@ from wizard.agents.llm import (
 )
 from wizard.agents.orchestrator import Orchestrator, Reviewer
 from wizard.config import RunConfig
-from wizard.matching.prefilter import prefilter_checklists, prefilter_tools
+from wizard.matching.prefilter import (
+    known_candidate_ids,
+    prefilter_checklists,
+    prefilter_tools,
+)
 from wizard.matching.tag_map import map_system_card_tags
 from wizard.models.catalogue import CatalogueTool, ChecklistDoc
 from wizard.models.plan import AssessmentPlan
@@ -70,9 +74,7 @@ class WizardPlanRunner:
 
         test_candidates = prefilter_tools(card, self.tools)
         checklist_candidates = prefilter_checklists(card, self.checklists)
-        known_ids = {c.item.slug for c in test_candidates} | {
-            c.item.slug for c in checklist_candidates
-        }
+        known_ids = known_candidate_ids(test_candidates, checklist_candidates)
         orchestrator = Orchestrator(
             test_proposer=LLMTestProposer(client=self.client, model=cfg.model),
             checklist_proposer=LLMChecklistProposer(client=self.client, model=cfg.model),

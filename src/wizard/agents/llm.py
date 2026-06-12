@@ -21,7 +21,7 @@ from typing import Any
 from wizard.config import DEFAULT_MODEL, Lens
 from wizard.matching.prefilter import ScoredCandidate
 from wizard.models.catalogue import ChecklistDoc
-from wizard.models.plan import VERDICT_SEVERITY, ItemVerdict, Proposal, Review
+from wizard.models.plan import Proposal, Review, merge_verdicts
 from wizard.models.system_card import SystemCard
 
 MAX_TOKENS = 16000
@@ -87,13 +87,36 @@ class _LLMAgent:
         self.client = client
         self.model = model
 
-    def _parse(self, system: str, user_payload: dict, schema: type) -> Any:
+    def _parse(
+        self,
+        system: str,
+        stable_payload: dict,
+        volatile_payload: dict | None,
+        schema: type,
+    ) -> Any:
+        """Two-block prompt for cache reuse (SPEC §5.4): the stable block
+        (card + candidates / known ids) carries the cache breakpoint and is
+        byte-identical across review rounds and lenses; per-round material
+        (prior proposal, revision notes, lens instruction) goes in the tail,
+        after the breakpoint."""
+        content: list[dict] = [
+            {
+                "type": "text",
+                "text": json.dumps(stable_payload, ensure_ascii=False),
+                "cache_control": {"type": "ephemeral"},
+            }
+        ]
+        if volatile_payload:
+            content.append(
+                {"type": "text", "text": json.dumps(volatile_payload, ensure_ascii=False)}
+            )
         response = self.client.messages.parse(
             model=self.model,
             max_tokens=MAX_TOKENS,
             thinking={"type": "adaptive"},
+            output_config={"effort": "high"},
             system=system,
-            messages=[{"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)}],
+            messages=[{"role": "user", "content": content}],
             output_format=schema,
         )
         return response.parsed_output
@@ -109,16 +132,17 @@ class _LLMProposerBase(_LLMAgent):
         revision_notes: str | None = None,
         prior: Proposal | None = None,
     ) -> Proposal:
-        payload: dict[str, Any] = {
+        stable: dict[str, Any] = {
             "task": f"Propose {self.track} for the assessment plan of this system.",
             "system_card": _card_digest(card),
             "candidates": _candidate_digest(candidates),
         }
+        volatile: dict[str, Any] = {}
         if prior is not None:
-            payload["prior_proposal"] = prior.model_dump()
+            volatile["prior_proposal"] = prior.model_dump()
         if revision_notes:
-            payload["revision_notes"] = revision_notes
-        return self._parse(_PROPOSER_SYSTEM, payload, Proposal)
+            volatile["revision_notes"] = revision_notes
+        return self._parse(_PROPOSER_SYSTEM, stable, volatile or None, Proposal)
 
 
 class LLMTestProposer(_LLMProposerBase):
@@ -135,21 +159,25 @@ class LLMReviewer(_LLMAgent):
         client: Any,
         known_item_ids: set[str],
         model: str = DEFAULT_MODEL,
-        system_suffix: str = "",
+        lens_instruction: str = "",
     ):
         super().__init__(client, model)
         self.known_item_ids = known_item_ids
-        self.system_suffix = system_suffix
+        # goes in the volatile tail, NOT the system prompt: the system and
+        # stable block stay byte-identical across lenses, so multi-lens
+        # reviews share one cached prefix instead of three full-price reads
+        self.lens_instruction = lens_instruction
 
     def review(self, card: SystemCard, proposal: Proposal) -> Review:
-        payload = {
+        stable = {
             "task": "Review this proposal for quality and coverage.",
             "system_card": _card_digest(card),
             "known_ids": sorted(self.known_item_ids),
-            "proposal": proposal.model_dump(),
         }
-        system = _REVIEWER_SYSTEM + ("\n\n" + self.system_suffix if self.system_suffix else "")
-        return self._parse(system, payload, Review)
+        volatile: dict[str, Any] = {"proposal": proposal.model_dump()}
+        if self.lens_instruction:
+            volatile["lens_instruction"] = self.lens_instruction
+        return self._parse(_REVIEWER_SYSTEM, stable, volatile, Review)
 
 
 _LENS_PROMPTS: dict[str, str] = {
@@ -188,23 +216,16 @@ class MultiLensReviewer:
                 client=client,
                 known_item_ids=known_item_ids,
                 model=model,
-                system_suffix=_LENS_PROMPTS[lens],
+                lens_instruction=_LENS_PROMPTS[lens],
             )
             for lens in self.lenses
         ]
 
     def review(self, card: SystemCard, proposal: Proposal) -> Review:
         reviews = [r.review(card, proposal) for r in self._reviewers]
-
-        merged_verdicts: dict[str, ItemVerdict] = {}
-        for review in reviews:
-            for verdict in review.verdicts:
-                current = merged_verdicts.get(verdict.item_id)
-                if current is None or VERDICT_SEVERITY[verdict.verdict] > VERDICT_SEVERITY[current.verdict]:
-                    merged_verdicts[verdict.item_id] = verdict.model_copy()
-                elif VERDICT_SEVERITY[verdict.verdict] == VERDICT_SEVERITY[current.verdict]:
-                    current.reasons = list(dict.fromkeys(current.reasons + verdict.reasons))
-
+        merged_verdicts = merge_verdicts(
+            [v for review in reviews for v in review.verdicts]
+        )
         notes = "\n".join(
             f"[{lens}] {review.notes_for_revision}"
             for lens, review in zip(self.lenses, reviews)

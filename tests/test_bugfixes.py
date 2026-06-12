@@ -7,7 +7,6 @@ from pydantic import ValidationError
 from wizard.agents.orchestrator import Orchestrator
 from wizard.config import RunConfig
 from wizard.matching.evidence import find_quote
-from wizard.matching.prefilter import prefilter_checklists, prefilter_tools
 from wizard.matching.tag_map import map_ai_type
 from wizard.models.plan import ItemVerdict, Proposal, Review
 from wizard.models.system_card import SystemCard

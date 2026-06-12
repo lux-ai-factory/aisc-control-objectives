@@ -34,6 +34,17 @@ class ScoredCandidate:
     article_overlap: set[str] = field(default_factory=set)
 
 
+def known_candidate_ids(
+    test_candidates: list["ScoredCandidate"],
+    checklist_candidates: list["ScoredCandidate"],
+) -> set[str]:
+    """The single definition of candidate identity — used by the orchestrator's
+    hallucination guard and the reviewer's known-ids list, which must agree."""
+    return {c.item.slug for c in test_candidates} | {
+        c.item.slug for c in checklist_candidates
+    }
+
+
 def _card_signals(card: SystemCard) -> tuple[set[str], set[str], set[str]]:
     mapped = map_system_card_tags(
         sorted(card.target_system_slugs), sorted(card.sector_slugs)
