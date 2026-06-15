@@ -19,7 +19,25 @@ from helpers import (
 )
 
 from wizard.agents.orchestrator import Orchestrator
-from wizard.models.plan import ItemVerdict, Proposal, Review
+from wizard.models.plan import (
+    DimensionFrame,
+    DimensionFraming,
+    ItemVerdict,
+    Proposal,
+    Review,
+)
+
+
+class QueueFramer:
+    """Framer fake: returns a fixed framing and records the dimensions it saw."""
+
+    def __init__(self, framing: DimensionFraming):
+        self.framing = framing
+        self.seen_dimensions: list[list[str]] = []
+
+    def frame(self, card, dimension_slugs):
+        self.seen_dimensions.append(list(dimension_slugs))
+        return self.framing
 
 
 class AcceptAllReviewer:
@@ -66,6 +84,124 @@ class TestHappyPath:
         )
         plan = orch.run(mcas_card, test_cands, checklist_cands)
         assert len(plan.datasets) == 1
+
+
+class TestDimensionEnrichment:
+    def test_accepted_items_carry_candidate_dimensions(self, mcas_card, world):
+        test_cands, checklist_cands = world
+        # pick a test candidate whose tool carries a dimension tag
+        cand = next(
+            c for c in test_cands if c.item.dimension_slugs()
+        )
+        tid = cand.item.slug
+        expected = cand.item.dimension_slugs()
+
+        orch = Orchestrator(
+            test_proposer=QueueProposer(
+                Proposal(items=[make_item(tid, "test", FULL_COVERS)])
+            ),
+            checklist_proposer=QueueProposer(),
+            reviewer=AcceptAllReviewer(),
+        )
+        plan = orch.run(mcas_card, test_cands, checklist_cands)
+
+        item = next(i for i in plan.tests if i.item_id == tid)
+        assert item.dimension_slugs == expected
+        assert expected  # guard: the fixture really exercises a dimension
+
+    def test_checklist_dimension_enriched(self, mcas_card, world):
+        test_cands, checklist_cands = world
+        cand = next(c for c in checklist_cands if c.item.dimension_slugs())
+        cid = cand.item.slug
+
+        orch = Orchestrator(
+            test_proposer=QueueProposer(),
+            checklist_proposer=QueueProposer(
+                Proposal(items=[make_item(cid, "checklist", FULL_COVERS)])
+            ),
+            reviewer=AcceptAllReviewer(),
+        )
+        plan = orch.run(mcas_card, test_cands, checklist_cands)
+        item = next(i for i in plan.checklists if i.item_id == cid)
+        assert item.dimension_slugs == cand.item.dimension_slugs()
+
+
+class TestDimensionAssembly:
+    def test_no_framer_still_populates_dimensions(self, mcas_card, world):
+        test_cands, checklist_cands = world
+        cand = next(c for c in test_cands if c.item.dimension_slugs())
+        tid = cand.item.slug
+        orch = Orchestrator(
+            test_proposer=QueueProposer(
+                Proposal(items=[make_item(tid, "test", FULL_COVERS)])
+            ),
+            checklist_proposer=QueueProposer(),
+            reviewer=AcceptAllReviewer(),
+        )
+        plan = orch.run(mcas_card, test_cands, checklist_cands)
+        # the accepted item's dimension surfaces as an in-scope assessment
+        slugs = {d.dimension_slug for d in plan.dimensions}
+        assert set(cand.item.dimension_slugs()) <= slugs
+
+    def test_framer_receives_candidate_dimensions(self, mcas_card, world):
+        test_cands, checklist_cands = world
+        cand = next(c for c in test_cands if c.item.dimension_slugs())
+        tid = cand.item.slug
+        framer = QueueFramer(
+            DimensionFraming(
+                frames=[
+                    DimensionFrame(
+                        dimension_slug=cand.item.dimension_slugs()[0],
+                        in_scope=True,
+                        residual_gaps=["something still missing"],
+                    )
+                ]
+            )
+        )
+        orch = Orchestrator(
+            test_proposer=QueueProposer(
+                Proposal(items=[make_item(tid, "test", FULL_COVERS)])
+            ),
+            checklist_proposer=QueueProposer(),
+            reviewer=AcceptAllReviewer(),
+            framer=framer,
+        )
+        plan = orch.run(mcas_card, test_cands, checklist_cands)
+
+        # framer saw the union of candidate dimensions
+        assert framer.seen_dimensions
+        assert cand.item.dimension_slugs()[0] in framer.seen_dimensions[0]
+        # the framed dimension carries the recommendation and a partial status
+        da = next(
+            d for d in plan.dimensions
+            if d.dimension_slug == cand.item.dimension_slugs()[0]
+        )
+        assert tid in da.recommended_item_ids
+        assert da.status == "partial"
+
+    def test_high_risk_floor_applied_via_orchestrator(self, mcas_card, world):
+        test_cands, checklist_cands = world
+        cand = next(c for c in test_cands if c.item.dimension_slugs())
+        tid = cand.item.slug
+        dim = cand.item.dimension_slugs()[0]
+        framer = QueueFramer(
+            DimensionFraming(
+                frames=[DimensionFrame(dimension_slug=dim, residual_gaps=[])]
+            )
+        )
+        orch = Orchestrator(
+            test_proposer=QueueProposer(
+                Proposal(items=[make_item(tid, "test", FULL_COVERS)])
+            ),
+            checklist_proposer=QueueProposer(),
+            reviewer=AcceptAllReviewer(),
+            framer=framer,
+            high_risk=True,
+        )
+        plan = orch.run(mcas_card, test_cands, checklist_cands)
+        da = next(d for d in plan.dimensions if d.dimension_slug == dim)
+        # no accepted control for the dim + high risk → floored off "covered"
+        assert da.status == "partial"
 
 
 class TestHallucinatedIds:

@@ -4,3 +4,17 @@ __pycache__/
 data/
 .pytest_cache/
 uv.lock
+
+# local secrets (Anthropic API key for the wizard service)
+.env
+
+# server-owned active-recommendation state (single-user demo persistence)
+.wizard_state.json
+
+# standalone wizard frontend build artifacts
+frontend/node_modules/
+frontend/build/
+frontend/.env
+
+# transient pasted screenshots
+Pasted image.png

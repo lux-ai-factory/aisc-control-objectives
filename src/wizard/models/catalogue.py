@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from wizard.dimensions import dimension_slugs_from_tags, normalize_slug
 from wizard.matching.articles import article_keys
 
 
@@ -20,7 +21,7 @@ class CatalogueTool(BaseModel):
     target_legal_requirements: str = ""
 
     @classmethod
-    def from_seed(cls, entry: dict) -> "CatalogueTool":
+    def from_seed(cls, entry: dict) -> CatalogueTool:
         metadata = entry.get("metadata") or {}
         return cls(
             slug=entry.get("slug") or entry["name"],
@@ -34,6 +35,11 @@ class CatalogueTool(BaseModel):
         return article_keys(self.target_legal_requirements) | article_keys(
             self.description
         )
+
+    def dimension_slugs(self) -> list[str]:
+        """Canonical trustworthiness dimensions this tool belongs to, derived
+        from its tags (a tool may span more than one), in registry order."""
+        return dimension_slugs_from_tags(self.tag_slugs)
 
 
 class ChecklistQuestion(BaseModel):
@@ -52,7 +58,7 @@ class ChecklistDoc(BaseModel):
     questions: list[ChecklistQuestion] = Field(default_factory=list)
 
     @classmethod
-    def from_seed(cls, entry: dict) -> "ChecklistDoc":
+    def from_seed(cls, entry: dict) -> ChecklistDoc:
         metadata = entry.get("metadata") or {}
         return cls(
             slug=entry.get("slug") or entry["name"],
@@ -76,3 +82,11 @@ class ChecklistDoc(BaseModel):
         for question in self.questions:
             keys |= article_keys(question.article)
         return keys
+
+    def dimension_slugs(self) -> list[str]:
+        """Canonical dimension(s) this checklist belongs to. A control carries a
+        single `dimension_slug`; this normalises slug drift and returns the
+        uniform list shape used across catalogue items (empty if untagged)."""
+        if not self.dimension_slug:
+            return []
+        return [normalize_slug(self.dimension_slug)]

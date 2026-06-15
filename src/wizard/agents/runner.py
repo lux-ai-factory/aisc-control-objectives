@@ -10,11 +10,12 @@ from __future__ import annotations
 
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from wizard.agents.llm import (
     LLMChecklistProposer,
+    LLMDimensionFramer,
     LLMReviewer,
     LLMTestProposer,
     MultiLensReviewer,
@@ -30,6 +31,7 @@ from wizard.matching.tag_map import map_system_card_tags
 from wizard.models.catalogue import CatalogueTool, ChecklistDoc
 from wizard.models.plan import AssessmentPlan
 from wizard.models.system_card import SystemCard
+from wizard.skills import SkillsLoader
 
 
 class WizardPlanRunner:
@@ -39,11 +41,19 @@ class WizardPlanRunner:
         tools: list[CatalogueTool],
         checklists: list[ChecklistDoc],
         config: RunConfig | None = None,
+        skills: SkillsLoader | None = None,
+        high_risk_sectors: set[str] | None = None,
     ):
         self.client = client
         self.tools = tools
         self.checklists = checklists
         self.config = config or RunConfig.from_env(os.environ)
+        # disabled by default until real skills files exist (Phase 2)
+        self.skills = skills or SkillsLoader.disabled()
+        # the Annex III high-risk sectors come from the document base (loaded by
+        # the composition root); empty here means the D2 floor never classifies
+        # a system high-risk
+        self.high_risk_sectors = high_risk_sectors or set()
 
     def _build_reviewer(self, config: RunConfig, known_ids: set[str]) -> Reviewer:
         if config.review.lenses:
@@ -76,11 +86,22 @@ class WizardPlanRunner:
         checklist_candidates = prefilter_checklists(card, self.checklists)
         known_ids = known_candidate_ids(test_candidates, checklist_candidates)
         orchestrator = Orchestrator(
-            test_proposer=LLMTestProposer(client=self.client, model=cfg.model),
-            checklist_proposer=LLMChecklistProposer(client=self.client, model=cfg.model),
+            test_proposer=LLMTestProposer(
+                client=self.client, model=cfg.model, skills=self.skills
+            ),
+            checklist_proposer=LLMChecklistProposer(
+                client=self.client, model=cfg.model, skills=self.skills
+            ),
             reviewer=self._build_reviewer(cfg, known_ids),
             max_rounds=cfg.max_rounds,
             guards=cfg.guards,
+            framer=LLMDimensionFramer(
+                client=self.client, model=cfg.model, skills=self.skills
+            ),
+            high_risk=(
+                cfg.floor.enabled
+                and bool(card.sector_slugs & self.high_risk_sectors)
+            ),
         )
         try:
             plan = orchestrator.run(card, test_candidates, checklist_candidates)
@@ -89,7 +110,7 @@ class WizardPlanRunner:
                 plan_id=str(uuid.uuid4()),
                 qualification_id=card.qualification_id,
                 system_name=card.system_name,
-                created_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
                 status="failed",
                 warnings=[f"run-failed: {type(exc).__name__}: {exc}"] + tag_warnings,
                 run_config=cfg.model_dump(),

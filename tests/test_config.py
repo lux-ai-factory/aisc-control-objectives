@@ -4,27 +4,85 @@ Precedence: per-run override > environment > defaults. Every knob the spec
 table lists must be reachable from both env and per-run JSON.
 """
 
+import textwrap
+
 import pytest
 from pydantic import ValidationError
 
-from wizard.config import GuardsConfig, ReviewConfig, RunConfig
+from wizard.config import (
+    GuardsConfig,
+    ReviewConfig,
+    RunConfig,
+)
 
 
 class TestDefaults:
     def test_documented_defaults(self):
         cfg = RunConfig()
-        assert cfg.model == "claude-opus-4-8"
+        assert cfg.model == "anthropic/claude-opus-4-8"
         assert cfg.max_rounds == 3
         assert cfg.guards.evidence == "drop"
         assert cfg.guards.coverage_claims == "strip"
         assert cfg.guards.dataset_pairing == "enforce"
         assert cfg.review.lenses == []
         assert cfg.review.reviewer_model is None
+        # D2 floor: the toggle only — the high-risk sector list is domain
+        # knowledge in the document base, not config (see test_knowledge.py)
+        assert cfg.floor.enabled is True
 
     def test_effective_reviewer_model_falls_back_to_model(self):
-        assert RunConfig().effective_reviewer_model == "claude-opus-4-8"
-        cfg = RunConfig(review=ReviewConfig(reviewer_model="claude-sonnet-4-6"))
-        assert cfg.effective_reviewer_model == "claude-sonnet-4-6"
+        assert RunConfig().effective_reviewer_model == "anthropic/claude-opus-4-8"
+        cfg = RunConfig(review=ReviewConfig(reviewer_model="openai/gpt-4o"))
+        assert cfg.effective_reviewer_model == "openai/gpt-4o"
+
+
+class TestConfigFile:
+    def _write(self, tmp_path, body):
+        path = tmp_path / "wizard.toml"
+        path.write_text(textwrap.dedent(body))
+        return path
+
+    def test_from_file_chooses_model(self, tmp_path):
+        path = self._write(
+            tmp_path,
+            """
+            model = "openai/gpt-4o-mini"
+            max_rounds = 2
+
+            [review]
+            lenses = ["relevance", "coverage"]
+
+            [floor]
+            enabled = false
+            """,
+        )
+        cfg = RunConfig.from_file(path)
+        assert cfg.model == "openai/gpt-4o-mini"
+        assert cfg.max_rounds == 2
+        assert cfg.review.lenses == ["relevance", "coverage"]
+        assert cfg.floor.enabled is False
+
+    def test_missing_file_gives_defaults(self, tmp_path):
+        cfg = RunConfig.from_file(tmp_path / "absent.toml")
+        assert cfg == RunConfig()
+
+    def test_load_merges_file_then_env(self, tmp_path):
+        path = self._write(
+            tmp_path,
+            """
+            model = "openai/gpt-4o-mini"
+            max_rounds = 4
+            """,
+        )
+        # env overrides the file's model but leaves max_rounds intact
+        cfg = RunConfig.load({"WIZARD_MODEL": "gemini/gemini-1.5-pro"}, path)
+        assert cfg.model == "gemini/gemini-1.5-pro"
+        assert cfg.max_rounds == 4
+
+    def test_load_without_file_is_env_only(self, tmp_path):
+        cfg = RunConfig.load({"WIZARD_MODEL": "openai/gpt-4o"}, tmp_path / "absent.toml")
+        assert cfg.model == "openai/gpt-4o"
+        assert cfg.max_rounds == 3  # default preserved
 
 
 class TestValidation:
@@ -53,8 +111,10 @@ class TestFromEnv:
             "WIZARD_DATASET_PAIRING": "off",
             "WIZARD_REVIEW_LENSES": "relevance,coverage",
             "WIZARD_REVIEWER_MODEL": "claude-opus-4-8",
+            "WIZARD_FLOOR_ENABLED": "false",
         }
         cfg = RunConfig.from_env(env)
+        assert cfg.floor.enabled is False
         assert cfg.model == "claude-sonnet-4-6"
         assert cfg.max_rounds == 5
         assert cfg.guards.evidence == "demote"

@@ -35,8 +35,8 @@ class ScoredCandidate:
 
 
 def known_candidate_ids(
-    test_candidates: list["ScoredCandidate"],
-    checklist_candidates: list["ScoredCandidate"],
+    test_candidates: list[ScoredCandidate],
+    checklist_candidates: list[ScoredCandidate],
 ) -> set[str]:
     """The single definition of candidate identity — used by the orchestrator's
     hallucination guard and the reviewer's known-ids list, which must agree."""

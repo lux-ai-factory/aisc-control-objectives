@@ -53,7 +53,7 @@ class SystemCard(BaseModel):
     open_issues: list[str] = Field(default_factory=list)
 
     @classmethod
-    def from_card_json(cls, raw: dict) -> "SystemCard":
+    def from_card_json(cls, raw: dict) -> SystemCard:
         return cls.model_validate(raw)
 
     @property

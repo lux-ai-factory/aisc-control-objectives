@@ -19,19 +19,25 @@ are recorded as gaps.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal, Protocol
 
 from wizard.config import GuardsConfig
+from wizard.dimensions import all_dimensions
 from wizard.matching.evidence import card_corpus, verify_evidence
 from wizard.matching.prefilter import ScoredCandidate, known_candidate_ids
 from wizard.models.catalogue import ChecklistDoc
 from wizard.models.plan import (
     AssessmentPlan,
+    DimensionFrame,
+    DimensionFraming,
     Proposal,
     ProposedItem,
     Review,
     build_coverage,
+    build_dimension_assessments,
+    dedupe_gaps,
+    dedupe_items,
     drop_unpaired_datasets,
     merge_verdicts,
 )
@@ -52,6 +58,12 @@ class Reviewer(Protocol):
     def review(self, card: SystemCard, proposal: Proposal) -> Review: ...
 
 
+class Framer(Protocol):
+    def frame(
+        self, card: SystemCard, dimension_slugs: list[str]
+    ) -> DimensionFraming: ...
+
+
 def _drop_unknown_ids(
     items: list[ProposedItem], known_ids: set[str], report: list[str]
 ) -> list[ProposedItem]:
@@ -64,6 +76,20 @@ def _drop_unknown_ids(
             report.append(
                 f"id-not-found: proposed item '{item.item_id}' is not in the candidate set; dropped"
             )
+    return kept
+
+
+def _drop_zero_score(
+    items: list[ProposedItem], report: list[str]
+) -> list[ProposedItem]:
+    """A score of 0 means 'not recommended' — exclude it (the proposer should
+    simply omit such items; this is the backstop)."""
+    kept = []
+    for item in items:
+        if item.score <= 0:
+            report.append(f"excluded-zero-score: {item.item_id}")
+        else:
+            kept.append(item)
     return kept
 
 
@@ -86,7 +112,7 @@ def _check_evidence(
             kept.append(item.model_copy(update={"evidence": verified}))
         elif policy == "demote":
             report.append(f"evidence-empty(demoted): {item.item_id}")
-            kept.append(item.model_copy(update={"evidence": [], "priority": "optional"}))
+            kept.append(item.model_copy(update={"evidence": [], "score": 1}))
         else:  # drop
             report.append(f"evidence-empty: {item.item_id}")
     return kept
@@ -121,6 +147,21 @@ def _check_coverage_claims(
     return kept
 
 
+def _enrich_dimensions(
+    items: list[ProposedItem], dimension_lookup: dict[str, list[str]]
+) -> list[ProposedItem]:
+    """Stamp each accepted item with the trustworthiness dimension(s) of its
+    catalogue candidate (Phase 0). The proposer emits only an item_id; the
+    dimension is a property of the candidate, so it is resolved here, after the
+    item has survived the guards and review."""
+    return [
+        item.model_copy(
+            update={"dimension_slugs": dimension_lookup.get(item.item_id, [])}
+        )
+        for item in items
+    ]
+
+
 def _drop_unpaired_datasets(
     items: list[ProposedItem], report: list[str]
 ) -> list[ProposedItem]:
@@ -132,6 +173,25 @@ def _drop_unpaired_datasets(
     return kept
 
 
+def _candidate_dimensions(dimension_lookup: dict[str, list[str]]) -> list[str]:
+    """The trustworthiness dimensions present across the candidate set, in
+    registry order — the dimensions the framer is asked to assess."""
+    present = {slug for slugs in dimension_lookup.values() for slug in slugs}
+    return [d.slug for d in all_dimensions() if d.slug in present]
+
+
+def _open_issue_gaps(card: SystemCard, covered_keys: set[str]) -> list[str]:
+    """One gap line per open issue whose coverage keys are not all covered."""
+    gaps = []
+    for issue, keys in zip(card.open_issues, card.open_issue_keys()):
+        missing = keys - covered_keys
+        if missing:
+            gaps.append(
+                f"open issue not covered ({', '.join(sorted(missing))}): {issue[:120]}"
+            )
+    return gaps
+
+
 class Orchestrator:
     def __init__(
         self,
@@ -140,12 +200,20 @@ class Orchestrator:
         reviewer: Reviewer,
         max_rounds: int = 3,
         guards: GuardsConfig | None = None,
+        framer: Framer | None = None,
+        high_risk: bool = False,
     ):
         self.test_proposer = test_proposer
         self.checklist_proposer = checklist_proposer
         self.reviewer = reviewer
         self.max_rounds = max_rounds
         self.guards = guards or GuardsConfig()
+        # framer is optional: without it the loop behaves exactly as before and
+        # dimensions are assembled from the accepted items' tags alone (every
+        # candidate dimension in scope, no narrative). high_risk drives the D2
+        # floor and is supplied by the runner from the card's sector + config.
+        self.framer = framer
+        self.high_risk = high_risk
 
     def _apply_guards(
         self,
@@ -156,12 +224,18 @@ class Orchestrator:
     ) -> Proposal:
         """Deterministic guards (WP1): run after proposers, before the reviewer.
 
-        Order matters: ID guard → evidence → coverage claims → dataset
-        pairing (last, so a dataset cascades out with its dropped test).
+        Order matters: dedup → ID guard → evidence → coverage claims → dataset
+        pairing (last, so a dataset cascades out with its dropped test). Dedup
+        runs first so the reviewer never sees (and rejects) duplicate rows.
         Findings land in guard_report, which the reviewer sees.
         """
         report: list[str] = []
-        items = _drop_unknown_ids(proposal.items, known_ids, report)
+        items, dup_warnings = dedupe_items(
+            proposal.items, "duplicate-item: {item_id} ({n} rows merged into one)"
+        )
+        report.extend(dup_warnings)
+        items = _drop_zero_score(items, report)
+        items = _drop_unknown_ids(items, known_ids, report)
         if self.guards.evidence != "off":
             items = _check_evidence(items, card, self.guards.evidence, report)
         if self.guards.coverage_claims != "off":
@@ -172,6 +246,19 @@ class Orchestrator:
             items=items,
             coverage_gaps=proposal.coverage_gaps,
             guard_report=report,
+        )
+
+    def _frame_dimensions(
+        self, card: SystemCard, dimension_lookup: dict[str, list[str]]
+    ) -> DimensionFraming:
+        """Frame the candidate dimensions up front (Phase 1): scope + what the
+        card already addresses, consumed at assembly. Without a framer, every
+        candidate dimension is framed in-scope with no narrative."""
+        ordered_dims = _candidate_dimensions(dimension_lookup)
+        if self.framer is not None:
+            return self.framer.frame(card, ordered_dims)
+        return DimensionFraming(
+            frames=[DimensionFrame(dimension_slug=slug) for slug in ordered_dims]
         )
 
     def run(
@@ -186,6 +273,12 @@ class Orchestrator:
             for c in checklist_candidates
             if isinstance(c.item, ChecklistDoc)
         }
+        dimension_lookup = {
+            c.item.slug: c.item.dimension_slugs()
+            for c in test_candidates + checklist_candidates
+        }
+        framing = self._frame_dimensions(card, dimension_lookup)
+
         warnings: list[str] = []
         accepted: list[ProposedItem] = []
         declared_gaps: list[str] = []
@@ -253,29 +346,32 @@ class Orchestrator:
                 f"review not converged after {rounds} round(s); last reviewer notes: {notes or 'n/a'}"
             )
 
+        accepted = _enrich_dimensions(accepted, dimension_lookup)
+        # surface the strongest recommendations first
+        accepted.sort(key=lambda i: -i.score)
         coverage = build_coverage(accepted)
 
+        # Dimension-first view (Phase 1): group accepted items under the framed
+        # in-scope dimensions and apply the D2 floor.
+        dimensions = build_dimension_assessments(
+            framing.frames, accepted, high_risk=self.high_risk
+        )
+
         # open issues with no accepted coverage become gaps
-        gaps = list(declared_gaps)
-        covered_keys = set(coverage)
-        for issue, keys in zip(card.open_issues, card.open_issue_keys()):
-            missing = keys - covered_keys
-            if missing:
-                gaps.append(
-                    f"open issue not covered ({', '.join(sorted(missing))}): {issue[:120]}"
-                )
+        gaps = dedupe_gaps(declared_gaps + _open_issue_gaps(card, set(coverage)))
 
         return AssessmentPlan(
             plan_id=str(uuid.uuid4()),
             qualification_id=card.qualification_id,
             system_name=card.system_name,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             status="reviewed" if reviewed else "draft",
             tests=[i for i in accepted if i.item_type == "test"],
             datasets=[i for i in accepted if i.item_type == "dataset"],
             checklists=[i for i in accepted if i.item_type == "checklist"],
             coverage=coverage,
             gaps=gaps,
+            dimensions=dimensions,
             warnings=warnings,
             review_rounds=rounds,
         )

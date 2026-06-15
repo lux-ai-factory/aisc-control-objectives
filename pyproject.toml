@@ -6,6 +6,13 @@ requires-python = ">=3.12"
 dependencies = [
     "pydantic>=2.7",
     "fastapi>=0.111",
+    "anthropic>=0.40",
+    "httpx>=0.27",
+    "uvicorn>=0.30",
+    "pyyaml>=6.0",
+    "jinja2>=3.1",
+    "weasyprint>=60",
+    "litellm>=1.70",
 ]
 
 [project.optional-dependencies]
@@ -20,6 +27,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/wizard"]
+artifacts = ["src/wizard/templates/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

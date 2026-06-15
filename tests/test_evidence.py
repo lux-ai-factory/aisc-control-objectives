@@ -56,7 +56,7 @@ class TestVerifyEvidence:
         return ProposedItem(
             item_id="x",
             item_type="test",
-            priority="must",
+            score=5,
             rationale="r",
             evidence=evidence,
             covers=[],

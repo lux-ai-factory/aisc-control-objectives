@@ -29,6 +29,42 @@ def run(mcas_card, world, tests_proposal, guards=GuardsConfig(), checks_proposal
     return orch.run(mcas_card, test_cands, checklist_cands), reviewer
 
 
+class TestDedup:
+    def test_duplicate_item_merged_before_review(self, mcas_card, world):
+        # the LLM proposing the same id twice must NOT cause it to be flagged as
+        # a duplicate and dropped — it is merged into one row before review
+        tid = world[0][0].item.slug
+        proposal = Proposal(
+            items=[
+                guarded_item(tid, covers=["article-13"], score=3),
+                guarded_item(tid, covers=["article-14"], score=5),
+            ]
+        )
+        plan, reviewer = run(mcas_card, world, proposal)
+        # one row reaches the reviewer and the plan
+        assert [i.item_id for i in reviewer.seen[0].items] == [tid]
+        kept = [i for i in plan.tests if i.item_id == tid]
+        assert len(kept) == 1
+        # covers unioned, highest score wins
+        assert set(kept[0].covers) >= {"article-13", "article-14"}
+        assert kept[0].score == 5
+        assert any(w.startswith("duplicate-item") and tid in w for w in plan.warnings)
+
+
+class TestScore:
+    def test_zero_score_item_excluded(self, mcas_card, world):
+        good_id = world[0][0].item.slug
+        other_id = world[0][1].item.slug
+        proposal = Proposal(
+            items=[guarded_item(good_id, score=4), guarded_item(other_id, score=0)]
+        )
+        plan, reviewer = run(mcas_card, world, proposal)
+        kept = [i.item_id for i in plan.tests]
+        assert good_id in kept and other_id not in kept
+        assert other_id not in [i.item_id for i in reviewer.seen[0].items]
+        assert any(w.startswith("excluded-zero-score") and other_id in w for w in plan.warnings)
+
+
 class TestEvidencePolicies:
     def test_drop_removes_zero_evidence_items_before_review(self, mcas_card, world):
         good_id = world[0][0].item.slug
@@ -52,21 +88,21 @@ class TestEvidencePolicies:
         assert kept.evidence == [REAL_QUOTE]
         assert any(w.startswith("evidence-not-found") for w in plan.warnings)
 
-    def test_demote_keeps_item_as_optional(self, mcas_card, world):
+    def test_demote_lowers_score_to_one(self, mcas_card, world):
         good_id = world[0][0].item.slug
         proposal = Proposal(items=[guarded_item(good_id, evidence=[FAKE_QUOTE])])
         plan, _ = run(mcas_card, world, proposal, guards=GuardsConfig(evidence="demote"))
         [kept] = plan.tests
-        assert kept.priority == "optional"
+        assert kept.score == 1
         assert any(w.startswith("evidence-empty(demoted)") for w in plan.warnings)
 
     def test_off_passes_everything(self, mcas_card, world):
         good_id = world[0][0].item.slug
-        proposal = Proposal(items=[guarded_item(good_id, evidence=[FAKE_QUOTE])])
+        proposal = Proposal(items=[guarded_item(good_id, evidence=[FAKE_QUOTE], score=5)])
         plan, _ = run(mcas_card, world, proposal, guards=GuardsConfig(evidence="off"))
         [kept] = plan.tests
         assert kept.evidence == [FAKE_QUOTE]
-        assert kept.priority == "must"
+        assert kept.score == 5
 
 
 class TestCoverageClaims:
@@ -121,6 +157,21 @@ class TestDatasetPairing:
             items=[
                 guarded_item(tid, evidence=[FAKE_QUOTE]),  # dropped by evidence guard
                 guarded_item(did, item_type="dataset", paired_test_id=tid),
+            ]
+        )
+        plan, _ = run(mcas_card, world, proposal)
+        assert plan.datasets == []
+        assert any(w.startswith("dataset-unpaired") for w in plan.warnings)
+
+    def test_dataset_with_no_pairing_dropped_not_crashed(self, mcas_card, world):
+        # a weaker LLM may emit a dataset with paired_test_id=None; the guard
+        # must drop it with a warning, not let it crash the run
+        tid = world[0][0].item.slug
+        did = world[0][1].item.slug
+        proposal = Proposal(
+            items=[
+                guarded_item(tid),
+                guarded_item(did, item_type="dataset", paired_test_id=None),
             ]
         )
         plan, _ = run(mcas_card, world, proposal)

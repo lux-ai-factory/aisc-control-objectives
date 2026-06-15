@@ -16,14 +16,14 @@ def make_item(
     item_id,
     item_type="test",
     covers=("article-10",),
-    priority="must",
+    score=5,
     paired_test_id=None,
     evidence=None,
 ):
     return ProposedItem(
         item_id=item_id,
         item_type=item_type,
-        priority=priority,
+        score=score,
         rationale="r",
         evidence=[REAL_QUOTE] if evidence is None else evidence,
         covers=list(covers),

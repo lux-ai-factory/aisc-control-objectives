@@ -11,7 +11,7 @@ from helpers import FULL_COVERS, ScriptedClient, accept_all, make_item
 
 from wizard.agents.runner import WizardPlanRunner
 from wizard.config import DEFAULT_MODEL, ReviewConfig, RunConfig
-from wizard.models.plan import Proposal, Review
+from wizard.models.plan import DimensionFraming, Proposal, Review
 
 
 def fairness_proposal():
@@ -20,8 +20,10 @@ def fairness_proposal():
 
 def test_runner_end_to_end(mcas_card, seed_tools, seed_checklists):
     proposal = fairness_proposal()
-    # call order: test proposer, checklist proposer, reviewer
-    client = ScriptedClient([proposal, Proposal(), accept_all(proposal)])
+    # call order: framer, test proposer, checklist proposer, reviewer
+    client = ScriptedClient(
+        [DimensionFraming(), proposal, Proposal(), accept_all(proposal)]
+    )
 
     runner = WizardPlanRunner(client=client, tools=seed_tools, checklists=seed_checklists)
     plan = runner.run(mcas_card)
@@ -31,13 +33,15 @@ def test_runner_end_to_end(mcas_card, seed_tools, seed_checklists):
     assert [i.item_id for i in plan.tests] == ["ai-fairness-360"]
 
     # the reviewer call must receive known ids from BOTH tracks
-    prompt = json.dumps(client.calls[2]["messages"])
+    prompt = json.dumps(client.calls[3]["messages"])
     assert "ai-fairness-360" in prompt  # a tool candidate
     assert "transparency" in prompt.lower()  # a checklist candidate
 
 
 def test_runner_respects_model_override(mcas_card, seed_tools, seed_checklists):
-    client = ScriptedClient([Proposal(), Proposal(), Review(coverage_ok=True)])
+    client = ScriptedClient(
+        [DimensionFraming(), Proposal(), Proposal(), Review(coverage_ok=True)]
+    )
     WizardPlanRunner(
         client=client,
         tools=seed_tools,
@@ -48,22 +52,26 @@ def test_runner_respects_model_override(mcas_card, seed_tools, seed_checklists):
 
 
 def test_reviewer_model_override_hits_only_reviewer(mcas_card, seed_tools, seed_checklists):
-    client = ScriptedClient([Proposal(), Proposal(), Review(coverage_ok=True)])
+    client = ScriptedClient(
+        [DimensionFraming(), Proposal(), Proposal(), Review(coverage_ok=True)]
+    )
     WizardPlanRunner(
         client=client,
         tools=seed_tools,
         checklists=seed_checklists,
         config=RunConfig(review=ReviewConfig(reviewer_model="claude-sonnet-4-6")),
     ).run(mcas_card)
-    proposer_calls, reviewer_call = client.calls[:2], client.calls[2]
-    assert all(c["model"] == DEFAULT_MODEL for c in proposer_calls)
+    # framer + 2 proposers use the base model; only the reviewer is overridden
+    non_reviewer, reviewer_call = client.calls[:3], client.calls[3]
+    assert all(c["model"] == DEFAULT_MODEL for c in non_reviewer)
     assert reviewer_call["model"] == "claude-sonnet-4-6"
 
 
 def test_lenses_config_builds_multilens_reviewer(mcas_card, seed_tools, seed_checklists):
-    # 2 proposer calls + 3 lens reviews
+    # 1 framer call + 2 proposer calls + 3 lens reviews
     client = ScriptedClient(
-        [Proposal(), Proposal()] + [Review(coverage_ok=True) for _ in range(3)]
+        [DimensionFraming(), Proposal(), Proposal()]
+        + [Review(coverage_ok=True) for _ in range(3)]
     )
     plan = WizardPlanRunner(
         client=client,
@@ -71,12 +79,14 @@ def test_lenses_config_builds_multilens_reviewer(mcas_card, seed_tools, seed_che
         checklists=seed_checklists,
         config=RunConfig(review=ReviewConfig(lenses=["relevance", "coverage", "parsimony"])),
     ).run(mcas_card)
-    assert len(client.calls) == 5
+    assert len(client.calls) == 6
     assert plan.status == "reviewed"
 
 
 def test_plan_echoes_effective_config(mcas_card, seed_tools, seed_checklists):
-    client = ScriptedClient([Proposal(), Proposal(), Review(coverage_ok=True)])
+    client = ScriptedClient(
+        [DimensionFraming(), Proposal(), Proposal(), Review(coverage_ok=True)]
+    )
     cfg = RunConfig(max_rounds=2)
     plan = WizardPlanRunner(
         client=client, tools=seed_tools, checklists=seed_checklists, config=cfg
@@ -85,7 +95,9 @@ def test_plan_echoes_effective_config(mcas_card, seed_tools, seed_checklists):
 
 
 def test_per_run_config_overrides_instance_config(mcas_card, seed_tools, seed_checklists):
-    client = ScriptedClient([Proposal(), Proposal(), Review(coverage_ok=True)])
+    client = ScriptedClient(
+        [DimensionFraming(), Proposal(), Proposal(), Review(coverage_ok=True)]
+    )
     runner = WizardPlanRunner(
         client=client, tools=seed_tools, checklists=seed_checklists, config=RunConfig()
     )

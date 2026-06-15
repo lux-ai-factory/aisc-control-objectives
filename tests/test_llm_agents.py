@@ -12,18 +12,26 @@ from helpers import ScriptedClient
 
 from wizard.agents.llm import (
     LLMChecklistProposer,
+    LLMDimensionFramer,
     LLMReviewer,
     LLMTestProposer,
     MultiLensReviewer,
 )
-from wizard.models.plan import ItemVerdict, Proposal, ProposedItem, Review
+from wizard.models.plan import (
+    DimensionFrame,
+    DimensionFraming,
+    ItemVerdict,
+    Proposal,
+    ProposedItem,
+    Review,
+)
 
 SAMPLE_PROPOSAL = Proposal(
     items=[
         ProposedItem(
             item_id="ai-fairness-360",
             item_type="test",
-            priority="must",
+            score=5,
             rationale="r",
             evidence=["e"],
             covers=["article-10"],
@@ -98,6 +106,95 @@ class TestLLMTestProposer:
         LLMTestProposer(client=client).propose(mcas_card, world[0])
         system = client.calls[0]["system"]
         assert "only" in system.lower()  # only candidate ids may be cited
+
+    def test_prompt_enumerates_valid_coverage_keys(self, mcas_card, world):
+        # the proposer must be given the exact valid coverage keys (so it can't
+        # invent open-issue-N keys the coverage guard would strip)
+        client = ScriptedClient([SAMPLE_PROPOSAL])
+        LLMTestProposer(client=client).propose(mcas_card, world[0])
+        stable = client.calls[0]["messages"][0]["content"][0]["text"]
+        assert "coverage_keys" in stable
+        for key in mcas_card.article_keys():
+            assert key in stable
+        # and the system prompt points the model at that list
+        assert "coverage_keys" in client.calls[0]["system"]
+
+
+SAMPLE_FRAMING = DimensionFraming(
+    frames=[
+        DimensionFrame(
+            dimension_slug="technical-robustness-safety",
+            in_scope=True,
+            relevance_reason="agentic system exposed to untrusted tool output",
+            residual_gaps=["no prompt-injection benchmark"],
+        )
+    ]
+)
+
+
+class TestLLMDimensionFramer:
+    def test_returns_parsed_framing(self, mcas_card):
+        client = ScriptedClient([SAMPLE_FRAMING])
+        framer = LLMDimensionFramer(client=client)
+        result = framer.frame(
+            mcas_card, ["technical-robustness-safety", "transparency"]
+        )
+        assert isinstance(result, DimensionFraming)
+        assert result.frames[0].dimension_slug == "technical-robustness-safety"
+
+    def test_request_schema_model_and_thinking(self, mcas_card):
+        client = ScriptedClient([SAMPLE_FRAMING])
+        LLMDimensionFramer(client=client, model="claude-opus-4-8").frame(
+            mcas_card, ["transparency"]
+        )
+        call = client.calls[0]
+        assert call["model"] == "claude-opus-4-8"
+        assert call["output_format"] is DimensionFraming
+        assert call["thinking"] == {"type": "adaptive"}
+
+    def test_prompt_carries_dimensions_with_labels_and_technology(self, mcas_card):
+        client = ScriptedClient([SAMPLE_FRAMING])
+        LLMDimensionFramer(client=client).frame(
+            mcas_card, ["technical-robustness-safety", "transparency"]
+        )
+        prompt = json.dumps(client.calls[0]["messages"])
+        # slug + human label both offered so the model reasons over named dims
+        assert "technical-robustness-safety" in prompt
+        assert "Technical Robustness and Safety" in prompt
+        # technology conditioning: the card's target systems are in the prompt
+        assert "target_systems" in prompt
+        # system prompt instructs not to recommend for already-covered dims
+        system = client.calls[0]["system"].lower()
+        assert "scope" in system
+
+    def test_stable_block_cached(self, mcas_card):
+        client = ScriptedClient([SAMPLE_FRAMING])
+        LLMDimensionFramer(client=client).frame(mcas_card, ["transparency"])
+        content = client.calls[0]["messages"][0]["content"]
+        assert content[0]["cache_control"] == {"type": "ephemeral"}
+
+    def test_no_skills_key_when_loader_absent(self, mcas_card):
+        client = ScriptedClient([SAMPLE_FRAMING])
+        LLMDimensionFramer(client=client).frame(mcas_card, ["transparency"])
+        assert "skills" not in client.calls[0]["messages"][0]["content"][0]["text"]
+
+    def test_matching_skill_injected_into_stable_block(self, mcas_card):
+        from pathlib import Path
+
+        from wizard.skills import SkillsLoader
+
+        loader = SkillsLoader.from_dir(
+            Path(__file__).parent / "fixtures" / "skills"
+        )
+        client = ScriptedClient([SAMPLE_FRAMING])
+        # MCAS is NLP + finance → robustness skill matches
+        LLMDimensionFramer(client=client, skills=loader).frame(
+            mcas_card, ["technical-robustness-safety", "transparency"]
+        )
+        stable = client.calls[0]["messages"][0]["content"][0]
+        assert "prompt-injection" in stable["text"]
+        # injected into the CACHED stable block, not the volatile tail
+        assert stable["cache_control"] == {"type": "ephemeral"}
 
 
 class TestLLMChecklistProposer:

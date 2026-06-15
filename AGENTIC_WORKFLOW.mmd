@@ -1,0 +1,73 @@
+%% Wizard — dimension-first agentic workflow
+%% Companion to DIMENSION_PLAN.md. Legend: blue = LLM agent, grey = deterministic,
+%% light-blue = data/store, yellow = output. Render at mermaid.live or any Mermaid viewer.
+flowchart TD
+
+    subgraph IN["Inputs"]
+        SC["System Card JSON<br/>(upload or qualification)"]
+        CAT["Catalogue<br/>tools + control checklists<br/>(via catalogue_http)"]
+        SK["Skills files<br/>wizard/skills/*.md"]
+    end
+
+    subgraph PREP["Deterministic prep"]
+        N1["Parse SystemCard<br/>tech: target_systems / ai_types<br/>context: sectors, use case, findings, open issues<br/>+ article_keys"]
+        N2["Prefilter & score candidates<br/>ai_type / sector / article overlap"]
+        N3["Tag candidates with dimension(s)<br/>registry = union of 11<br/>6 shared + 5 control-only"]
+    end
+
+    subgraph FRAME["Dimension framing (LLM + deterministic scope)"]
+        SKR["Skills router<br/>inject matching guidance by<br/>(dimension, ai_type, sector)"]
+        F1{"Select in-scope dimensions<br/>conditioned on technology + sector + findings"}
+        F2["Per dimension: summarise what the card<br/>ALREADY addresses (evidence-backed)<br/>+ residual-risk hypothesis"]
+    end
+
+    subgraph LOOP["Per in-scope dimension: propose -> review loop (max_rounds)"]
+        P1["Test / Dataset proposer (LLM)<br/>minimal items to close residual gap<br/>(skipped for control-only dimensions)"]
+        P2["Checklist proposer (LLM)<br/>minimal controls to close residual gap"]
+        G["Deterministic guards<br/>G0 unknown-id - G1 evidence<br/>G2 coverage-claims - G3 dataset-pairing"]
+        R["MultiLensReviewer (LLM)<br/>relevance - coverage - parsimony<br/>worst verdict wins"]
+        D1{"All items accepted<br/>& coverage_ok?"}
+    end
+
+    FLOOR["Deterministic floor (D2)<br/>high-risk sector / requires_control:<br/>dimension cannot be 'covered' without an accepted control"]
+
+    subgraph OUT["Assemble & export"]
+        A1["Build DimensionAssessment per dimension<br/>status: covered / partial / gap<br/>already_addressed - residual_gaps - recommended items"]
+        A2["AssessmentPlan (+ dimensions[])<br/>derive legacy tests / datasets / checklists / coverage / gaps"]
+        ST[("Plan store<br/>by plan_id")]
+        PDF["GET /api/plans/{id}/pdf<br/>Jinja2 plan.html.j2 -> WeasyPrint"]
+        UI["Catalogue WizardInfo.tsx<br/>on-screen report + Download PDF"]
+    end
+
+    SC --> N1
+    CAT --> N2
+    N1 --> N2 --> N3 --> F1
+    SK --> SKR
+    SKR --> F1
+    F1 --> F2
+    SKR --> F2
+
+    F2 --> P1
+    F2 --> P2
+    SKR --> P1
+    SKR --> P2
+    P1 --> G
+    P2 --> G
+    G --> R --> D1
+    D1 -->|"no — revise (rounds < max)"| P1
+    D1 -->|"no — revise (rounds < max)"| P2
+    D1 -->|"yes / rounds exhausted (warn)"| FLOOR
+
+    FLOOR --> A1 --> A2 --> ST
+    ST --> PDF --> UI
+    ST --> UI
+
+    classDef llm fill:#EEF1FF,stroke:#000FDF,color:#1a1a2e;
+    classDef det fill:#ffffff,stroke:#9aa0ad,color:#1a1a2e;
+    classDef data fill:#F6F8FF,stroke:#C5D2FF,color:#1a1a2e;
+    classDef out fill:#fffbe6,stroke:#ffe58f,color:#49454F;
+
+    class F1,F2,P1,P2,R llm;
+    class N1,N2,N3,SKR,G,D1,FLOOR,A1,A2 det;
+    class SC,CAT,SK,ST data;
+    class PDF,UI out;

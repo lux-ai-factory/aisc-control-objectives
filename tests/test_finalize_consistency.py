@@ -1,6 +1,6 @@
 """Finding 1: finalize must keep the plan internally consistent."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
@@ -15,21 +15,21 @@ def rich_plan(qid: str, name: str) -> AssessmentPlan:
         plan_id="plan-rich",
         qualification_id=qid,
         system_name=name,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
         status="reviewed",
         tests=[
             ProposedItem(
-                item_id="tool-x", item_type="test", priority="must",
+                item_id="tool-x", item_type="test", score=5,
                 rationale="r", covers=["article-13", "article-10"],
             ),
             ProposedItem(
-                item_id="tool-y", item_type="test", priority="should",
+                item_id="tool-y", item_type="test", score=3,
                 rationale="r", covers=["article-10"],
             ),
         ],
         datasets=[
             ProposedItem(
-                item_id="data-1", item_type="dataset", priority="must",
+                item_id="data-1", item_type="dataset", score=5,
                 rationale="r", covers=[], paired_test_id="tool-x",
             ),
         ],

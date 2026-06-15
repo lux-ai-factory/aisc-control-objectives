@@ -1,5 +1,7 @@
 """Regression tests for the code-review findings (one class per finding)."""
 
+from datetime import UTC
+
 import pytest
 from helpers import QueueProposer, QueueReviewer, make_item
 from pydantic import ValidationError
@@ -232,7 +234,7 @@ class TestFailedPlanAPI:
     """Finding 4b (A4): the API returns 502 with the failed plan, stored."""
 
     def test_502_with_stored_failed_plan(self, mcas_raw):
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         from fastapi.testclient import TestClient
 
@@ -243,7 +245,7 @@ class TestFailedPlanAPI:
             plan_id="plan-failed",
             qualification_id=mcas_raw["qualification_id"],
             system_name=mcas_raw["system_name"],
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             status="failed",
             warnings=["run-failed: RuntimeError: api down"],
         )

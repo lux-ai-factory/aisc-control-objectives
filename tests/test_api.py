@@ -6,7 +6,7 @@ The app is a factory taking two injected dependencies:
 so these tests run without any live service, network, or LLM.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
@@ -15,6 +15,7 @@ from wizard.api.app import create_app
 from wizard.config import DEFAULT_MODEL
 from wizard.models.plan import AssessmentPlan, ProposedItem
 from wizard.models.system_card import SystemCard
+
 
 class FakeQualificationProvider:
     def __init__(self, cards: dict[str, dict]):
@@ -45,13 +46,13 @@ class FakePlanRunner:
             plan_id="plan-1",
             qualification_id=card.qualification_id,
             system_name=card.system_name,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             status="reviewed",
             tests=[
                 ProposedItem(
                     item_id="ai-fairness-360",
                     item_type="test",
-                    priority="must",
+                    score=5,
                     rationale="r",
                     evidence=[],
                     covers=["article-10"],
@@ -147,6 +148,21 @@ class TestPlans:
         resp = client.get("/api/plans")
         assert resp.status_code == 200
         assert len(resp.json()) >= 1
+
+
+class TestPdfExport:
+    def test_pdf_for_existing_plan(self, client, mcas_raw):
+        plan_id = client.post(
+            "/api/plans", json={"qualification_id": mcas_raw["qualification_id"]}
+        ).json()["plan_id"]
+        resp = client.get(f"/api/plans/{plan_id}/pdf")
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "application/pdf"
+        assert resp.content.startswith(b"%PDF")
+        assert "attachment" in resp.headers.get("content-disposition", "")
+
+    def test_pdf_unknown_plan_404(self, client):
+        assert client.get("/api/plans/missing/pdf").status_code == 404
 
 
 class TestFinalize:
