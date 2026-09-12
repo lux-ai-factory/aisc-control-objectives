@@ -1,91 +1,40 @@
-"""Shared test doubles and factories (one canonical copy of each).
+"""Shared test doubles and the MCAS spans the profile tests quote.
 
-pytest puts this directory on sys.path, so test files do `import helpers`.
+One copy, so a change to the fixture card or to the extractor's contract is
+made in one place.
 """
 
-from wizard.models.plan import ItemVerdict, Proposal, ProposedItem, Review
+from __future__ import annotations
 
-# a real quote from the MCAS card — survives the (default-on) evidence guard
-REAL_QUOTE = "Quarterly fairness audits compare approval, default, and override rates"
+from wizard.models.profile import Fact, HighRiskFact, Profile
 
-# the four article keys of the MCAS open issues
-FULL_COVERS = ["article-13", "article-14", "article-10", "article-12"]
+# Literal spans from tests/fixtures/mcas_system_card.json.
+CREDIT = "Evaluates creditworthiness for €100–€5,000 consumer loans"
+DEMOGRAPHIC = "limited demographic fields"
+CHATBOT = "LLM chatbot that produces natural-language explanations"
 
 
-def make_item(
-    item_id,
-    item_type="test",
-    covers=("article-10",),
-    score=5,
-    paired_test_id=None,
-    evidence=None,
-):
-    return ProposedItem(
-        item_id=item_id,
-        item_type=item_type,
-        score=score,
-        rationale="r",
-        evidence=[REAL_QUOTE] if evidence is None else evidence,
-        covers=list(covers),
-        paired_test_id=paired_test_id,
+def good_profile() -> Profile:
+    """A profile whose three quotes are all genuine spans of the MCAS card."""
+    return Profile(
+        high_risk=HighRiskFact(value="yes", quote=CREDIT, source="target_use_case", annex_iii_point="5(b)"),
+        personal_data=Fact(value="yes", quote=DEMOGRAPHIC, source="findings[0].summary"),
+        interacts_with_natural_persons=Fact(value="yes", quote=CHATBOT, source="description"),
     )
 
 
-class ScriptedClient:
-    """Anthropic-client stub: messages.parse returns queued outputs in call
-    order and records every call's kwargs."""
+class FakeExtractor:
+    """Returns queued profiles (the last one repeats), records the findings it
+    was told about, and can be made to raise on a given attempt."""
 
-    def __init__(self, outputs):
-        self._outputs = list(outputs)
-        self.calls: list[dict] = []
-        self.messages = self
+    def __init__(self, *profiles: Profile, raise_on: int | None = None, error: Exception | None = None):
+        self._profiles = list(profiles) or [good_profile()]
+        self._raise_on = raise_on if raise_on is not None else (1 if error else None)
+        self._error = error or RuntimeError("provider down")
+        self.calls: list[tuple] = []
 
-    def parse(self, **kwargs):
-        self.calls.append(kwargs)
-        out = self._outputs.pop(0) if len(self._outputs) > 1 else self._outputs[0]
-        return type("Parsed", (), {"parsed_output": out})()
-
-
-class QueueProposer:
-    """Proposer fake: returns queued proposals (last one repeats) and records
-    the revision notes each round received."""
-
-    def __init__(self, *proposals: Proposal):
-        self.proposals = list(proposals) or [Proposal()]
-        self.received_notes: list[str | None] = []
-        self.calls = 0
-
-    def propose(self, card, candidates, revision_notes=None, prior=None) -> Proposal:
-        self.calls += 1
-        self.received_notes.append(revision_notes)
-        return self.proposals[min(self.calls - 1, len(self.proposals) - 1)]
-
-
-class QueueReviewer:
-    """Reviewer fake: returns queued reviews (last one repeats)."""
-
-    def __init__(self, *reviews: Review):
-        self.reviews = list(reviews)
-        self.calls = 0
-
-    def review(self, card, proposal) -> Review:
-        self.calls += 1
-        return self.reviews[min(self.calls - 1, len(self.reviews) - 1)]
-
-
-class SpyAcceptReviewer:
-    """Accepts everything; records the proposals it was shown."""
-
-    def __init__(self):
-        self.seen: list[Proposal] = []
-
-    def review(self, card, proposal) -> Review:
-        self.seen.append(proposal)
-        return accept_all(proposal)
-
-
-def accept_all(proposal: Proposal) -> Review:
-    return Review(
-        verdicts=[ItemVerdict(item_id=i.item_id, verdict="accept") for i in proposal.items],
-        coverage_ok=True,
-    )
+    def propose(self, card, findings=()):
+        self.calls.append(tuple(findings))
+        if self._raise_on is not None and len(self.calls) == self._raise_on:
+            raise self._error
+        return self._profiles.pop(0) if len(self._profiles) > 1 else self._profiles[0]
