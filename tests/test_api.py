@@ -1,193 +1,159 @@
-"""Wizard service API (SPEC §7), tested in-process with TestClient.
+"""HTTP surface: the wizard serves the control objectives.
 
-The app is a factory taking two injected dependencies:
-- qualification_provider: lists qualifications / fetches a system card
-- plan_runner: executes the matching pipeline for a card → AssessmentPlan
-so these tests run without any live service, network, or LLM.
+The card-to-objectives mapping is not specified yet, so there are no plan
+routes — the API is a read-only view over the objectives catalogue plus the
+effective config.
 """
 
-from datetime import UTC, datetime
+from __future__ import annotations
 
 import pytest
 from fastapi.testclient import TestClient
 
 from wizard.api.app import create_app
-from wizard.config import DEFAULT_MODEL
-from wizard.models.plan import AssessmentPlan, ProposedItem
-from wizard.models.system_card import SystemCard
+from wizard.config import RunConfig
+from wizard.control_objectives import load_control_objectives
 
 
-class FakeQualificationProvider:
-    def __init__(self, cards: dict[str, dict]):
-        self._cards = cards
-
-    def list_qualifications(self) -> list[dict]:
-        return [
-            {"id": qid, "system_name": c["system_name"], "has_system_card": True}
-            for qid, c in self._cards.items()
-        ]
-
-    def get_system_card(self, qualification_id: str) -> SystemCard | None:
-        raw = self._cards.get(qualification_id)
-        return SystemCard.from_card_json(raw) if raw else None
-
-
-class FakePlanRunner:
-    """Synchronous runner; the production runner wraps the orchestrator."""
-
-    def __init__(self):
-        self.calls: list[str] = []
-        self.received_configs: list = []
-
-    def run(self, card: SystemCard, config=None) -> AssessmentPlan:
-        self.calls.append(card.qualification_id)
-        self.received_configs.append(config)
-        return AssessmentPlan(
-            plan_id="plan-1",
-            qualification_id=card.qualification_id,
-            system_name=card.system_name,
-            created_at=datetime.now(UTC),
-            status="reviewed",
-            tests=[
-                ProposedItem(
-                    item_id="ai-fairness-360",
-                    item_type="test",
-                    score=5,
-                    rationale="r",
-                    evidence=[],
-                    covers=["article-10"],
-                )
-            ],
-            review_rounds=1,
-        )
-
-
-@pytest.fixture()
-def runner():
-    return FakePlanRunner()
-
-
-@pytest.fixture()
-def client(mcas_raw, runner):
-    provider = FakeQualificationProvider({mcas_raw["qualification_id"]: mcas_raw})
-    app = create_app(qualification_provider=provider, plan_runner=runner)
-    return TestClient(app)
+@pytest.fixture(scope="module")
+def client(objectives):
+    return TestClient(create_app(objectives, base_config=RunConfig()))
 
 
 class TestConfig:
-    def test_get_config_returns_effective_base(self, client):
-        resp = client.get("/api/config")
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body["model"] == DEFAULT_MODEL
-        assert body["guards"]["evidence"] == "drop"
-        assert body["review"]["lenses"] == []
-
-    def test_per_run_config_override_reaches_runner(self, client, runner, mcas_raw):
-        resp = client.post(
-            "/api/plans",
-            json={
-                "qualification_id": mcas_raw["qualification_id"],
-                "config": {"guards": {"evidence": "demote"}, "max_rounds": 2},
-            },
-        )
-        assert resp.status_code == 201
-        effective = runner.received_configs[0]
-        assert effective.guards.evidence == "demote"
-        assert effective.max_rounds == 2
-        # untouched knobs keep base values
-        assert effective.guards.dataset_pairing == "enforce"
-
-    def test_invalid_config_rejected_422(self, client, mcas_raw):
-        resp = client.post(
-            "/api/plans",
-            json={
-                "qualification_id": mcas_raw["qualification_id"],
-                "config": {"max_rounds": 99},
-            },
-        )
-        assert resp.status_code == 422
+    def test_config_echoes_the_effective_model(self, client):
+        response = client.get("/api/config")
+        assert response.status_code == 200
+        assert response.json()["model"] == RunConfig().model
 
 
-class TestQualificationList:
-    def test_lists_qualifications(self, client, mcas_raw):
-        resp = client.get("/api/qualifications")
-        assert resp.status_code == 200
-        items = resp.json()
-        assert items[0]["id"] == mcas_raw["qualification_id"]
-        assert items[0]["has_system_card"] is True
+class TestControlObjectives:
+    def test_lists_every_objective_in_requirement_order(self, client):
+        payload = client.get("/api/control-objectives").json()
+        assert len(payload) == 50
+        assert payload[0]["id"] == "R1.1"
+        assert payload[-1]["id"] == "R11.4"
+
+    def test_an_objective_carries_its_derived_routing_fields(self, client):
+        payload = client.get("/api/control-objectives").json()
+        paired = next(item for item in payload if item["id"] == "R2.1")
+        assert paired["macro_id"] == "R2"
+        assert paired["requires_control"] is True
+        assert paired["requires_test"] is True
+        assert "control_targets" not in paired
+        assert "test_targets" not in paired
+
+    def test_filter_by_assessment_mode(self, client):
+        controls = client.get("/api/control-objectives?mode=control").json()
+        tests = client.get("/api/control-objectives?mode=test").json()
+        assert len(controls) == 41
+        assert len(tests) == 14
+        # a paired objective is in both partitions
+        assert "R2.1" in {item["id"] for item in controls}
+        assert "R2.1" in {item["id"] for item in tests}
+
+    def test_an_unknown_mode_is_rejected(self, client):
+        assert client.get("/api/control-objectives?mode=banana").status_code == 422
+
+    def test_fetch_one_objective_by_id(self, client):
+        payload = client.get("/api/control-objectives/R1.1").json()
+        assert payload["sub_requirement_label"] == "Operator oversight capability"
+        assert payload["legal_bases"] == ["AI Act Art. 14"]
+
+    def test_unknown_id_is_404(self, client):
+        assert client.get("/api/control-objectives/R99.9").status_code == 404
 
 
-class TestPlans:
-    def test_create_plan_runs_pipeline(self, client, mcas_raw):
-        resp = client.post(
-            "/api/plans", json={"qualification_id": mcas_raw["qualification_id"]}
-        )
-        assert resp.status_code == 201
-        body = resp.json()
-        assert body["status"] == "reviewed"
-        assert body["plan_id"]
-
-    def test_create_plan_unknown_qualification_404(self, client):
-        resp = client.post("/api/plans", json={"qualification_id": "nope"})
-        assert resp.status_code == 404
-
-    def test_get_plan_roundtrip(self, client, mcas_raw):
-        plan_id = client.post(
-            "/api/plans", json={"qualification_id": mcas_raw["qualification_id"]}
-        ).json()["plan_id"]
-        resp = client.get(f"/api/plans/{plan_id}")
-        assert resp.status_code == 200
-        assert resp.json()["tests"][0]["item_id"] == "ai-fairness-360"
-
-    def test_get_unknown_plan_404(self, client):
-        assert client.get("/api/plans/missing").status_code == 404
-
-    def test_list_plans(self, client, mcas_raw):
-        client.post("/api/plans", json={"qualification_id": mcas_raw["qualification_id"]})
-        resp = client.get("/api/plans")
-        assert resp.status_code == 200
-        assert len(resp.json()) >= 1
+class TestMacroRequirements:
+    def test_lists_the_eleven_macro_requirements_with_their_objectives(self, client):
+        payload = client.get("/api/macro-requirements").json()
+        assert [macro["id"] for macro in payload] == [f"R{n}" for n in range(1, 12)]
+        assert payload[0]["title"] == "Human Agency and Oversight"
+        assert sum(len(macro["objectives"]) for macro in payload) == 50
 
 
-class TestPdfExport:
-    def test_pdf_for_existing_plan(self, client, mcas_raw):
-        plan_id = client.post(
-            "/api/plans", json={"qualification_id": mcas_raw["qualification_id"]}
-        ).json()["plan_id"]
-        resp = client.get(f"/api/plans/{plan_id}/pdf")
-        assert resp.status_code == 200
-        assert resp.headers["content-type"] == "application/pdf"
-        assert resp.content.startswith(b"%PDF")
-        assert "attachment" in resp.headers.get("content-disposition", "")
-
-    def test_pdf_unknown_plan_404(self, client):
-        assert client.get("/api/plans/missing/pdf").status_code == 404
+def test_health_is_served(client):
+    assert client.get("/health").json() == {"status": "ok"}
 
 
-class TestFinalize:
-    def test_finalize_reviewed_plan(self, client, mcas_raw):
-        plan_id = client.post(
-            "/api/plans", json={"qualification_id": mcas_raw["qualification_id"]}
-        ).json()["plan_id"]
-        resp = client.post(f"/api/plans/{plan_id}/finalize")
-        assert resp.status_code == 200
-        assert resp.json()["status"] == "finalized"
+class TestObjectivesPage:
+    """The root is the interface: every objective rendered server-side."""
 
-    def test_finalize_with_deselection(self, client, mcas_raw):
-        plan_id = client.post(
-            "/api/plans", json={"qualification_id": mcas_raw["qualification_id"]}
-        ).json()["plan_id"]
-        resp = client.post(
-            f"/api/plans/{plan_id}/finalize",
-            json={"deselect": ["ai-fairness-360"]},
-        )
-        assert resp.status_code == 200
-        assert resp.json()["tests"] == []
+    @pytest.fixture(scope="class")
+    def page(self, client):
+        response = client.get("/")
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/html")
+        return response.text
 
-    def test_finalize_twice_conflict(self, client, mcas_raw):
-        plan_id = client.post(
-            "/api/plans", json={"qualification_id": mcas_raw["qualification_id"]}
-        ).json()["plan_id"]
-        client.post(f"/api/plans/{plan_id}/finalize")
-        assert client.post(f"/api/plans/{plan_id}/finalize").status_code == 409
+    def test_every_objective_id_is_on_the_page(self, page, objectives):
+        for objective in objectives:
+            assert f'class="co-obj-id">{objective.id}<' in page, objective.id
+
+    def test_every_macro_requirement_is_a_section(self, page, objectives):
+        for macro in objectives.macro_requirements():
+            assert f'id="{macro.id}"' in page
+            assert macro.title in page
+
+    def test_objective_text_is_rendered_not_just_ids(self, page):
+        assert "A qualified operator can monitor" in page
+
+    def test_the_page_does_not_split_control_from_test(self, page):
+        """Assessment mode stays in the data and the API, off the page.
+
+        "Control" itself still occurs — it is in the title and in objective
+        text — so this pins the markers of the distinction, not the word.
+        """
+        for marker in (
+            "qf-tag--control",   # the badges
+            "qf-tag--test",
+            "Assessment mode",   # the filter
+            "Need a control",    # the stat tiles
+            "Need a test",
+            "Need both",
+            "data-control",      # the filter hooks
+            "data-test",
+            "Applies to",        # the target codes
+        ):
+            assert marker not in page, marker
+
+    def test_page_wears_the_platform_chrome(self, page):
+        """It has to read as the same product as the qualification app."""
+        assert "laif-logo.svg" in page          # Luxembourg AI Factory mark
+        assert "#000fdf" in page.lower()        # brand primary
+        assert "#ff007e" in page.lower()        # brand accent
+        assert "site-header" in page and "qf-section" in page
+
+    def test_the_logo_is_served(self, client):
+        response = client.get("/static/laif-logo.svg")
+        assert response.status_code == 200
+        assert "svg" in response.headers["content-type"]
+
+    def test_the_counts_are_stated(self, page):
+        assert ">50<" in page  # objectives
+        assert ">11<" in page  # macro requirements
+
+    def test_notes_survive_to_the_page(self, page):
+        assert "thresholds must be documented before the test is run" in page
+
+    def test_the_page_carries_no_api_chrome(self, page):
+        assert "/api/control-objectives" not in page
+        assert "/docs" not in page
+
+    def test_markup_is_escaped_not_injected(self):
+        """Objective text is data: a CSV carrying markup must not become markup."""
+        catalogue = load_control_objectives()
+        catalogue.objectives[0].text = "<script>alert(1)</script>"
+        page = TestClient(create_app(catalogue, base_config=RunConfig())).get("/").text
+        assert "<script>alert(1)</script>" not in page
+        assert "&lt;script&gt;" in page
+
+
+def test_the_three_facts_are_declared_once():
+    """Every place that enumerates the facts derives from Profile.FACTS."""
+    from wizard.api.app import ProfileAnswers
+    from wizard.models.profile import Profile
+    from wizard.rendering import FACT_QUESTIONS
+
+    assert tuple(ProfileAnswers.model_fields) == Profile.FACTS
+    assert tuple(name for name, _ in FACT_QUESTIONS) == Profile.FACTS

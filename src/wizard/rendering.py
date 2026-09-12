@@ -1,62 +1,109 @@
-"""Render an AssessmentPlan to a dimension-first HTML report and PDF (Phase 3).
+"""Render the wizard's pages.
 
-Mirrors the `aisc/qualification` renderer pattern (Jinja2 template + WeasyPrint)
-but lives inside the Wizard service. The report is organised by trustworthiness
-dimension: per dimension its status, what the card already addresses, residual
-gaps, and the recommended items with rationale resolved from the plan.
+Server-rendered on purpose: each page ships with everything already in it, so
+the browser needs no API round-trip and the service stays the single source of
+truth. Autoescaping is on — objective text and card text are data, never markup.
 
-WeasyPrint is imported lazily so importing this module (and the API) never
-requires the native PDF stack until a PDF is actually requested.
+The pages carry the qualification app's design tokens verbatim (the Luxembourg
+AI Factory palette in apps/qualification/src/app/globals.css) so the modules
+read as one platform.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
+from wizard.cards import CardRecord
+from wizard.control_objectives import ControlObjectiveCatalogue
 
-from wizard.models.plan import AssessmentPlan, ProposedItem
+TEMPLATES = Path(__file__).resolve().parent / "templates"
+STATIC = Path(__file__).resolve().parent / "static"
 
-_TEMPLATES = Path(__file__).parent / "templates"
+#: Note tags that qualify the objective itself and are called out in colour;
+#: "Paired" only explains a Control + Test row and stays neutral.
+FLAG_TAGS = ("GAP", "CONDITIONAL", "VOLUNTARY")
 
-
-def _lookup_item(item_id: str, items_by_id: dict[str, ProposedItem]):
-    return items_by_id.get(item_id)
-
-
-@lru_cache(maxsize=1)
-def _env() -> Environment:
-    env = Environment(
-        loader=FileSystemLoader(str(_TEMPLATES)),
-        autoescape=select_autoescape(["html", "xml", "j2"]),
-    )
-    env.filters["lookup_item"] = _lookup_item
-    return env
+#: The profile's facts as questions a person can answer.
+FACT_QUESTIONS = (
+    ("high_risk", "Is the system high-risk under AI Act Annex III?"),
+    ("personal_data", "Does the system process personal data?"),
+    ("interacts_with_natural_persons", "Does the system interact directly with natural persons?"),
+)
 
 
 @lru_cache(maxsize=1)
-def _css() -> str:
-    return (_TEMPLATES / "styles.css").read_text(encoding="utf-8")
-
-
-def render_plan_html(plan: AssessmentPlan) -> str:
-    """The dimension-first report as a standalone HTML document."""
-    items_by_id = {
-        item.item_id: item
-        for item in (*plan.tests, *plan.datasets, *plan.checklists)
-    }
-    return _env().get_template("plan.html.j2").render(
-        plan=plan,
-        dimensions=plan.dimensions,
-        items_by_id=items_by_id,
-        css=_css(),
+def _environment() -> Environment:
+    return Environment(
+        loader=FileSystemLoader(TEMPLATES),
+        autoescape=select_autoescape(["html", "html.j2"]),
+        trim_blocks=True,
+        lstrip_blocks=True,
     )
 
 
-def render_plan_pdf(plan: AssessmentPlan) -> bytes:
-    """The same report rendered to PDF bytes via WeasyPrint."""
-    from weasyprint import HTML
+def render_objectives_page(
+    catalogue: ControlObjectiveCatalogue, source_name: str = "", root_path: str = ""
+) -> str:
+    """The full objectives page as HTML."""
+    template = _environment().get_template("objectives.html.j2")
+    return template.render(
+        macros=catalogue.macro_requirements(),
+        total=len(catalogue),
+        source_name=source_name,
+        flag_tags=FLAG_TAGS,
+        root_path=root_path,
+    )
 
-    html = render_plan_html(plan)
-    return HTML(string=html).write_pdf()
+
+@dataclass
+class _MacroView:
+    id: str
+    title: str
+    objectives: list[tuple] = field(default_factory=list)  # (ControlObjective, Verdict)
+    in_scope: int = 0
+
+
+@dataclass
+class _Counts:
+    to_achieve: int = 0
+    non_binding: int = 0
+    not_applicable: int = 0
+    pending: int = 0
+
+
+def render_card_page(
+    record: CardRecord, catalogue: ControlObjectiveCatalogue, root_path: str = ""
+) -> str:
+    """One assessed card: its profile to confirm, and the verdict per objective."""
+    verdicts = {v.objective_id: v for v in record.verdicts}
+    counts = _Counts()
+    macros: list[_MacroView] = []
+    for macro in catalogue.macro_requirements():
+        rows = []
+        in_scope = 0
+        for objective in macro.objectives:
+            verdict = verdicts[objective.id]
+            rows.append((objective, verdict))
+            if verdict.non_binding:
+                counts.non_binding += 1
+            elif verdict.applies == "yes":
+                counts.to_achieve += 1
+                in_scope += 1
+            elif verdict.applies == "no":
+                counts.not_applicable += 1
+            else:
+                counts.pending += 1
+        macros.append(_MacroView(id=macro.id, title=macro.title, objectives=rows, in_scope=in_scope))
+
+    template = _environment().get_template("card.html.j2")
+    return template.render(
+        record=record,
+        macros=macros,
+        counts=counts,
+        facts=FACT_QUESTIONS,
+        flag_tags=FLAG_TAGS,
+        root_path=root_path,
+    )
