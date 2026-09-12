@@ -1,15 +1,49 @@
-"""LiteLLMClient — the provider-agnostic adapter behind the agents.
+"""LiteLLMClient — the provider-agnostic adapter.
 
-The agents depend only on `client.messages.parse(...) -> obj.parsed_output`
+Callers depend only on `client.messages.parse(...) -> obj.parsed_output`
 (a validated pydantic instance). This adapter translates that call onto
-`litellm.completion`, so the same agents run on any LiteLLM-supported provider.
-Tested with an injected fake `completion` — no network, no real provider.
+`litellm.completion`, so the same caller runs on any LiteLLM-supported
+provider. Tested with an injected fake `completion` — no network, no real
+provider.
+
+The schemas below are local test doubles: the adapter is schema-agnostic, so
+it is tested against shapes it does not own.
 """
 
 import json
 
+from pydantic import BaseModel, Field
+
 from wizard.llm_client import LiteLLMClient
-from wizard.models.plan import Proposal, Review
+
+
+class Item(BaseModel):
+    item_id: str
+    item_type: str = ""
+    score: int = 0
+    rationale: str = ""
+    evidence: list[str] = Field(default_factory=list)
+    covers: list[str] = Field(default_factory=list)
+
+
+class Proposal(BaseModel):
+    items: list[Item] = Field(default_factory=list)
+    coverage_gaps: list[str] = Field(default_factory=list)
+
+
+class Frame(BaseModel):
+    dimension_slug: str
+
+
+class DimensionFraming(BaseModel):
+    """Single-field schema — the shape a provider tends to stringify whole."""
+
+    frames: list[Frame] = Field(default_factory=list)
+
+
+class Review(BaseModel):
+    verdicts: list[str] = Field(default_factory=list)
+    coverage_ok: bool = False
 
 
 class FakeCompletion:
@@ -99,6 +133,34 @@ class TestParse:
         )
         assert fake.calls[0]["reasoning_effort"] == "high"
 
+    def test_temperature_reaches_the_provider(self):
+        client, fake = _client([PROPOSAL_PAYLOAD])
+        client.messages.parse(
+            model="openai/gpt-4o",
+            system="s",
+            messages=[{"role": "user", "content": [{"type": "text", "text": "x"}]}],
+            output_format=Proposal,
+            temperature=0,
+        )
+        assert fake.calls[0]["temperature"] == 0
+
+    def test_empty_content_is_a_named_error_not_a_json_stack(self):
+        class Empty:
+            def __call__(self, **kwargs):
+                message = type("Msg", (), {"content": None})()
+                choice = type("Choice", (), {"message": message})()
+                return type("Resp", (), {"choices": [choice]})()
+
+        client = LiteLLMClient(completion=Empty())
+        import pytest
+
+        with pytest.raises(ValueError, match="no content"):
+            client.messages.parse(
+                model="m", system="s",
+                messages=[{"role": "user", "content": [{"type": "text", "text": "x"}]}],
+                output_format=Proposal,
+            )
+
     def test_anthropic_thinking_kwarg_is_ignored(self):
         client, fake = _client([PROPOSAL_PAYLOAD])
         # the agents always pass thinking=...; the adapter must not choke
@@ -111,6 +173,37 @@ class TestParse:
         )
         assert "thinking" not in fake.calls[0]
 
+    def test_recovers_when_provider_wraps_whole_payload_as_string(self):
+        # Observed with Claude via LiteLLM tool-use: the model returns the whole
+        # object stringified under the schema's own single field name, i.e.
+        # {"frames": "<json of the entire DimensionFraming>"}. Naive validation
+        # sees frames as a string and rejects it; the adapter must recover.
+        inner = json.dumps({"frames": [{"dimension_slug": "fairness"}]})
+        content = json.dumps({"frames": inner})
+        client, _ = _client([content])
+        result = client.messages.parse(
+            model="anthropic/claude-opus-4-8",
+            system="s",
+            messages=[{"role": "user", "content": [{"type": "text", "text": "x"}]}],
+            output_format=DimensionFraming,
+        )
+        assert isinstance(result.parsed_output, DimensionFraming)
+        assert result.parsed_output.frames[0].dimension_slug == "fairness"
+
+    def test_recovers_when_list_field_arrives_as_json_string(self):
+        # Related malformation: a list-valued field comes back as a JSON string
+        # ({"frames": "[...]"}) rather than a real array.
+        content = json.dumps({"frames": json.dumps([{"dimension_slug": "privacy"}])})
+        client, _ = _client([content])
+        result = client.messages.parse(
+            model="anthropic/claude-opus-4-8",
+            system="s",
+            messages=[{"role": "user", "content": [{"type": "text", "text": "x"}]}],
+            output_format=DimensionFraming,
+        )
+        assert isinstance(result.parsed_output, DimensionFraming)
+        assert result.parsed_output.frames[0].dimension_slug == "privacy"
+
     def test_strips_markdown_json_fences(self):
         fenced = "```json\n" + json.dumps({"verdicts": [], "coverage_ok": True}) + "\n```"
         client, _ = _client([fenced])
@@ -121,16 +214,3 @@ class TestParse:
             output_format=Review,
         )
         assert result.parsed_output.coverage_ok is True
-
-
-class TestAgentCompatibility:
-    def test_works_as_agent_client(self, mcas_card, world):
-        # the real proposer must accept this client unchanged
-        from wizard.agents.llm import LLMTestProposer
-
-        client, _ = _client([PROPOSAL_PAYLOAD])
-        proposal = LLMTestProposer(client=client, model="openai/gpt-4o-mini").propose(
-            mcas_card, world[0]
-        )
-        assert isinstance(proposal, Proposal)
-        assert proposal.items[0].item_id == "ai-fairness-360"

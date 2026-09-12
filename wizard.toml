@@ -1,8 +1,7 @@
-# Wizard configuration — model & policy live here; API keys live in .env.
+# Wizard configuration — the model lives here; API keys live in .env.
 #
 # Loaded at startup (override the path with WIZARD_CONFIG_FILE). Environment
-# variables (WIZARD_*) override anything set here. Per-request API overrides
-# sit above both.
+# variables (WIZARD_*) override anything set here.
 
 # The model. Every model runs through LiteLLM, so the string carries the
 # provider; LiteLLM reads the matching API key from .env:
@@ -12,29 +11,6 @@
 #   "azure/<deployment>" | "bedrock/anthropic.claude-3-5-..." | "ollama/llama3.1"
 model = "openai/gpt-4o"
 
-# Propose→review rounds before the loop hard-stops (1–5). Higher gives the
-# review loop more chances to converge (drop duplicates, fix coverage).
-max_rounds = 5
-
-[guards]
-evidence = "drop"          # drop | demote | off
-coverage_claims = "strip"  # strip | off
-dataset_pairing = "enforce"  # enforce | off
-
-[review]
-# Empty = single reviewer. Multi-lens panel: ["relevance", "coverage", "parsimony"]
-lenses = []
-# reviewer_model = "claude-opus-4-8"   # defaults to `model` above
-
-[floor]
-# D2 deterministic floor: in a high-risk deployment (or for a governance
-# dimension) a dimension can't be auto-marked "covered" without an accepted
-# control checklist. This is the operational on/off switch only.
-#
-# WHICH sectors count as high-risk is EU AI Act Annex III domain knowledge and
-# lives in the document base — edit knowledge/high-risk-sectors.md, not here.
-enabled = true
-
-# ── Example: run on OpenAI instead ───────────────────────────────────────────
-# model = "openai/gpt-4o-mini"
-# …and put OPENAI_API_KEY=sk-... in .env
+# The control objectives are bundled with the package
+# (src/wizard/data/ai_act_control_objectives.csv); point WIZARD_OBJECTIVES_FILE
+# at another CSV to serve a newer export without rebuilding.

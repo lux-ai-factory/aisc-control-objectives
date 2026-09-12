@@ -1,7 +1,7 @@
 """The LLM client — a single, provider-agnostic gateway over LiteLLM.
 
-Every model runs through here, so the agents are not tied to any one vendor.
-The agents (`wizard.agents.llm`) depend only on a small duck-typed surface:
+Callers (today: `wizard.profiling.ProfileExtractor`) depend only on a small
+duck-typed surface:
 
     response = client.messages.parse(model=..., system=..., messages=[...],
                                      output_format=<pydantic class>, ...)
@@ -14,42 +14,22 @@ key from the environment (.env).
 
 Translation from the parse-shaped call:
 - `system` → a leading `{"role": "system"}` chat message.
-- the content blocks (`[{"type": "text", "text": ...}]`, with optional
-  `cache_control`) are flattened into one user message. (The codebase's prompt
-  blocks still carry `cache_control`; provider-specific prompt caching is not
-  re-implemented here, so it degrades to a plain prompt.)
+- content blocks (`[{"type": "text", "text": ...}]`) are flattened into one
+  user message; any `cache_control` on them is dropped.
 - `output_format` (a pydantic class) → `response_format` for structured output.
-- `output_config={"effort": ...}` → `reasoning_effort`.
-- `thinking` and any other vendor-specific kwargs are ignored.
+- `output_config={"effort": ...}` → `reasoning_effort`; `temperature` passes through.
+- `thinking` and other vendor-specific kwargs are ignored.
 
 `litellm.drop_params` is enabled so params a given provider does not support are
-dropped rather than raising.
+dropped rather than raising. Validation of the answer is lenient about one thing
+providers get wrong: a field, or the whole payload, arriving as a JSON string.
 """
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
-from typing import Any, Protocol
-
-
-class ParseResult(Protocol):
-    """The envelope `messages.parse` returns: the validated structured output
-    is on `.parsed_output`."""
-
-    parsed_output: Any
-
-
-class Messages(Protocol):
-    def parse(self, **kwargs: Any) -> ParseResult: ...
-
-
-class LLMClient(Protocol):
-    """The minimal surface the agents need from an LLM client: a `messages`
-    namespace whose `parse(...)` returns a validated `.parsed_output`. Both the
-    native Anthropic SDK and `LiteLLMClient` satisfy this structurally — the
-    agents depend on this Protocol, not on any concrete client."""
-
-    messages: Messages
+from typing import Any
 
 
 class _Parsed:
@@ -87,14 +67,60 @@ def _strip_fences(text: str) -> str:
     return body.strip()
 
 
+def _try_json(value: Any) -> Any:
+    """Decode a value that is itself a JSON-encoded string; otherwise return it
+    unchanged. Used to unwrap fields a provider stringified."""
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except (ValueError, TypeError):
+            return value
+    return value
+
+
 def _coerce(content: Any, output_format: type | None) -> Any:
     if output_format is None:
         return content
     if isinstance(content, output_format):
         return content
     if isinstance(content, (dict, list)):
-        return output_format.model_validate(content)
-    return output_format.model_validate_json(_strip_fences(str(content)))
+        obj = content
+    else:
+        obj = json.loads(_strip_fences(str(content)))
+    return _validate_lenient(obj, output_format)
+
+
+def _validate_lenient(obj: Any, output_format: type) -> Any:
+    """Validate `obj` against `output_format`, tolerating providers that return
+    JSON-as-string where a structured array/object is expected. Observed with
+    Claude via LiteLLM tool-use, which sometimes stringifies a field's value, or
+    wraps (and stringifies) the whole payload under the schema's own field name.
+    Falls back to the natural validation error if no recovery applies."""
+    from pydantic import ValidationError
+
+    try:
+        return output_format.model_validate(obj)
+    except ValidationError:
+        pass
+    if isinstance(obj, dict):
+        # A field arrived as a JSON string (e.g. {"frames": "[...]"}) — decode
+        # each string-encoded value in place and retry.
+        decoded = {key: _try_json(value) for key, value in obj.items()}
+        try:
+            return output_format.model_validate(decoded)
+        except ValidationError:
+            pass
+        # The whole payload was wrapped under a single key and stringified
+        # (e.g. {"frames": "{\"frames\": [...]}"}) — validate the inner object.
+        if len(obj) == 1:
+            inner = _try_json(next(iter(obj.values())))
+            if isinstance(inner, (dict, list)):
+                try:
+                    return output_format.model_validate(inner)
+                except ValidationError:
+                    pass
+    # Nothing recovered — re-run to raise the natural validation error.
+    return output_format.model_validate(obj)
 
 
 class _LiteLLMMessages:
@@ -111,7 +137,8 @@ class _LiteLLMMessages:
         max_tokens: int | None = None,
         output_format: type | None = None,
         output_config: dict | None = None,
-        **_ignored: Any,
+        temperature: float | None = None,
+        **_ignored: Any,  # Anthropic-only kwargs such as `thinking`
     ) -> _Parsed:
         chat: list[dict] = []
         if system:
@@ -125,10 +152,16 @@ class _LiteLLMMessages:
             kwargs["response_format"] = output_format
         if output_config and output_config.get("effort"):
             kwargs["reasoning_effort"] = output_config["effort"]
+        if temperature is not None:
+            kwargs["temperature"] = temperature
         kwargs.update(self._extra)
 
         response = self._completion(**kwargs)
         content = response.choices[0].message.content
+        if content is None:
+            # A refusal, a tool call or a truncated answer: say so, rather than
+            # surfacing json.loads("None") to whoever reads the error.
+            raise ValueError(f"{model} returned no content")
         return _Parsed(_coerce(content, output_format))
 
 
