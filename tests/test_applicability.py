@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections import Counter
 
-from wizard.applicability import Verdict, decide
+from wizard.applicability import CLAUSES, FACT_FOR_REGIME, Verdict, decide
 from wizard.models.profile import Fact, HighRiskFact, Profile
 
 
@@ -139,3 +139,27 @@ class TestDecide:
         assert "not" in by_id["R1.1"].reason.lower()
         assert "natural persons" in by_id["R4.4"].reason.lower()
         assert "personal data" in by_id["R3.3"].reason.lower()
+
+
+class TestFactTablesCoverTheProfile:
+    """Adding a fourth fact to Profile must not KeyError at request time."""
+
+    def test_every_fact_has_reason_clauses_for_all_three_answers(self):
+        assert set(CLAUSES) == set(Profile.FACTS)
+        for fact, clauses in CLAUSES.items():
+            assert set(clauses) == {"yes", "no", "undetermined"}, fact
+            for answer, clause in clauses.items():
+                assert "{basis}" in clause, (fact, answer)
+
+    def test_every_governing_fact_is_a_fact_of_the_profile(self, objectives):
+        assert set(FACT_FOR_REGIME.values()) <= set(Profile.FACTS)
+        triggers = {o.trigger_fact for o in objectives if o.trigger_fact}
+        assert triggers <= set(Profile.FACTS)
+
+    def test_every_regime_in_the_catalogue_is_decidable(self, objectives):
+        """A regime with no governing fact and no trigger would crash decide()."""
+        for objective in objectives:
+            for regime in objective.regimes:
+                if regime == "voluntary":
+                    continue
+                assert FACT_FOR_REGIME.get(regime) or objective.trigger_fact, objective.id

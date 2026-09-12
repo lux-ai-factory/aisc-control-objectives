@@ -15,7 +15,8 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Literal, Protocol, Sequence
+from collections.abc import Iterator, Sequence
+from typing import Literal, Protocol
 
 from pydantic import BaseModel
 
@@ -37,24 +38,25 @@ class Finding(BaseModel):
 # ── the card as text, and the controls ────────────────────────────────────
 
 
+def _strings(value: object) -> Iterator[str]:
+    """Every non-blank string leaf of a dumped model."""
+    if isinstance(value, str):
+        if value.strip():
+            yield value
+    elif isinstance(value, dict):
+        for item in value.values():
+            yield from _strings(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _strings(item)
+
+
 def card_text(card: SystemCard) -> str:
-    """Every string in the card, so a quote can be checked wherever it came from."""
-    parts: list[str] = [
-        card.system_name,
-        card.system_version,
-        card.provider,
-        card.description,
-        card.overview,
-        card.target_use_case,
-        card.target_users,
-        *card.classification.sectors,
-    ]
-    for target in card.classification.target_systems:
-        parts += [target.category, target.subcategory]
-    for finding in card.findings:
-        parts += [finding.title, finding.article, finding.summary, *finding.points, *finding.references]
-    parts += card.open_issues
-    return "\n".join(part for part in parts if part)
+    """Every string in the card, so a quote can be checked wherever it came
+    from. Derived from the same dump `ProfileExtractor` shows the model, so a
+    field added to SystemCard reaches both and a genuine quote from it is never
+    flagged quote-not-in-card."""
+    return "\n".join(_strings(card.model_dump()))
 
 
 def _normalise(text: str) -> str:
@@ -116,7 +118,8 @@ class ProfileExtractor:
     def propose(self, card: SystemCard, findings: Sequence[Finding] = ()) -> Profile:
         lines = [
             "System card (JSON):",
-            json.dumps(card.model_dump(), indent=2, ensure_ascii=False),
+            # compact: the indentation was ~8% of the prompt's bytes
+            json.dumps(card.model_dump(), ensure_ascii=False),
             "",
         ]
         if findings:

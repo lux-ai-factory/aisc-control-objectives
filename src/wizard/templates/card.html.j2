@@ -32,7 +32,9 @@
           {%- if fact.rationale %}<p class="q">{{ fact.rationale }}</p>{% endif %}
           {%- if fact.quote %}
           <blockquote class="co-quote">“{{ fact.quote }}”
-            <small>{{ fact.source or "card" }}{% if name == "high_risk" and fact.annex_iii_point %} · Annex III point {{ fact.annex_iii_point }}{% endif %}</small>
+            {#- a fact that carries an Annex III point shows it; the template does not
+                need to know which fact that is -#}
+            <small>{{ fact.source or "card" }}{% if fact.annex_iii_point %} · Annex III point {{ fact.annex_iii_point }}{% endif %}</small>
           </blockquote>
           {%- elif fact.value == "undetermined" %}
           <p class="q">The card does not settle this.</p>

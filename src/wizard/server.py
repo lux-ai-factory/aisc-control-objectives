@@ -46,7 +46,13 @@ def objectives_source(env: Mapping[str, str]) -> tuple[Path | None, str]:
 
 
 def _load_dotenv() -> None:
-    """Minimal .env loader (no dependency). Existing env vars win."""
+    """Minimal .env loader (no dependency). Existing env vars win.
+
+    Accepts `KEY=value`, an optional `export ` prefix, quoted values, and a
+    trailing `# comment` on an unquoted value. Anything else is not supported:
+    a key that looks set and is not surfaces only as an opaque provider error
+    on a card page, so the accepted shapes are pinned by tests.
+    """
     env_path = _repo_root() / ".env"
     if not env_path.is_file():
         return
@@ -54,9 +60,16 @@ def _load_dotenv() -> None:
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
+        if line.startswith("export "):
+            line = line[len("export "):]
         key, _, value = line.partition("=")
-        key, value = key.strip(), value.strip().strip('"').strip("'")
-        os.environ.setdefault(key, value)
+        value = value.strip()
+        if value[:1] in {'"', "'"}:
+            closing = value.find(value[0], 1)
+            value = value[1:closing] if closing > 0 else value[1:]
+        else:
+            value = value.split(" #", 1)[0].strip()
+        os.environ.setdefault(key.strip(), value)
 
 
 def _build_client():

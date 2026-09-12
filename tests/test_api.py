@@ -12,7 +12,8 @@ from fastapi.testclient import TestClient
 
 from wizard.api.app import create_app
 from wizard.config import RunConfig
-from wizard.control_objectives import load_control_objectives
+from wizard.models.control_objective import ControlObjective
+from wizard.control_objectives import ControlObjectiveCatalogue
 
 
 @pytest.fixture(scope="module")
@@ -141,9 +142,27 @@ class TestObjectivesPage:
         assert "/docs" not in page
 
     def test_markup_is_escaped_not_injected(self):
-        """Objective text is data: a CSV carrying markup must not become markup."""
-        catalogue = load_control_objectives()
-        catalogue.objectives[0].text = "<script>alert(1)</script>"
+        """Objective text is data: a CSV carrying markup must not become markup.
+
+        Built from its own row rather than by mutating a loaded catalogue: the
+        `objectives` fixture is session-scoped, so a mutation here would leak
+        into every later test and surface as an unrelated failure.
+        """
+        catalogue = ControlObjectiveCatalogue(
+            [
+                ControlObjective(
+                    id="R1.1",
+                    macro_requirement="R1 Human Agency and Oversight",
+                    legal_basis="AI Act Art. 14",
+                    sub_requirement_label="Injected",
+                    text="<script>alert(1)</script>",
+                    assessment_mode="Control",
+                    target="G",
+                    standards_grounding="",
+                    grounding_tier_flag="",
+                )
+            ]
+        )
         page = TestClient(create_app(catalogue, base_config=RunConfig())).get("/").text
         assert "<script>alert(1)</script>" not in page
         assert "&lt;script&gt;" in page

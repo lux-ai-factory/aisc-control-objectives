@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from wizard.api.app import create_app
 from wizard.config import RunConfig
+from wizard.models.system_card import SystemCard
 
 from helpers import CREDIT, FakeExtractor  # noqa: E402
 
@@ -82,6 +83,26 @@ class TestConfirm:
         applying = {v["objective_id"] for v in record["verdicts"] if v["applies"] == "yes"}
         assert applying == {"R6.1", "R6.2"}
         assert not any(v["provisional"] for v in record["verdicts"])
+
+    def test_an_override_leaves_the_models_proposal_of_record_untouched(self, client, mcas_raw):
+        """run.profile is what the model said; record.profile is what is in
+        force. An override must not rewrite the former."""
+        record = _upload(client, mcas_raw)
+        assert record["run"]["profile"]["high_risk"]["value"] == "yes"
+        record = client.post(
+            f"/api/cards/{record['id']}/profile", json={"high_risk": "no"}
+        ).json()
+        assert record["profile"]["high_risk"]["value"] == "no"
+        assert record["run"]["profile"]["high_risk"]["value"] == "yes"
+
+    def test_the_record_profile_is_not_the_run_profile_object(self, mcas_raw, objectives):
+        """They start equal; they must not start shared, or an in-place write
+        to the one in force would silently rewrite the proposal too."""
+        from wizard.cards import assess_card
+
+        record = assess_card(SystemCard.from_card_json(mcas_raw), FakeExtractor(), objectives)
+        record.profile.high_risk.value = "no"
+        assert record.run.profile.high_risk.value == "yes"
 
     def test_confirming_keeps_the_models_quotes_for_the_record(self, client, mcas_raw):
         record = _upload(client, mcas_raw)
@@ -160,6 +181,16 @@ class TestPages:
         )
         assert response.status_code == 400
         assert "JSON" in response.text
+
+    def test_the_annex_point_is_shown_because_the_fact_carries_one(self, client, mcas_raw):
+        """The page asks the fact whether it has an Annex III point; it does not
+        branch on the fact being called high_risk."""
+        from wizard.rendering import TEMPLATES
+
+        record = _upload(client, mcas_raw)
+        assert "Annex III point 5(b)" in client.get(f"/cards/{record['id']}").text
+        source = (TEMPLATES / "card.html.j2").read_text()
+        assert "high_risk" not in source
 
     def test_the_card_page_never_shows_target_codes(self, client, mcas_raw):
         record = _upload(client, mcas_raw)

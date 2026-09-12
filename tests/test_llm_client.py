@@ -122,16 +122,21 @@ class TestParse:
         # the pydantic schema is handed to litellm for structured output
         assert call["response_format"] is Proposal
 
-    def test_effort_maps_to_reasoning_effort(self):
+    def test_every_provider_kwarg_reaches_completion(self):
+        """No allowlist: a param a caller passes is forwarded, and LiteLLM's
+        drop_params decides what a given provider cannot take. An allowlist is
+        how `temperature` came to be silently swallowed."""
         client, fake = _client([PROPOSAL_PAYLOAD])
         client.messages.parse(
             model="openai/gpt-4o",
             system="s",
             messages=[{"role": "user", "content": [{"type": "text", "text": "x"}]}],
-            output_config={"effort": "high"},
             output_format=Proposal,
+            max_tokens=16000,
+            seed=7,
         )
-        assert fake.calls[0]["reasoning_effort"] == "high"
+        assert fake.calls[0]["max_tokens"] == 16000
+        assert fake.calls[0]["seed"] == 7
 
     def test_temperature_reaches_the_provider(self):
         client, fake = _client([PROPOSAL_PAYLOAD])
@@ -160,18 +165,6 @@ class TestParse:
                 messages=[{"role": "user", "content": [{"type": "text", "text": "x"}]}],
                 output_format=Proposal,
             )
-
-    def test_anthropic_thinking_kwarg_is_ignored(self):
-        client, fake = _client([PROPOSAL_PAYLOAD])
-        # the agents always pass thinking=...; the adapter must not choke
-        client.messages.parse(
-            model="openai/gpt-4o",
-            system="s",
-            messages=[{"role": "user", "content": [{"type": "text", "text": "x"}]}],
-            thinking={"type": "adaptive"},
-            output_format=Proposal,
-        )
-        assert "thinking" not in fake.calls[0]
 
     def test_recovers_when_provider_wraps_whole_payload_as_string(self):
         # Observed with Claude via LiteLLM tool-use: the model returns the whole

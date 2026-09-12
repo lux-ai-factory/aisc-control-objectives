@@ -24,6 +24,25 @@ from helpers import FakeExtractor, good_profile  # noqa: E402
 
 
 class TestCardText:
+    def test_covers_every_string_the_model_is_shown(self, mcas_card):
+        """The prompt shows the model the whole card; a quote from any part of
+        it must be checkable, so the haystack is derived from the same dump
+        rather than from a hand-kept field list that can fall behind."""
+        def leaves(value):
+            if isinstance(value, str):
+                if value.strip():
+                    yield value
+            elif isinstance(value, dict):
+                for item in value.values():
+                    yield from leaves(item)
+            elif isinstance(value, list):
+                for item in value:
+                    yield from leaves(item)
+
+        text = card_text(mcas_card)
+        for leaf in leaves(mcas_card.model_dump()):
+            assert leaf in text, leaf[:60]
+
     def test_contains_every_prose_field_and_every_finding_point(self, mcas_card):
         text = card_text(mcas_card)
         assert mcas_card.description in text

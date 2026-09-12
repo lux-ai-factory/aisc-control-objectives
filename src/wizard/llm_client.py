@@ -17,8 +17,7 @@ Translation from the parse-shaped call:
 - content blocks (`[{"type": "text", "text": ...}]`) are flattened into one
   user message; any `cache_control` on them is dropped.
 - `output_format` (a pydantic class) → `response_format` for structured output.
-- `output_config={"effort": ...}` → `reasoning_effort`; `temperature` passes through.
-- `thinking` and other vendor-specific kwargs are ignored.
+- every other keyword (`max_tokens`, `temperature`, …) is forwarded verbatim.
 
 `litellm.drop_params` is enabled so params a given provider does not support are
 dropped rather than raising. Validation of the answer is lenient about one thing
@@ -134,11 +133,8 @@ class _LiteLLMMessages:
         model: str,
         messages: list[dict],
         system: str | None = None,
-        max_tokens: int | None = None,
         output_format: type | None = None,
-        output_config: dict | None = None,
-        temperature: float | None = None,
-        **_ignored: Any,  # Anthropic-only kwargs such as `thinking`
+        **passthrough: Any,
     ) -> _Parsed:
         chat: list[dict] = []
         if system:
@@ -146,14 +142,13 @@ class _LiteLLMMessages:
         chat.append({"role": "user", "content": _flatten_content(messages)})
 
         kwargs: dict[str, Any] = {"model": model, "messages": chat}
-        if max_tokens is not None:
-            kwargs["max_tokens"] = max_tokens
         if output_format is not None:
             kwargs["response_format"] = output_format
-        if output_config and output_config.get("effort"):
-            kwargs["reasoning_effort"] = output_config["effort"]
-        if temperature is not None:
-            kwargs["temperature"] = temperature
+        # Everything else goes through untouched (max_tokens, temperature, …).
+        # An allowlist here is what silently swallowed `temperature`; letting
+        # litellm.drop_params decide what a provider cannot take is the job it
+        # already does.
+        kwargs.update(passthrough)
         kwargs.update(self._extra)
 
         response = self._completion(**kwargs)

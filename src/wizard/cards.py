@@ -19,6 +19,14 @@ from wizard.profiling import Extractor, ProfileRun, extract_profile
 
 
 class CardRecord(BaseModel):
+    """One assessed card.
+
+    `run.profile` is the proposal of record: what the model actually said,
+    kept whatever a person does afterwards. `profile` is what is in force,
+    and starts as a copy of it. They must never be the same object, or an
+    in-place write to the one in force would rewrite the proposal too.
+    """
+
     id: str
     created_at: str
     card: SystemCard
@@ -55,7 +63,8 @@ def assess_card(
         created_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
         card=card,
         run=run,
-        profile=run.profile,
+        # a copy: see CardRecord — the proposal of record must not be shared
+        profile=run.profile.model_copy(deep=True),
         confirmed=False,
         verdicts=decide(run.profile, catalogue, confirmed=False),
     )
