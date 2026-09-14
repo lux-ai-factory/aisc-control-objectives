@@ -210,11 +210,35 @@ class TestMappingAndTiers:
         assert again["severity"]["ratings"]["risk2"] == 5
 
 
+class TestTheHomepage:
+    def test_the_root_leads_to_both_halves(self, client):
+        page = client.get("/").text
+        assert "/objectives" in page
+        assert "/projects" in page
+        assert "50" in page                       # what is behind each door
+        assert page.count('class="co-obj"') == 0  # it is a way in, not the catalogue
+
+    def test_it_counts_the_systems_under_assessment(self, client, graph):
+        assert "No systems under assessment yet" in client.get("/").text
+        _start(client, graph)
+        assert "1 system under assessment" in client.get("/").text
+
+    def test_every_page_carries_the_navigation(self, client, graph):
+        project = _start(client, graph)
+        for path in ("/", "/objectives", "/projects", f"/projects/{project['id']}"):
+            page = client.get(path).text
+            assert 'href="/objectives"' in page, path
+            assert 'href="/projects"' in page, path
+
+    def test_the_current_page_is_marked_in_the_navigation(self, client):
+        assert 'class="nav-here"' in client.get("/objectives").text
+        assert 'class="nav-here"' in client.get("/projects").text
+
+
 class TestThePages:
     def test_the_objectives_page_is_the_catalogue(self, client):
-        page = client.get("/").text
+        page = client.get("/objectives").text
         assert page.count('class="co-obj"') == 50
-        assert "projects" in page.lower()
 
     def test_the_projects_page_lists_them(self, client, graph):
         _start(client, graph, name="MCAS pre-market")

@@ -2,7 +2,8 @@
 
 Two things to look at, and one project at a time:
 
-    /                      the 50 control objectives, as a reference
+    /                      the way in
+    /objectives            the 50 control objectives, as a reference
     /projects              the systems being assessed
     /projects/{id}         upload · three questions · Confirm/Refuse · map · tiers
 
@@ -29,6 +30,7 @@ from wizard.models.profile import Profile
 from wizard.projects import Projects
 from wizard.rendering import (
     STATIC,
+    render_home_page,
     render_objectives_page,
     render_project_page,
     render_projects_page,
@@ -106,6 +108,12 @@ def _register_pages(app, objectives, projects, _view_or_404, source_name, root_p
     """The three pages, and the forms that post to them."""
 
     @app.get("/", include_in_schema=False, response_class=HTMLResponse)
+    def home_page() -> HTMLResponse:
+        return HTMLResponse(
+            render_home_page(objectives, len(projects.list()), root_path=root_path)
+        )
+
+    @app.get("/objectives", include_in_schema=False, response_class=HTMLResponse)
     def objectives_page() -> HTMLResponse:
         return HTMLResponse(
             render_objectives_page(objectives, source_name=source_name, root_path=root_path)

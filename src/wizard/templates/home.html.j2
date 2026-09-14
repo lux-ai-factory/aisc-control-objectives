@@ -1,0 +1,52 @@
+{% extends "_base.html.j2" %}
+
+{% block title %}AI Act Control Objectives{% endblock %}
+
+{% block content %}
+  <div class="co-header">
+    <h1>AI Act Control Objectives</h1>
+    <p>What an AI system has to satisfy under the EU AI Act, and which of it to do first.
+       The catalogue is the same for everyone; what a particular system owes depends on
+       what it is and what its assessor found could go wrong with it.</p>
+  </div>
+
+  <div class="co-doors">
+    <a class="co-door" href="{{ root_path }}/objectives">
+      <span class="co-door-count">{{ objectives_count }}</span>
+      <h2>Control objectives</h2>
+      <p>The catalogue: {{ objectives_count }} objectives under {{ macros_count }} macro
+         requirements, each with its legal basis and its standards grounding. Read it,
+         search it, no system involved.</p>
+      <span class="co-door-go">Explore the catalogue →</span>
+    </a>
+
+    <a class="co-door co-door--primary" href="{{ root_path }}/projects">
+      <span class="co-door-count">{{ projects_count }}</span>
+      <h2>Projects</h2>
+      <p>{% if projects_count %}{{ projects_count }} system{{ 's' if projects_count != 1 }} under assessment.{% else %}No systems under assessment yet.{% endif %}
+         Upload a system's ontology export, answer the three Annex III questions, and the
+         wizard works out what is owed and where to start.</p>
+      <span class="co-door-go">
+        {%- if projects_count %}Open the projects →{% else %}Assess a system →{% endif %}
+      </span>
+    </a>
+  </div>
+
+  <div class="qf-section">
+    <h2>How an assessment runs</h2>
+    <ol class="co-steps">
+      <li><strong>Upload the system's ontology export</strong> (<code>ontology.jsonld</code>
+          from its card in the qualification app). It carries what the system is and the
+          risks its assessor identified.</li>
+      <li><strong>Answer three questions.</strong> A model reads the graph and proposes
+          whether the system is high-risk under Annex III, processes personal data, and
+          interacts with natural persons, each on a quote you can check. You confirm or
+          refuse; the answer is yours.</li>
+      <li><strong>The risks are mapped to the objectives</strong> that would mitigate
+          them, each on a quote from the risk's own chain.</li>
+      <li><strong>Rate the risks</strong> 1 to 5 for this system. The objectives answering
+          the worst ones become Tier 1: no more than seven, so it is a place to start
+          rather than another list.</li>
+    </ol>
+  </div>
+{% endblock %}

@@ -88,7 +88,7 @@ class TestObjectivesPage:
 
     @pytest.fixture()
     def page(self, client):
-        response = client.get("/")
+        response = client.get("/objectives")
         assert response.status_code == 200
         assert response.headers["content-type"].startswith("text/html")
         return response.text
@@ -177,7 +177,7 @@ class TestObjectivesPage:
             Projects(repository, catalogue, NoModel(), NoMapper()),
             base_config=RunConfig(),
         )
-        page = TestClient(app).get("/").text
+        page = TestClient(app).get("/objectives").text
         assert "<script>alert(1)</script>" not in page
         assert "&lt;script&gt;" in page
 

@@ -43,6 +43,19 @@ def _environment() -> Environment:
     )
 
 
+def render_home_page(
+    catalogue: ControlObjectiveCatalogue, projects_count: int, root_path: str = ""
+) -> str:
+    """The way in: what the two halves are, and how an assessment runs."""
+    return _environment().get_template("home.html.j2").render(
+        objectives_count=len(catalogue),
+        macros_count=len(catalogue.macro_requirements()),
+        projects_count=projects_count,
+        here="home",
+        root_path=root_path,
+    )
+
+
 def render_objectives_page(
     catalogue: ControlObjectiveCatalogue, source_name: str = "", root_path: str = ""
 ) -> str:
@@ -53,6 +66,7 @@ def render_objectives_page(
         total=len(catalogue),
         source_name=source_name,
         flag_tags=FLAG_TAGS,
+        here="objectives",
         root_path=root_path,
     )
 
@@ -121,7 +135,7 @@ class _Counts:
 def render_projects_page(views: list, root_path: str = "") -> str:
     """The systems under assessment."""
     return _environment().get_template("projects.html.j2").render(
-        projects=views, root_path=root_path
+        projects=views, here="projects", root_path=root_path
     )
 
 
@@ -177,6 +191,7 @@ def render_project_page(view, catalogue: ControlObjectiveCatalogue, root_path: s
         counts=counts,
         facts=FACT_QUESTIONS,
         flag_tags=FLAG_TAGS,
+        here="projects",
         risks=_risk_views(record),
         objective_labels={o.id: o.sub_requirement_label for o in catalogue},
         root_path=root_path,
