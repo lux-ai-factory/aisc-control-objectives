@@ -23,11 +23,6 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-#: Joins separate pieces of text so a quote cannot straddle two of them. A
-#: model cannot produce this, so a "span" made of one field's tail and
-#: another's head fails the only deterministic guard on its claims.
-FIELD_BREAK = "\n\u0000\n"
-
 AIRO = "https://w3id.org/airo#"
 VAIR = "https://w3id.org/vair#"
 QUAL = "https://lux-ai-factory.github.io/qualification/ns#"
@@ -100,38 +95,6 @@ class _Graph:
         )
 
 
-#: What the graph says the system is. The three Annex III questions are
-#: answered from these plus the Annex IV answers, and both are the assessor's
-#: own words rather than an LLM's summary of them.
-SYSTEM_PROPERTIES = (
-    "hasPurpose",
-    "isAppliedWithinDomain",
-    "hasCapability",
-    "hasAIUser",
-    "hasComponent",
-    "usesTechnique",
-    "hasModality",
-    "isUsedWithinLocality",
-    "isProvidedBy",
-    "isDeployedBy",
-)
-
-
-class Property(BaseModel):
-    """One thing the graph says about the system, and what it points at."""
-
-    name: str
-    labels: list[str] = Field(default_factory=list)
-
-
-class Answer(BaseModel):
-    """One Annex IV answer, verbatim, with the provision it answers."""
-
-    citation: str = ""
-    question_id: str = ""
-    text: str = ""
-
-
 class OntologyRisk(BaseModel):
     """One risk and its AIRO chain, flattened to the text a reader needs."""
 
@@ -190,27 +153,6 @@ class Ontology(BaseModel):
     qualification_id: str = ""
     system_name: str = ""
     risks: list[OntologyRisk] = Field(default_factory=list)
-    answers: list[Answer] = Field(default_factory=list)
-    properties: list[Property] = Field(default_factory=list)
-
-    def property(self, name: str) -> Property | None:
-        return next((p for p in self.properties if p.name == name), None)
-
-    def as_text(self) -> str:
-        """The graph as one passage: what the profile extractor is shown, and
-        therefore what its quotes have to be spans of."""
-        parts = [f"System: {self.system_name}"] if self.system_name else []
-        parts += [
-            f"{prop.name}: {'; '.join(prop.labels)}"
-            for prop in self.properties
-            if prop.labels
-        ]
-        parts += [
-            f"{answer.citation}: {answer.text}"
-            for answer in self.answers
-            if answer.text
-        ]
-        return FIELD_BREAK.join(parts)
 
     def by_id(self, risk_id: str) -> OntologyRisk | None:
         return next((risk for risk in self.risks if risk.id == risk_id), None)
@@ -256,23 +198,6 @@ class Ontology(BaseModel):
                 (cls._risk(graph, node) for node in graph.of_class("Risk")),
                 key=lambda risk: risk.position,
             ),
-            properties=[
-                Property(name=name, labels=labels)
-                for name in SYSTEM_PROPERTIES
-                if (labels := [
-                    graph.text(graph.by_id.get(ref))
-                    for ref in _refs(system or {}, AIRO + name)
-                ])
-            ],
-            answers=[
-                Answer(
-                    citation=_literal(node, QUAL + "citation"),
-                    question_id=_literal(node, QUAL + "questionId"),
-                    text=_literal(node, QUAL + "text"),
-                )
-                for node in graph.by_id.values()
-                if _literal(node, QUAL + "text")
-            ],
         )
 
     @staticmethod

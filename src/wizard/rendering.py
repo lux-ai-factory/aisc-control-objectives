@@ -25,13 +25,6 @@ STATIC = Path(__file__).resolve().parent / "static"
 #: "Paired" only explains a Control + Test row and stays neutral.
 FLAG_TAGS = ("GAP", "CONDITIONAL", "VOLUNTARY")
 
-#: The profile's facts as questions a person can answer.
-FACT_QUESTIONS = (
-    ("high_risk", "Is the system high-risk under AI Act Annex III?"),
-    ("personal_data", "Does the system process personal data?"),
-    ("interacts_with_natural_persons", "Does the system interact directly with natural persons?"),
-)
-
 
 @lru_cache(maxsize=1)
 def _environment() -> Environment:
@@ -71,16 +64,11 @@ def render_objectives_page(
     )
 
 
-#: A project's objective sections, in the order an assessor works through them. The last
-#: two are not tiers: they are what is out of scope and what is unsettled, kept
-#: on the page because "not applicable" is a finding a reader should be able to
-#: check, not something to hide.
+#: A project's objective sections, in the order an assessor works through them.
 TIER_SECTIONS = (
     (1, "Tier 1", "Start here"),
     (2, "Tier 2", "Next"),
     (3, "Tier 3", "Later"),
-    ("no", "Not applicable", "Out of scope for this system"),
-    ("undetermined", "Pending", "Waiting on the applicability profile"),
 )
 
 
@@ -89,7 +77,7 @@ class _TierView:
     key: object
     title: str
     subtitle: str
-    objectives: list[tuple] = field(default_factory=list)  # (objective, verdict, priority)
+    objectives: list[tuple] = field(default_factory=list)  # (objective, priority)
 
 
 @dataclass
@@ -123,10 +111,6 @@ def _risk_views(record) -> list:
 
 @dataclass
 class _Counts:
-    to_achieve: int = 0
-    non_binding: int = 0
-    not_applicable: int = 0
-    pending: int = 0
     tier1: int = 0
     tier2: int = 0
     tier3: int = 0
@@ -140,9 +124,8 @@ def render_projects_page(views: list, root_path: str = "") -> str:
 
 
 def render_project_page(view, catalogue: ControlObjectiveCatalogue, root_path: str = "") -> str:
-    """One project: the three questions, its risks, and its tiers."""
+    """One project: its risks, and the tiers they produce."""
     record = view.record
-    verdicts = {v.objective_id: v for v in view.verdicts}
     priorities = {p.objective_id: p for p in view.priorities}
     counts = _Counts()
     sections = {key: _TierView(key, title, subtitle) for key, title, subtitle in TIER_SECTIONS}
@@ -151,45 +134,21 @@ def render_project_page(view, catalogue: ControlObjectiveCatalogue, root_path: s
     # the page is a work list, and a work list reads top to bottom.
     rows = []
     for objective in catalogue:
-        verdict = verdicts[objective.id]
-        priority = priorities.get(objective.id)
-        rows.append((objective, verdict, priority))
-        if priority and priority.tier:
-            setattr(counts, f"tier{priority.tier}", getattr(counts, f"tier{priority.tier}") + 1)
-        if verdict.non_binding:
-            counts.non_binding += 1
-        elif verdict.applies == "yes":
-            counts.to_achieve += 1
-        elif verdict.applies == "no":
-            counts.not_applicable += 1
-        else:
-            counts.pending += 1
+        priority = priorities[objective.id]
+        rows.append((objective, priority))
+        setattr(counts, f"tier{priority.tier}", getattr(counts, f"tier{priority.tier}") + 1)
 
-    rows.sort(key=lambda row: (-(row[2].score if row[2] else 0), row[0].sort_key))
-    for objective, verdict, priority in rows:
-        key = priority.tier if priority and priority.tier else verdict.applies
-        sections[key].objectives.append((objective, verdict, priority))
+    rows.sort(key=lambda row: (-row[1].score, row[0].sort_key))
+    for objective, priority in rows:
+        sections[priority.tier].objectives.append((objective, priority))
     ordered = [section for section in sections.values() if section.objectives]
-
-
-    answer = record.answer
-    proposal = record.profile_run.profile if record.profile_run else __import__(
-        "wizard.models.profile", fromlist=["Profile"]
-    ).Profile()
-
-    def answered(name: str):
-        """True, False, or None when the company has not answered yet."""
-        return getattr(answer, name) if answer is not None else None
 
     template = _environment().get_template("project.html.j2")
     return template.render(
         view=view,
         record=record,
-        proposal=proposal,
-        answered=answered,
         sections=ordered,
         counts=counts,
-        facts=FACT_QUESTIONS,
         flag_tags=FLAG_TAGS,
         here="projects",
         risks=_risk_views(record),

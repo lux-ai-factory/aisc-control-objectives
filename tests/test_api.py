@@ -1,8 +1,7 @@
-"""HTTP surface: the wizard serves the control objectives.
+"""HTTP surface: the catalogue half.
 
-The card-to-objectives mapping is not specified yet, so there are no plan
-routes — the API is a read-only view over the objectives catalogue plus the
-effective config.
+A read-only view over the 50 control objectives plus the effective config,
+independent of any system. The project flow is exercised in test_projects.py.
 """
 
 from __future__ import annotations
@@ -18,12 +17,12 @@ from wizard.control_objectives import ControlObjectiveCatalogue
 
 @pytest.fixture()
 def client(objectives, repository):
-    """The catalogue routes need no models; a Projects with stand-ins is
-    enough, and the project flow is exercised in test_projects.py."""
-    from wizard.api.app import NoMapper, NoModel
+    """The catalogue routes need no model; a Projects with the stand-in
+    mapper is enough."""
+    from wizard.api.app import NoMapper
     from wizard.projects import Projects
 
-    projects = Projects(repository, objectives, NoModel(), NoMapper())
+    projects = Projects(repository, objectives, NoMapper())
     return TestClient(create_app(objectives, projects, base_config=RunConfig()))
 
 
@@ -169,24 +168,14 @@ class TestObjectivesPage:
                 )
             ]
         )
-        from wizard.api.app import NoMapper, NoModel
+        from wizard.api.app import NoMapper
         from wizard.projects import Projects
 
         app = create_app(
             catalogue,
-            Projects(repository, catalogue, NoModel(), NoMapper()),
+            Projects(repository, catalogue, NoMapper()),
             base_config=RunConfig(),
         )
         page = TestClient(app).get("/objectives").text
         assert "<script>alert(1)</script>" not in page
         assert "&lt;script&gt;" in page
-
-
-def test_the_three_facts_are_declared_once():
-    """Every place that enumerates the facts derives from Profile.FACTS."""
-    from wizard.api.app import AnswerBody
-    from wizard.models.profile import Profile
-    from wizard.rendering import FACT_QUESTIONS
-
-    assert tuple(AnswerBody.model_fields) == Profile.FACTS
-    assert tuple(name for name, _ in FACT_QUESTIONS) == Profile.FACTS

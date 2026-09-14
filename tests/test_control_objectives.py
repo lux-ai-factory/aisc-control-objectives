@@ -167,11 +167,11 @@ class TestLoadTimeValidation:
         with pytest.raises(ValueError, match=r"(?s)R1\.1.*regime"):
             load_control_objectives(path)
 
-    def test_a_conditional_note_with_an_unknown_trigger_fails_at_load(self, tmp_path):
+    def test_a_conditional_note_with_an_unknown_condition_fails_at_load(self, tmp_path):
         path = self._csv_with(
             tmp_path, {("R2.1", "Notes"): "CONDITIONAL: applies only to systems generating deepfakes."}
         )
-        with pytest.raises(ValueError, match=r"(?s)R2\.1.*trigger"):
+        with pytest.raises(ValueError, match=r"(?s)R2\.1.*condition"):
             load_control_objectives(path)
 
     def test_a_blank_macro_requirement_fails_at_load(self, tmp_path):

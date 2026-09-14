@@ -1,9 +1,9 @@
 """Projects, read and written. The only place that touches a session.
 
-Everything above this line works in pydantic models (`Ontology`, `Profile`,
-`MappingRun`); everything below is SQLAlchemy. The translation happens here, so
-`prioritising`, `risk_mapping` and `rendering` never learn that a database
-exists, and the domain keeps validating its own shape on the way back out.
+Everything above this line works in pydantic models (`Ontology`, `MappingRun`);
+everything below is SQLAlchemy. The translation happens here, so `prioritising`,
+`risk_mapping` and `rendering` never learn that a database exists, and the
+domain keeps validating its own shape on the way back out.
 """
 
 from __future__ import annotations
@@ -18,27 +18,14 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from wizard.db import tables
 from wizard.models.ontology import Ontology, OntologyRisk
-from wizard.models.profile import Profile
 from wizard.prioritising import Severity
-from wizard.profiling import Finding as ProfileFinding
-from wizard.profiling import ProfileRun
 from wizard.risk_mapping import Finding as MappingFinding
 from wizard.risk_mapping import MappedObjective, Mapping, MappingRun
 
 
 def digest_of(text: str) -> str:
-    """A graph's identity: the sha256 of the bytes that were uploaded."""
+    """A card's identity: the sha256 of the bytes that were uploaded."""
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
-
-
-@dataclass
-class Answer:
-    """What the company decided about the three Annex III questions."""
-
-    high_risk: bool
-    personal_data: bool
-    interacts_with_natural_persons: bool
-    answered_at: datetime | None = None
 
 
 @dataclass
@@ -56,15 +43,7 @@ class ProjectRecord:
     digest: str = ""
     ontology: Ontology = field(default_factory=Ontology)
     severity: Severity = field(default_factory=Severity)
-    profile_run: ProfileRun | None = None
-    answer: Answer | None = None
     mapping_run: MappingRun | None = None
-
-    @property
-    def confirmed(self) -> bool:
-        """The gate on the second workflow: tiers order work that is owed, and
-        nothing is owed until the company has answered."""
-        return self.answer is not None
 
 
 class ProjectRepository:
@@ -94,16 +73,18 @@ class ProjectRepository:
                 objectives_digest=self._objectives_digest,
             )
             session.add(project)
-            self._attach_graph(session, project, ontology, jsonld)
+            self._attach_card(session, project, ontology, jsonld)
             session.flush()
             return self._to_record(project)
 
-    def replace_ontology(self, project_id: str, ontology: Ontology, jsonld: str) -> ProjectRecord:
-        """A corrected export replaces the graph and keeps the project.
+    def replace_ontology(
+        self, project_id: str, ontology: Ontology, jsonld: str
+    ) -> ProjectRecord:
+        """A corrected card replaces the graph and keeps the project.
 
-        Ratings name risks, so a rating whose risk the new graph does not have
-        goes with it; the graph is the authority on what risks exist. The
-        mapping goes too: it was bought against the graph being replaced.
+        Ratings name risks, so a rating whose risk the new card does not have
+        goes with it; the card is the authority on what risks exist. The
+        mapping goes too: it was bought against the card being replaced.
         """
         with self._sessions.begin() as session:
             project = session.get(tables.Project, project_id)
@@ -114,7 +95,9 @@ class ProjectRepository:
             }
             session.execute(delete(tables.Risk).where(tables.Risk.project_id == project_id))
             session.execute(
-                delete(tables.MappingRunRow).where(tables.MappingRunRow.project_id == project_id)
+                delete(tables.MappingRunRow).where(
+                    tables.MappingRunRow.project_id == project_id
+                )
             )
             if project.graph is not None:
                 session.delete(project.graph)
@@ -122,53 +105,18 @@ class ProjectRepository:
             # Severities are set as the rows are created: reading them back off
             # `project.risks` straight after a delete-and-re-add reads a stale
             # collection, and silently loses the assessor's ratings.
-            self._attach_graph(session, project, ontology, jsonld, severities=kept)
-            session.flush()
+            self._attach_card(session, project, ontology, jsonld, severities=kept)
             project.system_name = ontology.system_name
             project.qualification_id = ontology.qualification_id
             session.flush()
             return self._to_record(project)
 
-    def save_profile_run(self, project_id: str, run: ProfileRun, model: str = "") -> None:
+    def rate(self, project_id: str, ratings: dict[str, int]) -> None:
         with self._sessions.begin() as session:
             project = session.get(tables.Project, project_id)
-            if project.profile_run is not None:
-                session.delete(project.profile_run)
-                session.flush()
-            session.add(
-                tables.ProfileRunRow(
-                    project_id=project_id,
-                    profile=run.profile.model_dump(),
-                    findings=[f.model_dump() for f in run.findings],
-                    stop=run.stop,
-                    attempts=run.attempts,
-                    error=run.error,
-                    model=model,
-                )
-            )
-
-    def answer(
-        self,
-        project_id: str,
-        high_risk: bool,
-        personal_data: bool,
-        interacts_with_natural_persons: bool,
-    ) -> None:
-        """The company's final word. Replaces any previous answer; the model's
-        proposal is untouched, so a refusal stays visible."""
-        with self._sessions.begin() as session:
-            project = session.get(tables.Project, project_id)
-            if project.answer is not None:
-                session.delete(project.answer)
-                session.flush()
-            session.add(
-                tables.Answer(
-                    project_id=project_id,
-                    high_risk=high_risk,
-                    personal_data=personal_data,
-                    interacts_with_natural_persons=interacts_with_natural_persons,
-                )
-            )
+            for row in project.risks:
+                if row.risk_id in ratings:
+                    row.severity = ratings[row.risk_id]
 
     def save_mapping_run(self, project_id: str, run: MappingRun, model: str = "") -> None:
         with self._sessions.begin() as session:
@@ -205,13 +153,6 @@ class ProjectRepository:
                 )
             )
 
-    def rate(self, project_id: str, ratings: dict[str, int]) -> None:
-        with self._sessions.begin() as session:
-            project = session.get(tables.Project, project_id)
-            for row in project.risks:
-                if row.risk_id in ratings:
-                    row.severity = ratings[row.risk_id]
-
     def delete(self, project_id: str) -> None:
         with self._sessions.begin() as session:
             project = session.get(tables.Project, project_id)
@@ -244,13 +185,13 @@ class ProjectRepository:
     # ── translation ───────────────────────────────────────────────────────
 
     @staticmethod
-    def _attach_graph(
+    def _attach_card(
         session: Session,
         project: tables.Project,
         ontology: Ontology,
         jsonld: str,
         severities: dict[str, int] | None = None,
-    ):
+    ) -> None:
         session.add(
             tables.Graph(
                 project_id=project.id,
@@ -301,21 +242,6 @@ class ProjectRepository:
             )
             for row in project.risks
         ]
-        mappings = {
-            row.risk_id: Mapping(
-                risk_id=row.risk_id,
-                objectives=[
-                    MappedObjective(
-                        objective_id=item.objective_id, quote=item.quote, rationale=item.rationale
-                    )
-                    for item in row.mapped
-                ],
-                stop=(project.mapping_run.stops or {}).get(row.risk_id, "clean")
-                if project.mapping_run
-                else "clean",
-            )
-            for row in project.risks
-        }
 
         record = ProjectRecord(
             id=project.id,
@@ -334,32 +260,36 @@ class ProjectRepository:
             ),
             severity=Severity(
                 ratings={
-                    row.risk_id: row.severity for row in project.risks if row.severity is not None
+                    row.risk_id: row.severity
+                    for row in project.risks
+                    if row.severity is not None
                 }
             ),
         )
-        if project.profile_run is not None:
-            record.profile_run = ProfileRun(
-                profile=Profile.model_validate(project.profile_run.profile),
-                findings=[ProfileFinding.model_validate(f) for f in project.profile_run.findings],
-                stop=project.profile_run.stop,
-                attempts=project.profile_run.attempts,
-                error=project.profile_run.error,
-            )
-        if project.answer is not None:
-            record.answer = Answer(
-                high_risk=project.answer.high_risk,
-                personal_data=project.answer.personal_data,
-                interacts_with_natural_persons=project.answer.interacts_with_natural_persons,
-                answered_at=project.answer.answered_at,
-            )
         if project.mapping_run is not None:
+            stops = project.mapping_run.stops or {}
             record.mapping_run = MappingRun(
-                mappings=mappings,
-                findings=[MappingFinding.model_validate(f) for f in project.mapping_run.findings],
+                mappings={
+                    row.risk_id: Mapping(
+                        risk_id=row.risk_id,
+                        objectives=[
+                            MappedObjective(
+                                objective_id=item.objective_id,
+                                quote=item.quote,
+                                rationale=item.rationale,
+                            )
+                            for item in row.mapped
+                        ],
+                        stop=stops.get(row.risk_id, "clean"),
+                    )
+                    for row in project.risks
+                },
+                findings=[
+                    MappingFinding.model_validate(f) for f in project.mapping_run.findings
+                ],
                 stop=project.mapping_run.stop,
                 attempts=project.mapping_run.attempts,
                 error=project.mapping_run.error,
+                model=project.mapping_run.model,
             )
-            record.mapping_run.model = project.mapping_run.model
         return record

@@ -1,10 +1,7 @@
-"""Of the objectives that apply, which to do first.
+"""Which control objectives to do first.
 
-For a high-risk system applicability is all-or-nothing: every AI Act duty
-binds, so "what do we owe" answers "all of it", which tells an assessor nothing
-about where to start. Tiering is the other half, and what drives it is the
-system's **own risks**, the AIRO chains the qualification captured, not an
-abstract view of which requirement family matters.
+All 50 are the register. What orders them is the system's **own risks**, the
+AIRO chains its AI Card carries, rated by the assessor:
 
     the assessor rates each risk 1-5
               |
@@ -22,7 +19,8 @@ abstract view of which requirement family matters.
 An objective no identified risk maps to is still owed; it simply is not where
 this system's danger lies, so it sorts below every objective that a risk does
 drive, and lands in the bottom tier. A voluntary objective sits lower still:
-it binds nobody, so it cannot displace a legal duty.
+it binds nobody, so it cannot displace a legal duty. Which of the two the CSV
+marks voluntary is the author's own note, not a judgement made here.
 """
 
 from __future__ import annotations
@@ -32,7 +30,6 @@ from collections.abc import Sequence
 
 from pydantic import BaseModel, Field, field_validator
 
-from wizard.applicability import Verdict
 from wizard.control_objectives import ControlObjectiveCatalogue
 from wizard.models.control_objective import ControlObjective
 from wizard.models.ontology import OntologyRisk
@@ -167,33 +164,28 @@ def _assign_tiers(scored: list[tuple[float, tuple[int, int], Priority]], budget:
 
 def prioritise(
     catalogue: ControlObjectiveCatalogue,
-    verdicts: list[Verdict],
     severity: Severity,
     mappings: MappingABC[str, Mapping],
     risks: Sequence[OntologyRisk],
     budget: int = TIER_ONE_BUDGET,
 ) -> list[Priority]:
-    """One Priority per objective, in catalogue order. Objectives that do not
-    apply carry no tier: there is nothing to schedule."""
+    """One Priority per objective, in catalogue order."""
     unknown = sorted(set(severity.ratings) - {risk.id for risk in risks})
     if unknown:
         raise ValueError(f"rated risk(s) not in this system's graph: {', '.join(unknown)}")
 
     driving = _driving_risks(mappings, risks, severity)
-    by_id = {verdict.objective_id: verdict for verdict in verdicts}
     scored: list[tuple[float, tuple[int, int], Priority]] = []
     priorities: dict[str, Priority] = {}
 
     for objective in catalogue:
-        verdict = by_id[objective.id]
-        priority = Priority(objective_id=objective.id, non_binding=verdict.non_binding)
+        non_binding = objective.note_tag == "VOLUNTARY"
+        priority = Priority(objective_id=objective.id, non_binding=non_binding)
         priorities[objective.id] = priority
-        if verdict.applies != "yes":
-            continue
         entries = driving.get(objective.id, [])
         priority.risk_ids = [risk.id for _, risk in entries]
         priority.driving_severity = entries[0][0] if entries else 0
-        priority.score, priority.reasons = _score(objective, severity, entries, verdict.non_binding)
+        priority.score, priority.reasons = _score(objective, severity, entries, non_binding)
         # catalogue order breaks ties, so the same input always tiers the same
         scored.append((priority.score, objective.sort_key, priority))
 

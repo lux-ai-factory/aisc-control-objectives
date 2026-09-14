@@ -1,7 +1,7 @@
-"""A project, end to end: upload · three questions · Confirm/Refuse · map · tiers.
+"""A project, end to end: upload the AI Card · rank the risks · map · tiers.
 
-Driven through the HTTP surface against a real database, with fake models, so
-what is tested is the flow and its gate rather than the models' judgement.
+Driven through the HTTP surface against a real database, with a fake mapper,
+so what is tested is the flow rather than a model's judgement.
 """
 
 from __future__ import annotations
@@ -13,26 +13,8 @@ from fastapi.testclient import TestClient
 
 from wizard.api.app import create_app
 from wizard.config import RunConfig
-from wizard.models.profile import Fact, HighRiskFact, Profile
 from wizard.projects import Projects
 from wizard.risk_mapping import MappedObjective, Mapping
-
-CREDIT = "Evaluates creditworthiness"
-USERS = "bank customers aged 18+"
-LLM = "Hosted explanation LLM"
-
-
-class FakeExtractor:
-    """Reads the graph the way a competent model would, quoting real spans."""
-
-    def propose(self, ontology, findings=()):
-        return Profile(
-            high_risk=HighRiskFact(value="yes", quote=CREDIT, source="hasPurpose",
-                                   annex_iii_point="5(b)", rationale="creditworthiness of natural persons"),
-            personal_data=Fact(value="yes", quote=USERS, source="hasAIUser", rationale="applicants"),
-            interacts_with_natural_persons=Fact(value="undetermined",
-                                                rationale="the graph does not say who sees the chatbot"),
-        )
 
 
 class FakeMapper:
@@ -57,7 +39,7 @@ class FakeMapper:
 
 @pytest.fixture()
 def client(repository, objectives):
-    projects = Projects(repository, objectives, FakeExtractor(), FakeMapper(), model="fake/model")
+    projects = Projects(repository, objectives, FakeMapper(), model="fake/model")
     return TestClient(create_app(objectives, projects, base_config=RunConfig()))
 
 
@@ -73,12 +55,18 @@ def _start(client, graph, name="MCAS") -> dict:
 
 
 class TestStartingAProject:
-    def test_an_upload_runs_the_first_workflow(self, client, graph):
+    def test_an_upload_brings_in_the_cards_risks(self, client, graph):
         project = _start(client, graph)
         assert project["system_name"].startswith("MicroCredit")
-        assert len(project["risks"]) == 5
-        assert project["profile_run"]["stop"] == "clean"
-        assert project["profile_run"]["profile"]["high_risk"]["quote"] == CREDIT
+        assert [risk["id"] for risk in project["risks"]] == [f"risk{n}" for n in range(5)]
+        assert project["mapping_run"] is None      # nothing agentic has run yet
+
+    def test_the_tiers_exist_before_anything_is_mapped(self, client, graph):
+        """All 50 are owed from the first page load; they are simply not
+        ordered by anything yet."""
+        project = _start(client, graph)
+        assert len(project["priorities"]) == 50
+        assert all(p["tier"] == 3 for p in project["priorities"])
 
     def test_what_is_not_an_ai_card_is_refused(self, client):
         for body in ({"hello": "world"}, "a string", [1, 2, 3]):
@@ -103,7 +91,8 @@ class TestStartingAProject:
     def test_a_project_survives_a_restart(self, client, graph):
         project = _start(client, graph)
         again = client.get(f"/api/projects/{project['id']}").json()
-        assert again["profile_run"]["profile"]["high_risk"]["annex_iii_point"] == "5(b)"
+        assert again["digest"] == project["digest"]
+        assert len(again["risks"]) == 5
 
     def test_the_project_is_listed(self, client, graph):
         project = _start(client, graph)
@@ -111,81 +100,36 @@ class TestStartingAProject:
         assert project["id"] in {p["id"] for p in listed}
 
 
-class TestTheGate:
-    def test_the_second_workflow_will_not_run_before_the_answer(self, client, graph):
+class TestRankingTheRisks:
+    def test_ranking_needs_nothing_but_the_card(self, client, graph):
+        """The point of dropping the first workflow: an assessor can rank the
+        moment the card is in, with no model call in between."""
         project = _start(client, graph)
-        assert project["can_map"] is False
-        response = client.post(f"/api/projects/{project['id']}/map")
-        assert response.status_code == 409
-        assert "answer the three questions" in response.text
+        rated = client.post(
+            f"/api/projects/{project['id']}/severity", json={"risk2": 5, "risk4": 1}
+        )
+        assert rated.status_code == 200
+        assert rated.json()["severity"]["ratings"] == {"risk2": 5, "risk4": 1}
 
-    def test_answering_opens_it(self, client, graph):
+    def test_a_rating_for_a_risk_this_card_lacks_is_refused(self, client, graph):
         project = _start(client, graph)
-        answered = client.post(
-            f"/api/projects/{project['id']}/answer",
-            json={"high_risk": True, "personal_data": True,
-                  "interacts_with_natural_persons": False},
-        ).json()
-        assert answered["can_map"] is True
-        assert client.post(f"/api/projects/{project['id']}/map").status_code == 200
+        response = client.post(
+            f"/api/projects/{project['id']}/severity", json={"risk99": 5}
+        )
+        assert response.status_code == 422
+        assert "risk99" in response.text
 
-
-class TestTheCompanyHasTheFinalWord:
-    def test_a_refusal_overrides_the_model(self, client, graph):
+    def test_the_ratings_survive_a_reload(self, client, graph):
         project = _start(client, graph)
-        answered = client.post(
-            f"/api/projects/{project['id']}/answer",
-            json={"high_risk": False, "personal_data": False,
-                  "interacts_with_natural_persons": False},
-        ).json()
-        # the model said high-risk; the company said no, so nothing but the
-        # voluntary pair is owed
-        applying = {v["objective_id"] for v in answered["verdicts"] if v["applies"] == "yes"}
-        assert applying == {"R6.1", "R6.2"}
-
-    def test_the_models_proposal_survives_the_refusal(self, client, graph):
-        project = _start(client, graph)
-        answered = client.post(
-            f"/api/projects/{project['id']}/answer",
-            json={"high_risk": False, "personal_data": False,
-                  "interacts_with_natural_persons": False},
-        ).json()
-        assert answered["profile_run"]["profile"]["high_risk"]["value"] == "yes"
-        assert answered["answer"]["high_risk"] is False
-
-    def test_an_undetermined_fact_is_settled_by_the_company(self, client, graph):
-        """The model was unsure about Art. 50; the company says yes, and R4.4
-        is owed."""
-        project = _start(client, graph)
-        assert project["profile_run"]["profile"]["interacts_with_natural_persons"]["value"] == "undetermined"
-        answered = client.post(
-            f"/api/projects/{project['id']}/answer",
-            json={"high_risk": True, "personal_data": True,
-                  "interacts_with_natural_persons": True},
-        ).json()
-        by_id = {v["objective_id"]: v for v in answered["verdicts"]}
-        assert by_id["R4.4"]["applies"] == "yes"
-
-    def test_verdicts_stop_being_provisional_once_answered(self, client, graph):
-        project = _start(client, graph)
-        assert all(v["provisional"] for v in project["verdicts"] if not v["non_binding"])
-        answered = client.post(
-            f"/api/projects/{project['id']}/answer",
-            json={"high_risk": True, "personal_data": True,
-                  "interacts_with_natural_persons": True},
-        ).json()
-        assert not any(v["provisional"] for v in answered["verdicts"])
+        client.post(f"/api/projects/{project['id']}/severity", json={"risk2": 5})
+        again = client.get(f"/api/projects/{project['id']}").json()
+        assert again["severity"]["ratings"]["risk2"] == 5
 
 
 class TestMappingAndTiers:
     @pytest.fixture()
     def mapped(self, client, graph):
         project = _start(client, graph)
-        client.post(
-            f"/api/projects/{project['id']}/answer",
-            json={"high_risk": True, "personal_data": True,
-                  "interacts_with_natural_persons": True},
-        )
         return client.post(f"/api/projects/{project['id']}/map").json()
 
     def test_every_risk_is_mapped(self, mapped):
@@ -213,17 +157,15 @@ class TestMappingAndTiers:
         ).json()
         assert sum(p["tier"] == 1 for p in rated["priorities"]) <= 7
 
-    def test_a_rating_for_a_risk_this_graph_lacks_is_refused(self, client, mapped):
-        response = client.post(
-            f"/api/projects/{mapped['id']}/severity", json={"risk99": 5}
-        )
-        assert response.status_code == 422
-        assert "risk99" in response.text
-
-    def test_the_ratings_survive_a_reload(self, client, mapped):
+    def test_a_corrected_card_keeps_the_ranking_and_drops_the_mapping(
+        self, client, mapped, graph
+    ):
+        """The mapping was bought against the card being replaced; the ranking
+        is the assessor's, and every risk it names is still on the new card."""
         client.post(f"/api/projects/{mapped['id']}/severity", json={"risk2": 5})
-        again = client.get(f"/api/projects/{mapped['id']}").json()
-        assert again["severity"]["ratings"]["risk2"] == 5
+        again = client.post(f"/api/projects/{mapped['id']}/card", json=graph).json()
+        assert again["severity"]["ratings"] == {"risk2": 5}
+        assert again["mapping_run"] is None
 
 
 class TestTheHomepage:
@@ -260,49 +202,41 @@ class TestThePages:
         _start(client, graph, name="MCAS pre-market")
         page = client.get("/projects").text
         assert "MCAS pre-market" in page
-        assert "Awaiting your answer" in page
+        assert "Awaiting your ranking" in page
 
-    def test_the_project_page_asks_the_three_questions_with_their_quotes(self, client, graph):
+    def test_the_project_page_opens_on_the_risks(self, client, graph):
+        """No questions, no gate: the card's risks and a rating for each."""
         project = _start(client, graph)
         page = client.get(f"/projects/{project['id']}").text
-        assert "Annex III: the three questions" in page
-        assert CREDIT in page                       # the quote behind high-risk
-        assert "Annex III point 5(b)" in page
-        assert "The model could not tell" in page   # the undetermined one
-        assert page.count('type="radio"') == 6      # yes/no for each of three
+        assert "Rank the risks on the card" in page
+        assert "Loan officers rubber-stamp" in page          # the risk itself
+        assert "Overreliance" in page                        # its VAIR typing
+        assert page.count("<select") == 5                    # one per risk
+        assert "Map the risks to objectives" in page
 
-    def test_the_project_page_will_not_offer_mapping_before_the_answer(self, client, graph):
+    def test_nothing_asks_the_three_questions(self, client, graph):
+        """"Annex III" itself still occurs: it is in the objectives' own text.
+        What must be gone are the question form and its answers."""
         project = _start(client, graph)
         page = client.get(f"/projects/{project['id']}").text
-        assert "Map the risks to objectives" not in page
-        assert "Answer the three questions first" in page
+        for gone in ("the three questions", 'type="radio"', "/answer", "Confirm"):
+            assert gone not in page, gone
 
-    def test_after_answering_the_page_offers_the_second_workflow(self, client, graph):
+    def test_ranking_from_the_page_re_tiers_it(self, client, graph):
         project = _start(client, graph)
+        client.post(f"/projects/{project['id']}/map", follow_redirects=False)
         client.post(
-            f"/projects/{project['id']}/answer",
-            data={"high_risk": "yes", "personal_data": "yes",
-                  "interacts_with_natural_persons": "no"},
+            f"/projects/{project['id']}/severity",
+            data={f"risk{n}": "5" if n == 2 else "1" for n in range(5)},
             follow_redirects=False,
         )
         page = client.get(f"/projects/{project['id']}").text
-        assert "Map the risks to objectives" in page
-
-    def test_the_finished_page_shows_the_risks_and_the_tiers(self, client, graph):
-        project = _start(client, graph)
-        client.post(f"/projects/{project['id']}/answer",
-                    data={"high_risk": "yes", "personal_data": "yes",
-                          "interacts_with_natural_persons": "yes"},
-                    follow_redirects=False)
-        client.post(f"/projects/{project['id']}/map", follow_redirects=False)
-        page = client.get(f"/projects/{project['id']}").text
-        assert "Loan officers rubber-stamp" in page          # the risk
-        assert "Overreliance" in page                        # its VAIR typing
         assert 'qf-tag--tier1">Tier 1</span>' in page
         assert page.index("Start here") < page.index("Later")
 
-    def test_an_unanswered_form_is_refused(self, client, graph):
+    def test_a_rating_that_is_not_a_number_is_refused(self, client, graph):
         project = _start(client, graph)
-        response = client.post(f"/projects/{project['id']}/answer",
-                               data={"high_risk": "yes"})
+        response = client.post(
+            f"/projects/{project['id']}/severity", data={"risk2": "high"}
+        )
         assert response.status_code == 400

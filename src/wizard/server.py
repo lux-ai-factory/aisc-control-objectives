@@ -1,10 +1,10 @@
 """Composition root + runnable entrypoint.
 
 Loads the control objectives (bundled CSV, no network and no database) and
-serves them: an HTML page at the root, plus the JSON API. The model proposes
-the three applicability facts from an uploaded card, and it is reached BAF's
-way (see wizard.llm): BAF_LLM_PROVIDER and BAF_LLM_MODEL name it, and the
-provider's own variable carries the key.
+serves them, and the projects assessed against them. The model maps a system's
+risks onto the objectives that mitigate them, and it is reached BAF's way (see
+wizard.llm): BAF_LLM_PROVIDER and BAF_LLM_MODEL name it, and the provider's own
+variable carries the key.
 
 Env:
   WIZARD_CONFIG_FILE       path to the TOML config (default <repo>/wizard.toml)
@@ -30,7 +30,6 @@ from wizard.api.app import create_app
 from wizard.db.repository import ProjectRepository
 from wizard.config import RunConfig
 from wizard.control_objectives import default_csv_path, load_control_objectives
-from wizard.profiling import ProfileExtractor
 from wizard.projects import Projects
 from wizard.risk_mapping import RiskMapper
 from wizard.settings import database_url
@@ -106,7 +105,6 @@ def build_app():
     projects = Projects(
         repository=repository,
         catalogue=objectives,
-        extractor=ProfileExtractor(complete=complete),
         mapper=RiskMapper(complete=complete, catalogue=objectives),
         model=f"{config.provider}/{config.model}",
     )

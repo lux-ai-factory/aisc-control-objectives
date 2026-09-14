@@ -1,18 +1,15 @@
-"""Tiering: of the objectives that apply, which to do first.
+"""Tiering: all 50 objectives are owed, so which of them to do first.
 
-Applicability is all-or-nothing for a high-risk system, so it says what is
-owed, not where to start. The assessor rates each macro requirement 1-5 for
-this system; the wizard orders the objectives by that rating, by what the card
-already admits, and by how binding the duty is, then cuts a Tier 1 that fits
-in a day's work.
+The register never changes; what orders it is the system's own risks. The
+assessor ranks each risk 1-5, the mapper says which objectives mitigate which
+risk, and an objective inherits the severity of the worst risk it answers.
+Tier 1 is the top of that, capped at what an assessor can actually start.
 """
 
 from __future__ import annotations
 
 import pytest
 
-from wizard.applicability import decide
-from wizard.models.profile import Fact, HighRiskFact, Profile
 from wizard.models.ontology import OntologyRisk
 from wizard.prioritising import (
     DEFAULT_SEVERITY,
@@ -21,17 +18,6 @@ from wizard.prioritising import (
     prioritise,
 )
 from wizard.risk_mapping import MappedObjective, Mapping
-
-ALL_YES = Profile(
-    high_risk=HighRiskFact(value="yes", annex_iii_point="5(b)"),
-    personal_data=Fact(value="yes"),
-    interacts_with_natural_persons=Fact(value="yes"),
-)
-
-
-@pytest.fixture()
-def verdicts(objectives):
-    return decide(ALL_YES, objectives, confirmed=True)
 
 
 def _tiers(priorities):
@@ -63,7 +49,7 @@ class TestSeverity:
             OntologyRisk(id="r-2", text="and another"),
         ]
         severity = Severity.model_validate({"ratings": {"Risk_1": 5, "r-2": 1}})
-        priorities = prioritise(objectives, decide(ALL_YES, objectives), severity, {}, odd)
+        priorities = prioritise(objectives, severity, {}, odd)
         assert priorities            # no raise: the graph's ids are the authority
 
 
@@ -87,139 +73,134 @@ MAPPINGS = {
 
 
 class TestTiering:
-    def test_only_objectives_that_apply_are_tiered(self, objectives):
-        """A system whose facts are unsettled has nothing to schedule, except
-        the two voluntary objectives, which apply to everyone."""
-        nothing = Profile()
-        priorities = prioritise(objectives, decide(nothing, objectives), Severity(), {}, RISKS)
-        by_id = {p.objective_id: p for p in priorities}
-        assert by_id["R1.1"].tier is None
-        assert by_id["R6.1"].tier == 3
+    def test_every_objective_is_tiered(self, objectives):
+        """All 50 are the register: none is ruled out, they are only ordered."""
+        priorities = prioritise(objectives, Severity(), MAPPINGS, RISKS)
+        assert len(priorities) == 50
+        assert all(p.tier in (1, 2, 3) for p in priorities)
 
-    def test_a_rating_for_a_risk_the_qualification_does_not_have_fails_loudly(
-        self, objectives, verdicts
-    ):
+    def test_a_rating_for_a_risk_the_card_does_not_have_fails_loudly(self, objectives):
         with pytest.raises(ValueError, match="risk9"):
-            prioritise(objectives, verdicts, Severity(ratings={"risk9": 5}), MAPPINGS, RISKS)
+            prioritise(objectives, Severity(ratings={"risk9": 5}), MAPPINGS, RISKS)
 
-    def test_tier_one_never_exceeds_the_budget(self, objectives, verdicts):
-        priorities = prioritise(objectives, verdicts, Severity(), MAPPINGS, RISKS)
+    def test_tier_one_never_exceeds_the_budget(self, objectives):
+        priorities = prioritise(objectives, Severity(), MAPPINGS, RISKS)
         assert TIER_ONE_BUDGET == 7
         assert sum(p.tier == 1 for p in priorities) <= 7
 
-    def test_an_objective_that_mitigates_the_worst_risk_is_tier_one(self, objectives, verdicts):
+    def test_an_objective_that_mitigates_the_worst_risk_is_tier_one(self, objectives):
         severity = Severity.model_validate({"ratings": {"risk2": 5, "risk4": 1}})
-        by_id = {p.objective_id: p for p in prioritise(objectives, verdicts, severity, MAPPINGS, RISKS)}
+        by_id = {p.objective_id: p for p in prioritise(objectives, severity, MAPPINGS, RISKS)}
         assert by_id["R1.1"].tier == 1
         assert by_id["R1.4"].tier == 1
         assert any("rubber-stamp" in r for r in by_id["R1.1"].reasons)
         # and the objectives answering the risk rated 1 are pushed out of it
         assert by_id["R2.3"].tier == 2
 
-    def test_a_marginal_risk_cannot_put_a_binding_duty_in_tier_one(self, objectives, verdicts):
+    def test_a_marginal_risk_cannot_put_a_binding_duty_in_tier_one(self, objectives):
         """The binding bonus is a tiebreak among work, and it was being added
         before the threshold test, so +1 lifted a risk rated 2 over the line."""
         binding = next(o for o in objectives if "Binding" in o.grounding_tier_flag)
         mapped = {"risk2": _maps("risk2", binding.id, "R1.1")}
         severity = Severity.model_validate({"ratings": {"risk2": 2}})
-        by_id = {p.objective_id: p for p in prioritise(objectives, verdicts, severity, mapped, RISKS)}
+        by_id = {p.objective_id: p for p in prioritise(objectives, severity, mapped, RISKS)}
         assert by_id[binding.id].tier == 2
         assert by_id["R1.1"].tier == 2
 
-    def test_tier_one_holds_only_risk_driven_work(self, objectives, verdicts):
+    def test_tier_one_holds_only_risk_driven_work(self, objectives):
         """Padding the budget with objectives nothing points at would make
         "start here" mean "these seven, some for no reason"."""
-        priorities = prioritise(objectives, verdicts, Severity(), MAPPINGS, RISKS)
+        priorities = prioritise(objectives, Severity(), MAPPINGS, RISKS)
         assert all(p.risk_ids for p in priorities if p.tier == 1)
 
-    def test_tier_one_is_smaller_than_the_budget_when_little_is_driven(
-        self, objectives, verdicts
-    ):
+    def test_tier_one_is_smaller_than_the_budget_when_little_is_driven(self, objectives):
         few = {"risk2": _maps("risk2", "R1.1", "R1.4")}
-        priorities = prioritise(objectives, verdicts, Severity(), few, RISKS)
+        priorities = prioritise(objectives, Severity(), few, RISKS)
         assert sum(p.tier == 1 for p in priorities) == 2
 
-    def test_reordering_the_risks_reorders_the_work(self, objectives, verdicts):
+    def test_reordering_the_risks_reorders_the_work(self, objectives):
         """The whole point: the same 50 duties, a different place to start."""
         oversight_first = Severity.model_validate({"ratings": {"risk2": 5, "risk4": 1}})
         poisoning_first = Severity.model_validate({"ratings": {"risk2": 1, "risk4": 5}})
-        a = {p.objective_id: p.tier for p in prioritise(objectives, verdicts, oversight_first, MAPPINGS, RISKS)}
-        b = {p.objective_id: p.tier for p in prioritise(objectives, verdicts, poisoning_first, MAPPINGS, RISKS)}
+        a = _tiers(prioritise(objectives, oversight_first, MAPPINGS, RISKS))
+        b = _tiers(prioritise(objectives, poisoning_first, MAPPINGS, RISKS))
         assert a["R1.1"] == 1 and b["R2.3"] == 1
         assert b["R1.1"] > a["R1.1"]      # oversight drops out of Tier 1
         assert a["R2.3"] > b["R2.3"]      # and poisoning takes its place
 
-    def test_an_objective_mitigating_two_risks_takes_the_worse_one(self, objectives, verdicts):
+    def test_an_objective_mitigating_two_risks_takes_the_worse_one(self, objectives):
         both = dict(MAPPINGS)
         both["risk4"] = _maps("risk4", "R1.1")
         severity = Severity.model_validate({"ratings": {"risk2": 1, "risk4": 5}})
-        by_id = {p.objective_id: p for p in prioritise(objectives, verdicts, severity, both, RISKS)}
+        by_id = {p.objective_id: p for p in prioritise(objectives, severity, both, RISKS)}
         assert by_id["R1.1"].score >= 5
 
-    def test_an_objective_no_risk_maps_to_is_not_tier_one(self, objectives, verdicts):
+    def test_an_objective_no_risk_maps_to_is_not_tier_one(self, objectives):
         """It is still owed, but nothing the assessor identified drives it."""
         severity = Severity.model_validate({"ratings": {"risk2": 5, "risk4": 5}})
-        by_id = {p.objective_id: p for p in prioritise(objectives, verdicts, severity, MAPPINGS, RISKS)}
+        by_id = {p.objective_id: p for p in prioritise(objectives, severity, MAPPINGS, RISKS)}
         assert by_id["R8.1"].tier != 1
         assert any("no identified risk" in r for r in by_id["R8.1"].reasons)
 
-    def test_an_unmapped_objective_sorts_below_every_mapped_one(self, objectives, verdicts):
+    def test_an_unmapped_objective_sorts_below_every_mapped_one(self, objectives):
         """Owed, but not where this system's danger is: that is Later, not
         Next. Sharing a score with a mapped objective would put "nothing points
         at this" alongside "a risk you rated 4 points at this"."""
         severity = Severity.model_validate({"ratings": {"risk2": 1, "risk4": 1}})
-        by_id = {p.objective_id: p for p in prioritise(objectives, verdicts, severity, MAPPINGS, RISKS)}
+        by_id = {p.objective_id: p for p in prioritise(objectives, severity, MAPPINGS, RISKS)}
         mapped = by_id["R1.1"]          # driven by risk2, rated 1 (the lowest)
         unmapped = by_id["R8.1"]        # driven by nothing
         assert mapped.score > unmapped.score
         assert unmapped.tier == 3
 
-    def test_the_tiers_read_as_driven_then_undriven(self, objectives, verdicts):
+    def test_the_tiers_read_as_driven_then_undriven(self, objectives):
         severity = Severity.model_validate({"ratings": {"risk2": 5, "risk4": 4}})
-        priorities = prioritise(objectives, verdicts, severity, MAPPINGS, RISKS)
-        driven = {p.objective_id for p in priorities if p.risk_ids}
+        priorities = prioritise(objectives, severity, MAPPINGS, RISKS)
+        driven = {p.objective_id for p in priorities if p.risk_ids and not p.non_binding}
         tier3 = {p.objective_id for p in priorities if p.tier == 3}
         # nothing a risk drives is relegated to Later
         assert not (driven & tier3)
 
-    def test_with_no_mappings_at_all_nothing_is_tier_one(self, objectives, verdicts):
-        """A graph with no risks, or a mapping run that failed: everything is
+    def test_with_no_mappings_at_all_nothing_is_tier_one(self, objectives):
+        """A card with no risks, or a mapping run that failed: everything is
         owed and nothing is urgent, which is the honest answer. The page still
         renders rather than going blank."""
-        priorities = prioritise(objectives, verdicts, Severity(), {}, [])
+        priorities = prioritise(objectives, Severity(), {}, [])
         assert sum(p.tier == 1 for p in priorities) == 0
         assert sum(p.tier == 3 for p in priorities) == 50
 
-    def test_a_binding_duty_breaks_a_tie(self, objectives, verdicts):
-        priorities = {p.objective_id: p for p in prioritise(objectives, verdicts, Severity(), {}, [])}
+    def test_a_binding_duty_breaks_a_tie(self, objectives):
+        priorities = {p.objective_id: p for p in prioritise(objectives, Severity(), {}, [])}
         binding = next(o for o in objectives if "Binding" in o.grounding_tier_flag)
         plain = next(o for o in objectives
                      if o.macro_id == binding.macro_id and "Binding" not in o.grounding_tier_flag)
         assert priorities[binding.id].score > priorities[plain.id].score
 
-    def test_voluntary_objectives_never_reach_the_top_tiers(self, objectives, verdicts):
+    def test_voluntary_objectives_never_reach_the_top_tiers(self, objectives):
+        """The CSV's own note, not a judgement made here: a voluntary objective
+        binds nobody, so it cannot displace a legal duty however it is rated."""
         mapped = {"risk2": Mapping(risk_id="risk2", objectives=[
             MappedObjective(objective_id="R6.1", quote="q", rationale="claimed")])}
         severity = Severity.model_validate({"ratings": {"risk2": 5}})
-        tiers = _tiers(prioritise(objectives, verdicts, severity, mapped, RISKS))
+        tiers = _tiers(prioritise(objectives, severity, mapped, RISKS))
         assert tiers["R6.1"] == 3
 
-    def test_the_order_is_stable_for_equal_scores(self, objectives, verdicts):
-        first = _tiers(prioritise(objectives, verdicts, Severity(), MAPPINGS, RISKS))
-        second = _tiers(prioritise(objectives, verdicts, Severity(), MAPPINGS, RISKS))
+    def test_the_order_is_stable_for_equal_scores(self, objectives):
+        first = _tiers(prioritise(objectives, Severity(), MAPPINGS, RISKS))
+        second = _tiers(prioritise(objectives, Severity(), MAPPINGS, RISKS))
         assert first == second
 
-    def test_the_budget_can_be_narrowed(self, objectives, verdicts):
-        priorities = prioritise(objectives, verdicts, Severity(), MAPPINGS, RISKS, budget=3)
+    def test_the_budget_can_be_narrowed(self, objectives):
+        priorities = prioritise(objectives, Severity(), MAPPINGS, RISKS, budget=3)
         assert sum(p.tier == 1 for p in priorities) == 3
 
 
 class TestTheMcasCase:
-    """Everything applies, so where to start is decided by the system's own risks."""
+    """Where to start is decided by the system's own risks, and nothing else."""
 
-    def test_the_worst_risk_drives_tier_one(self, objectives, verdicts):
+    def test_the_worst_risk_drives_tier_one(self, objectives):
         severity = Severity.model_validate({"ratings": {"risk2": 5, "risk4": 4}})
-        priorities = prioritise(objectives, verdicts, severity, MAPPINGS, RISKS)
+        priorities = prioritise(objectives, severity, MAPPINGS, RISKS)
         tier_one = {p.objective_id for p in priorities if p.tier == 1}
         assert {"R1.1", "R1.4", "R2.3"} <= tier_one
         assert len(tier_one) <= 7

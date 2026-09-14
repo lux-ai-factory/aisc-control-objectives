@@ -11,90 +11,20 @@
     <p>{{ record.system_name }}{% if record.qualification_id %} · qualification {{ record.qualification_id }}{% endif %}</p>
   </div>
 
-  {# ── 1. the three questions ─────────────────────────────────────────── #}
+  {# ── 1. rank the risks ──────────────────────────────────────────────── #}
   <div class="qf-section">
     <div class="co-macro-head">
       <span class="co-macro-id">1</span>
-      <h2>Annex III: the three questions</h2>
-      <span class="n">{% if view.can_map %}answered{% else %}awaiting your answer{% endif %}</span>
+      <h2>Rank the risks on the card</h2>
+      <span class="n">{{ view.rated }} of {{ record.ontology.risks | length }} rated</span>
     </div>
 
-    {%- if record.profile_run and record.profile_run.stop == "failed" %}
-    <div class="error">The model could not read the AI Card ({{ record.profile_run.error }}).
-       Answer the three questions yourself below.</div>
-    {%- elif not view.can_map %}
-    <div class="notice">Proposed by the model from this system's AI Card, each on a quote you
-       can check. <strong>You have the final word</strong>: confirm what it read, or refuse
-       it and answer the other way. Nothing is mapped or tiered until all three are answered.</div>
+    {%- if not record.ontology.risks %}
+    <div class="error">This AI Card carries no risks, so there is nothing to rank and
+       nothing to order the objectives by. Upload a card whose AIRO graph has them.</div>
     {%- else %}
-    <div class="notice">Answered {{ record.answer.answered_at.strftime('%Y-%m-%d %H:%M') }}.
-       The model's proposal is kept beside your answer, so where you disagreed stays visible.</div>
-    {%- endif %}
-
-    <form method="post" action="{{ root_path }}/projects/{{ record.id }}/answer">
-      {%- for name, question in facts %}
-      {%- set fact = proposal.fact(name) %}
-      <div class="co-fact">
-        <div>
-          <h3>{{ question }}</h3>
-          {%- if fact.value == "undetermined" %}
-          <p class="q"><strong>The model could not tell.</strong>
-             {{ fact.rationale or "The card does not settle this." }}
-             You decide.</p>
-          {%- else %}
-          <p class="q">The model reads this as <strong>{{ fact.value }}</strong>.
-             {{ fact.rationale }}</p>
-          {%- if fact.quote %}
-          <blockquote class="co-quote">“{{ fact.quote }}”
-            <small>{{ fact.source or "the card" }}{% if name == "high_risk" and fact.annex_iii_point %} · Annex III point {{ fact.annex_iii_point }}{% endif %}</small>
-          </blockquote>
-          {%- endif %}
-          {%- endif %}
-          {%- for finding in (record.profile_run.findings if record.profile_run else []) if finding.fact == name %}
-          <p class="co-note co-note--flag"><b>{{ finding.flag }}:</b> {{ finding.detail }}</p>
-          {%- endfor %}
-        </div>
-        <div class="field">
-          <label>Your answer</label>
-          <div class="co-choice">
-            <label class="co-radio"><input type="radio" name="{{ name }}" value="yes"
-              {% if answered(name) is true %}checked{% endif %}> Yes</label>
-            <label class="co-radio"><input type="radio" name="{{ name }}" value="no"
-              {% if answered(name) is false %}checked{% endif %}> No</label>
-          </div>
-        </div>
-      </div>
-      {%- endfor %}
-      <div class="qf-actions">
-        <button class="btn" type="submit">{% if view.can_map %}Update the answer{% else %}Confirm{% endif %}</button>
-      </div>
-    </form>
-  </div>
-
-  {# ── 2. the risks ───────────────────────────────────────────────────── #}
-  <div class="qf-section">
-    <div class="co-macro-head">
-      <span class="co-macro-id">2</span>
-      <h2>The risks on the card</h2>
-      <span class="n">{{ record.ontology.risks | length }} from the AI Card</span>
-    </div>
-
-    {%- if not view.can_map %}
-    <p class="qf-help">Answer the three questions first. A tier orders work that is owed,
-       and nothing is owed until they are answered.</p>
-    {%- elif not view.mapped %}
-    <p class="qf-help">Each risk is read against the 50 control objectives to find the ones
-       that would mitigate it, each resting on a quote from that risk's own chain.</p>
-    <form method="post" action="{{ root_path }}/projects/{{ record.id }}/map">
-      <div class="qf-actions"><button class="btn" type="submit">Map the risks to objectives</button></div>
-    </form>
-    {%- else %}
-    {%- if record.mapping_run.stop != "clean" %}
-    <div class="error">The mapping stopped on <code>{{ record.mapping_run.stop }}</code>{% if record.mapping_run.error %}: {{ record.mapping_run.error }}{% endif %}.
-       What survived its checks is below; what did not is listed with each risk.</div>
-    {%- endif %}
-    <p class="qf-help">Rate each risk 1 (marginal here) to 5 (decisive). The objectives
-       answering the worst risks become Tier 1.</p>
+    <p class="qf-help">Rate each risk 1 (marginal for this system) to 5 (decisive).
+       The objectives answering the worst risks become Tier 1. Unrated risks count as 3.</p>
     <form method="post" action="{{ root_path }}/projects/{{ record.id }}/severity">
       {%- for risk in risks %}
       <div class="co-risk">
@@ -109,6 +39,7 @@
             {%- if risk.risk.stakeholder %}<dt>Borne by</dt><dd>{{ risk.risk.stakeholder }}</dd>{% endif %}
             {%- if risk.risk.vair_terms %}<dt>Typed in VAIR</dt><dd>{{ risk.risk.vair_terms | join(', ') }}</dd>{% endif %}
           </dl>
+          {%- if view.mapped %}
           <p class="co-reason">
             {%- if risk.mapped %}Mitigated by
             {%- for objective_id, rationale in risk.mapped %}
@@ -116,6 +47,7 @@
             {%- endfor %}
             {%- else %}<em>No objective was mapped to this risk.</em>{% endif %}
           </p>
+          {%- endif %}
           {%- for finding in risk.findings %}
           <p class="co-note co-note--flag"><b>{{ finding.flag }}:</b> {{ finding.detail }}</p>
           {%- endfor %}
@@ -130,18 +62,40 @@
         </div>
       </div>
       {%- endfor %}
-      <div class="qf-actions"><button class="btn" type="submit">Re-tier</button></div>
+      <div class="qf-actions"><button class="btn" type="submit">Save the ranking</button></div>
     </form>
     {%- endif %}
   </div>
 
-  {# ── 3. the objectives ──────────────────────────────────────────────── #}
+  {# ── 2. map them to objectives ──────────────────────────────────────── #}
+  {%- if record.ontology.risks %}
+  <div class="qf-section">
+    <div class="co-macro-head">
+      <span class="co-macro-id">2</span>
+      <h2>Map the risks to control objectives</h2>
+      <span class="n">{% if view.mapped %}mapped{% else %}not yet mapped{% endif %}</span>
+    </div>
+
+    {%- if view.mapped and record.mapping_run.stop != "clean" %}
+    <div class="error">The mapping stopped on <code>{{ record.mapping_run.stop }}</code>{% if record.mapping_run.error %}: {{ record.mapping_run.error }}{% endif %}.
+       What survived its checks is above; what did not is listed with each risk.</div>
+    {%- endif %}
+    <p class="qf-help">Each risk is read against the 50 control objectives to find the ones
+       that would mitigate it, each resting on a quote from that risk's own chain.
+       {%- if view.mapped %} Re-running replaces the mapping; the ranking is kept.{% endif %}</p>
+    <form method="post" action="{{ root_path }}/projects/{{ record.id }}/map">
+      <div class="qf-actions">
+        <button class="btn" type="submit">{% if view.mapped %}Map again{% else %}Map the risks to objectives{% endif %}</button>
+      </div>
+    </form>
+  </div>
+  {%- endif %}
+
+  {# ── 3. the objectives, in tiers ────────────────────────────────────── #}
   <div class="co-stats">
     <div class="co-stat co-stat--tier1"><div class="v">{{ counts.tier1 }}</div><div class="k">Tier 1 · start here</div></div>
     <div class="co-stat"><div class="v">{{ counts.tier2 }}</div><div class="k">Tier 2 · next</div></div>
     <div class="co-stat"><div class="v">{{ counts.tier3 }}</div><div class="k">Tier 3 · later</div></div>
-    <div class="co-stat"><div class="v">{{ counts.to_achieve }}</div><div class="k">Owed in total</div></div>
-    <div class="co-stat"><div class="v">{{ counts.not_applicable }}</div><div class="k">Not applicable</div></div>
   </div>
 
   {%- for section in sections %}
@@ -150,21 +104,16 @@
       <h2>{{ section.title }}</h2>
       <span class="n">{{ section.subtitle }} · {{ section.objectives | length }}</span>
     </div>
-    {%- for objective, verdict, priority in section.objectives %}
-    <article class="co-obj {{ 'co-obj--out' if verdict.applies == 'no' else '' }}">
+    {%- for objective, priority in section.objectives %}
+    <article class="co-obj">
       <div class="co-obj-head">
         <span class="co-obj-id">{{ objective.id }}</span>
         <h3>{{ objective.sub_requirement_label }}</h3>
         <span class="co-family">{{ objective.macro_id }} {{ objective.macro_title }}</span>
-        {%- if priority and priority.tier %}
         <span class="qf-tag qf-tag--tier{{ priority.tier }}">Tier {{ priority.tier }}</span>
-        {%- endif %}
-        {%- if verdict.non_binding %}<span class="qf-tag qf-tag--voluntary">Non-binding</span>{% endif %}
+        {%- if priority.non_binding %}<span class="qf-tag qf-tag--voluntary">Non-binding</span>{% endif %}
       </div>
-      <p class="co-reason">{{ verdict.reason }}</p>
-      {%- if priority and priority.tier %}
       <p class="co-reason co-why">{% if priority.tier == 1 %}<b>Start here.</b> {% endif %}{{ priority.reasons | join('; ') }}.</p>
-      {%- endif %}
       <p class="co-text">{{ objective.text }}</p>
       {% include "_objective_meta.html.j2" %}
     </article>
@@ -174,7 +123,6 @@
 
   <p class="co-count">
     Card <code>{{ record.digest[:12] }}</code> · catalogue <code>{{ record.objectives_digest[:12] }}</code>
-    {%- if record.profile_run %} · profile run {{ record.profile_run.attempts }} attempt{{ 's' if record.profile_run.attempts != 1 }}, <code>{{ record.profile_run.stop }}</code>{% endif %}
     {%- if record.mapping_run %} · mapping {{ record.mapping_run.attempts }} attempt{{ 's' if record.mapping_run.attempts != 1 }}, <code>{{ record.mapping_run.stop }}</code>, {{ record.mapping_run.model }}{% endif %}
   </p>
 {% endblock %}

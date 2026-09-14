@@ -15,12 +15,7 @@ import json
 import pytest
 
 from wizard.models.ontology import Ontology
-from wizard.models.profile import Fact, HighRiskFact, Profile
-from wizard.profiling import Finding as ProfileFinding
-from wizard.profiling import ProfileRun
-from wizard.risk_mapping import MappedObjective, Mapping, MappingRun
-
-CREDIT = "Evaluates creditworthiness"
+from wizard.risk_mapping import Finding, MappedObjective, Mapping, MappingRun
 
 
 @pytest.fixture()
@@ -69,20 +64,9 @@ class TestCreatingAProject:
 class TestSurvivingARestart:
     def test_everything_worth_money_comes_back(self, repository, ontology, graph_json):
         """The mapping cost five model calls; losing it to a restart means
-        paying again for a slightly different answer."""
+        paying again for a slightly different answer. The ranking is worth
+        more still: a person made it."""
         project = repository.create(name="MCAS", ontology=ontology, jsonld=graph_json)
-        repository.save_profile_run(
-            project.id,
-            ProfileRun(
-                profile=Profile(
-                    high_risk=HighRiskFact(value="yes", quote=CREDIT, annex_iii_point="5(b)"),
-                    personal_data=Fact(value="yes", quote=CREDIT),
-                    interacts_with_natural_persons=Fact(value="undetermined"),
-                ),
-                stop="clean",
-                attempts=1,
-            ),
-        )
         repository.save_mapping_run(
             project.id,
             MappingRun(
@@ -100,58 +84,41 @@ class TestSurvivingARestart:
         repository.rate(project.id, {"risk2": 5, "risk4": 1})
 
         # a fresh repository, as a restart would give
-        fresh = repository.reopened()
-        stored = fresh.get(project.id)
-        assert stored.profile_run.profile.high_risk.annex_iii_point == "5(b)"
-        assert stored.profile_run.profile.high_risk.quote == CREDIT
+        stored = repository.reopened().get(project.id)
         assert stored.mapping_run.mappings["risk2"].objectives[0].objective_id == "R1.1"
         assert stored.mapping_run.model == "openai/gpt-4o"
         assert stored.severity.ratings == {"risk2": 5, "risk4": 1}
 
     def test_a_run_that_struggled_keeps_its_findings(self, repository, ontology, graph_json):
         project = repository.create(name="MCAS", ontology=ontology, jsonld=graph_json)
-        repository.save_profile_run(
+        repository.save_mapping_run(
             project.id,
-            ProfileRun(
-                profile=Profile(),
-                findings=[ProfileFinding(fact="high_risk", flag="quote-missing", detail="x")],
+            MappingRun(
+                mappings={"risk2": Mapping(risk_id="risk2", stop="cap")},
+                findings=[Finding(risk_id="risk2", flag="quote-not-in-risk", detail="x")],
                 stop="cap",
                 attempts=3,
             ),
         )
         stored = repository.reopened().get(project.id)
-        assert stored.profile_run.stop == "cap"
-        assert [f.flag for f in stored.profile_run.findings] == ["quote-missing"]
+        assert stored.mapping_run.stop == "cap"
+        assert [f.flag for f in stored.mapping_run.findings] == ["quote-not-in-risk"]
 
-
-class TestTheCompanysAnswer:
-    def test_a_project_starts_unconfirmed(self, repository, ontology, graph_json):
+    def test_a_second_run_replaces_the_first(self, repository, ontology, graph_json):
+        """Re-mapping buys a new answer; keeping both would leave the page
+        showing objectives the latest run did not claim."""
         project = repository.create(name="MCAS", ontology=ontology, jsonld=graph_json)
-        assert repository.get(project.id).answer is None
-
-    def test_confirming_records_what_the_company_decided(self, repository, ontology, graph_json):
-        project = repository.create(name="MCAS", ontology=ontology, jsonld=graph_json)
-        repository.answer(project.id, high_risk=True, personal_data=True,
-                          interacts_with_natural_persons=False)
+        for objective_id in ("R1.1", "R2.3"):
+            repository.save_mapping_run(
+                project.id,
+                MappingRun(mappings={"risk2": Mapping(
+                    risk_id="risk2",
+                    objectives=[MappedObjective(objective_id=objective_id, quote="q", rationale="w")],
+                )}),
+            )
         stored = repository.reopened().get(project.id)
-        assert stored.answer.high_risk is True
-        assert stored.answer.interacts_with_natural_persons is False
-        assert stored.answer.answered_at
-
-    def test_the_models_proposal_survives_being_refused(self, repository, ontology, graph_json):
-        """Where the model and the company disagree is a fact about the
-        assessment, not noise to overwrite."""
-        project = repository.create(name="MCAS", ontology=ontology, jsonld=graph_json)
-        repository.save_profile_run(
-            project.id,
-            ProfileRun(profile=Profile(high_risk=HighRiskFact(value="yes", quote=CREDIT,
-                                                              annex_iii_point="5(b)"))),
-        )
-        repository.answer(project.id, high_risk=False, personal_data=False,
-                          interacts_with_natural_persons=False)
-        stored = repository.reopened().get(project.id)
-        assert stored.profile_run.profile.high_risk.value == "yes"   # the proposal
-        assert stored.answer.high_risk is False                      # the decision
+        claimed = [o.objective_id for o in stored.mapping_run.mappings["risk2"].objectives]
+        assert claimed == ["R2.3"]
 
 
 class TestListingAndReplacing:

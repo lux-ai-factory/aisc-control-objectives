@@ -233,7 +233,7 @@ class TestTheMapper:
         assert "R11.4" in user                      # the whole catalogue is offered
 
     def test_the_skill_carries_a_literal_answer_schema(self):
-        from wizard.profiling import load_skill
+        from wizard.skills import load_skill
 
         skill = load_skill(RiskMapper.SKILL)
         blocks = [b for b in skill.split("```") if b.strip().startswith(("json", "{"))]

@@ -5,7 +5,7 @@ Two things to look at, and one project at a time:
     /                      the way in
     /objectives            the 50 control objectives, as a reference
     /projects              the systems being assessed
-    /projects/{id}         the AI Card · three questions · Confirm/Refuse · map · tiers
+    /projects/{id}         the AI Card · rank its risks · map · tiers
 
 The JSON API mirrors the pages. Everything is persisted, so a restart loses
 nothing.
@@ -20,13 +20,10 @@ from fastapi import Body, FastAPI, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
-
 from wizard.config import RunConfig
 from wizard.control_objectives import ControlObjectiveCatalogue
 from wizard.models.control_objective import ControlObjective, MacroRequirement
 from wizard.models.ontology import Ontology
-from wizard.models.profile import Profile
 from wizard.projects import Projects
 from wizard.rendering import (
     STATIC,
@@ -44,22 +41,6 @@ CARD_WANTED = (
     "is not an AI Card. Download the AI Card from the system's page in the "
     "qualification app: either ai-card.json, or ontology.jsonld."
 )
-
-
-class AnswerBody(BaseModel):
-    """The company's decision. Booleans: a model may be unsure, a register may not."""
-
-    high_risk: bool
-    personal_data: bool
-    interacts_with_natural_persons: bool
-
-
-class NoModel:
-    """Stand-in when no extractor is wired: every fact comes back undetermined
-    and the company answers all three by hand."""
-
-    def propose(self, ontology, findings=()) -> Profile:
-        return Profile()
 
 
 class NoMapper:
@@ -144,22 +125,11 @@ def _register_pages(app, objectives, projects, _view_or_404, source_name, root_p
             render_project_page(_view_or_404(project_id), objectives, root_path=root_path)
         )
 
-    @app.post("/projects/{project_id}/answer", include_in_schema=False)
-    async def answer_form(project_id: str, request: Request):
-        _view_or_404(project_id)
-        form = await request.form()
-        if not all(form.get(name) in {"yes", "no"} for name in Profile.FACTS):
-            return PlainTextResponse("Answer all three questions.", status_code=400)
-        projects.answer(project_id, {name: form[name] == "yes" for name in Profile.FACTS})
-        return RedirectResponse(url=f"{root_path}/projects/{project_id}", status_code=303)
-
     @app.post("/projects/{project_id}/map", include_in_schema=False)
     def map_form(project_id: str):
+        """The one agentic step, on a button: it costs a model call per risk."""
         _view_or_404(project_id)
-        try:
-            projects.map_risks_of(project_id)
-        except PermissionError as exc:
-            return PlainTextResponse(str(exc), status_code=409)
+        projects.map_risks_of(project_id)
         return RedirectResponse(url=f"{root_path}/projects/{project_id}", status_code=303)
 
     @app.post("/projects/{project_id}/severity", include_in_schema=False)
@@ -214,7 +184,7 @@ def _register_objective_api(app, objectives, config):
 
 
 def _register_project_api(app, projects, _view_or_404):
-    """One assessed system: its graph, its answer, its mapping, its tiers."""
+    """One assessed system: its graph, its ranking, its mapping, its tiers."""
 
     def payload(view) -> dict:
         record = view.record
@@ -229,12 +199,9 @@ def _register_project_api(app, projects, _view_or_404):
             "updated_at": record.updated_at.isoformat(),
             "risks": [risk.model_dump() for risk in record.ontology.risks],
             "severity": record.severity.model_dump(),
-            "profile_run": record.profile_run.model_dump() if record.profile_run else None,
-            "answer": record.answer.__dict__ if record.answer else None,
             "mapping_run": record.mapping_run.model_dump() if record.mapping_run else None,
-            "verdicts": [v.model_dump() for v in view.verdicts],
             "priorities": [p.model_dump() for p in view.priorities],
-            "can_map": view.can_map,
+            "mapped": view.mapped,
         }
 
     def _card_or_422(raw: object) -> None:
@@ -243,7 +210,7 @@ def _register_project_api(app, projects, _view_or_404):
 
     @app.post("/api/projects", status_code=201)
     def create_project(card: Any = Body(...), name: str = Query("")) -> dict:
-        """Upload a system's AI Card; the first workflow runs on it."""
+        """Upload a system's AI Card. Its risks are what gets ranked next."""
         _card_or_422(card)
         return payload(projects.create(name=name, jsonld=json.dumps(card), raw=card))
 
@@ -260,20 +227,11 @@ def _register_project_api(app, projects, _view_or_404):
         """A corrected AI Card for a system already under assessment."""
         _view_or_404(project_id)
         _card_or_422(card)
-        return payload(projects.replace_graph(project_id, jsonld=json.dumps(card), raw=card))
-
-    @app.post("/api/projects/{project_id}/answer")
-    def answer(project_id: str, body: AnswerBody) -> dict:
-        _view_or_404(project_id)
-        return payload(projects.answer(project_id, body.model_dump()))
+        return payload(projects.replace_card(project_id, jsonld=json.dumps(card), raw=card))
 
     @app.post("/api/projects/{project_id}/map")
     def map_risks(project_id: str) -> dict:
-        _view_or_404(project_id)
-        try:
-            return payload(projects.map_risks_of(project_id))
-        except PermissionError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return payload(projects.map_risks_of(project_id))
 
     @app.post("/api/projects/{project_id}/severity")
     def rate(project_id: str, ratings: dict[str, int] = Body(...)) -> dict:

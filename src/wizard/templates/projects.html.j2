@@ -6,9 +6,9 @@
   <div class="co-header">
     <h1>Projects</h1>
     <p>One project per AI system being assessed. Start it with the system's
-       <strong>AI Card</strong> from the qualification app, answer the three
-       Annex III questions, and the wizard works out which control objectives are owed
-       and which to start with.</p>
+       <strong>AI Card</strong> from the qualification app, rank the risks the card
+       carries, and the wizard works out which control objectives answer them and
+       which to start with.</p>
   </div>
 
   <div class="qf-section">
@@ -41,10 +41,8 @@
     <article class="co-obj">
       <div class="co-obj-head">
         <h3><a href="{{ root_path }}/projects/{{ record.id }}">{{ record.name }}</a></h3>
-        {%- if not record.profile_run %}
-        <span class="qf-tag qf-tag--pending">Not yet assessed</span>
-        {%- elif not view.can_map %}
-        <span class="qf-tag qf-tag--pending">Awaiting your answer</span>
+        {%- if not view.rated %}
+        <span class="qf-tag qf-tag--pending">Awaiting your ranking</span>
         {%- elif not view.mapped %}
         <span class="qf-tag qf-tag--in">Ready to map</span>
         {%- else %}

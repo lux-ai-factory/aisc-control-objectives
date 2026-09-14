@@ -4,7 +4,7 @@ The qualification carries the risks an assessor actually identified for this
 system, as AIRO chains. This is what connects them to the 50 objectives, so
 that ranking the risks ranks the work.
 
-Same shape as `wizard.profiling` and the qualification app's ontology filler:
+Same shape as the qualification app's ontology filler:
 the model proposes, deterministic controls check every claim against the
 catalogue and against the risk's own words, failing items go back with the
 findings, the rounds are bounded, and **every exit publishes** so a person has

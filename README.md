@@ -52,9 +52,15 @@ FastAPI, port `8090`, interactive docs at `/docs`.
 | `GET /api/control-objectives?mode=control\|test` | the control / test partition |
 | `GET /api/control-objectives/{id}` | one objective, 404 if unknown |
 | `GET /api/macro-requirements` | R1 ... R11 with their objectives nested |
-| `POST /api/cards` | assess a system card (body: the card JSON) |
-| `GET /api/cards` · `GET /api/cards/{id}` | assessed cards |
-| `POST /api/cards/{id}/profile` | confirm or override the three facts |
+| `POST /api/projects` | start a project (body: the AI Card) |
+| `GET /api/projects` · `GET /api/projects/{id}` | the systems under assessment |
+| `POST /api/projects/{id}/card` | replace the card with a corrected export |
+| `POST /api/projects/{id}/severity` | rank the risks (body: `{"risk2": 5, ...}`) |
+| `POST /api/projects/{id}/map` | run the mapping (one model call per risk) |
+| `DELETE /api/projects/{id}` | delete a project and everything under it |
+
+Pages: `/` the way in, `/objectives` the catalogue, `/projects` and
+`/projects/{id}` the assessments.
 
 Every objective is served with its derived fields: `macro_id`, `macro_title`,
 `requires_control`, `requires_test`, `legal_bases`.
@@ -63,49 +69,61 @@ Every objective is served with its derived fields: `macro_id`, `macro_title`,
 
 ## Assessing a system
 
-Upload a system card (the JSON the qualification module produces) on the root
-page, or `POST /api/cards` with it as the body. Three things happen:
+A project is one system, and it starts with that system's **AI Card** from the
+qualification app: `ai-card.json`, or `ontology.jsonld` if that is what you
+have. Both are the same card — the qualification app's own position is that the
+filled AIRO graph *is* the card — and the graph is where the risks live.
 
-1. **The model proposes an applicability profile**: three facts, each with the
-   literal span of the card it rests on.
+All 50 objectives are the register; no question narrows it. What the wizard
+works out is **where to start**, and that is decided by the system's own risks:
 
-   | Fact | Governs |
-   |---|---|
-   | `high_risk` (with its Annex III point) | the AI Act's Chapter III duties: 44 objectives |
-   | `interacts_with_natural_persons` | Art. 50 disclosure: R4.4 |
-   | `personal_data` | the GDPR-based objectives: R3.3, R3.4, R3.5 |
+1. **Rank the risks the card carries.** Each AIRO chain (risk, its source, the
+   vulnerability it exploits, the consequence, who bears it, the declared
+   control) gets a severity, 1 marginal to 5 decisive, from the assessor. This
+   is the one judgement no model makes here. Unrated risks count as 3.
 
-   R6.1 and R6.2 (Art. 95 codes of conduct) are always in the register, flagged
-   **non-binding**. The role is always the provider. `Target` codes play no part.
+2. **Map the risks to objectives** (`risk_mapping.map_risks`, one model call
+   per risk): which of the 50 would mitigate *this* risk, each claim resting on
+   a literal span of that risk's own chain. The proposal goes through
+   deterministic controls — the objective has to exist, the quote has to be a
+   verbatim span of the risk, no duplicates — and failing items go back to the
+   model with the findings, at most three attempts; the same findings twice
+   running is a fixpoint. **Every exit publishes**, findings attached, because
+   the project page is where a person corrects it.
 
-   The proposal goes through deterministic controls (`profiling.run_controls`):
-   every decided fact needs a quote that is a verbatim span of the card, and
-   `high_risk: yes` needs its Annex III point. Failing facts go back to the
-   model, at most three attempts; the same findings twice running is a fixpoint.
-   **Every exit publishes**, findings attached, because the card page is where a
-   person corrects it. A dead provider publishes an all-undetermined profile
-   with the error on the page.
+3. **Read the tiers** (`prioritising.prioritise`, no model involved). An
+   objective inherits the severity of the worst risk it mitigates. Tier 1 is
+   the top of that, capped at 7 and holding only work a risk actually drives —
+   a short Tier 1 is an honest answer, a padded one is not. Tier 2 is the rest
+   of the driven work; Tier 3 is what is owed but is not where this system's
+   danger lies, plus the two voluntary objectives, which bind nobody and so
+   cannot displace a legal duty.
 
-2. **A rules table decides** (`applicability.decide`): one verdict per
-   objective, `yes` / `no` / `undetermined`, with a printable reason naming
-   the legal basis. No model involved. Verdicts are **provisional** until the
-   profile is confirmed.
+Nothing derived is stored: tiers are recomputed from the card, the ranking and
+the mapping on every read, so a changed rating cannot leave a stale tier behind.
+What *is* stored is what cannot be recomputed — the uploaded bytes and their
+digest, the risks, the ranking, and what the mapping run cost.
 
-3. **A person confirms** the three facts on the card page (or
-   `POST /api/cards/{id}/profile`). The model's quotes stay on the record; the
-   verdicts are recomputed from the confirmed profile.
+The skill the model runs under is
+`src/wizard/skills/mapping-a-risk-to-control-objectives.md`, markdown so its
+behaviour can be changed without touching Python.
 
-The skill the model runs under is `src/wizard/skills/extracting-the-applicability-profile.md`,
-markdown so its behaviour can be changed without touching Python.
+## Storage
+
+Postgres, on the qualification app's blueprint: a table per real thing
+(`project`, `graph`, `risk`, `mapped_objective`, `mapping_run`), cascading
+deletes from the project, and the uploaded graph kept as the bytes that were
+uploaded with a sha256 digest, so the file someone was given and the row are
+the same document. Migrations are Alembic (`alembic upgrade head`); the tests
+run against a real Postgres, not SQLite.
 
 ## Not here yet
 
-**What the card says about each in-scope objective** (claims, admissions,
-silence) is a separate, model-backed layer that is not built. Uploads are held
-in memory and lost on restart. `frontend/` still speaks to a retired plan API.
-The old design documents (`SPEC.md`, `SPEC_HARDENING.md`, `DIMENSION_PLAN.md`,
-`AGENTIC_WORKFLOW.mmd`, `NEXT_STEPS.md`, `HANDOFF.md`) describe the retired
-pipeline and are kept only as a record.
+**What the card says about each objective** (claims, admissions, silence) is a
+separate, model-backed layer that is not built. `frontend/` still speaks to a
+retired plan API. The old design documents (`SPEC.md`, `SPEC_HARDENING.md`,
+`DIMENSION_PLAN.md`, `AGENTIC_WORKFLOW.mmd`, `NEXT_STEPS.md`, `HANDOFF.md`)
+describe the retired pipeline and are kept only as a record.
 
 ## Configuration
 
@@ -122,6 +140,7 @@ Three layers, lowest to highest: **built-in defaults → `wizard.toml` →
 | `WIZARD_PORT` | `8090` | port |
 | `WIZARD_ROOT_PATH` | *(empty)* | sub-path when behind a reverse proxy |
 | `WIZARD_CORS_ORIGINS` | *(permissive)* | comma-separated allowlist |
+| `DATABASE_URL` | local `wizard` database | the same variable the qualification app reads |
 
 API keys live in `.env`, each provider under its own variable
 (`MISTRAL_API_KEY`, `OPENAI_API_KEY`, …), read through BAF's property store.

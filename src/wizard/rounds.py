@@ -1,6 +1,6 @@
 """The review loop, and the rules that end it.
 
-Both the profile extractor and the risk mapper run the same loop: a model
+The risk mapper runs this loop, once per risk: a model
 proposes, deterministic controls check the proposal, whatever failed goes back
 with its findings, and the rounds are bounded. The policy that ends the loop is
 the design, not an implementation detail, so it lives here once rather than

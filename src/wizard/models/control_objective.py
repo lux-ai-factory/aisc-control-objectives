@@ -26,12 +26,9 @@ AssessmentMode = Literal["Control", "Test", "Control + Test"]
 #: the whole row.
 Regime = Literal["ai_act", "gdpr", "conditional", "voluntary"]
 
-#: A CONDITIONAL note must name its trigger in words this table knows, and the
-#: trigger must be a fact of the applicability profile. A note naming none of
-#: them fails at load rather than being routed to the wrong fact.
-CONDITIONAL_TRIGGERS: dict[str, str] = {
-    "natural persons": "interacts_with_natural_persons",
-}
+#: A CONDITIONAL note must name its condition in words this list knows. A note
+#: naming none of them fails at load rather than passing as unconditional.
+CONDITIONAL_CONDITIONS: tuple[str, ...] = ("natural persons",)
 
 
 class ControlObjective(BaseModel):
@@ -58,7 +55,7 @@ class ControlObjective(BaseModel):
     def _derivations_hold(self) -> ControlObjective:
         if self.id.split(".", 1)[0] != self.macro_id:
             raise ValueError(f"id {self.id!r} is not under macro requirement {self.macro_id!r}")
-        self.regimes  # raises on a basis or a conditional trigger it cannot place
+        self.regimes  # raises on a basis or a condition it cannot place
         return self
 
     @computed_field
@@ -101,14 +98,14 @@ class ControlObjective(BaseModel):
         return self.notes.partition(":")[2] if self.note_tag else self.notes
 
     @property
-    def trigger_fact(self) -> str | None:
-        """For a CONDITIONAL row, the profile fact that switches it on."""
+    def condition(self) -> str | None:
+        """For a CONDITIONAL row, the words that say when it applies."""
         if self.note_tag != "CONDITIONAL":
             return None
-        for phrase, fact in CONDITIONAL_TRIGGERS.items():
+        for phrase in CONDITIONAL_CONDITIONS:
             if phrase in self.notes:
-                return fact
-        raise ValueError(f"conditional note names no known trigger: {self.notes!r}")
+                return phrase
+        raise ValueError(f"conditional note names no known condition: {self.notes!r}")
 
     @computed_field
     @property
@@ -117,7 +114,7 @@ class ControlObjective(BaseModel):
         if self.note_tag == "VOLUNTARY":
             return ["voluntary" for _ in self.legal_bases]
         if self.note_tag == "CONDITIONAL":
-            self.trigger_fact
+            self.condition
             return ["conditional" for _ in self.legal_bases]
         regimes: list[Regime] = []
         for basis in self.legal_bases:
