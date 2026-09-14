@@ -54,10 +54,17 @@ class TestSeverity:
             with pytest.raises(ValueError):
                 Severity.model_validate({"ratings": {"risk0": bad}})
 
-    def test_something_that_is_not_a_risk_id_is_rejected(self):
-        for bad in ("banana", "R1", "5"):
-            with pytest.raises(ValueError):
-                Severity.model_validate({"ratings": {bad: 3}})
+    def test_any_id_the_graph_uses_can_be_rated(self, objectives):
+        """Risk ids come from whatever the exporter names its nodes; a pattern
+        of our own would reject a valid graph and leave the assessor unable to
+        rate anything, with no message explaining why."""
+        odd = [
+            OntologyRisk(id="Risk_1", text="named another way"),
+            OntologyRisk(id="r-2", text="and another"),
+        ]
+        severity = Severity.model_validate({"ratings": {"Risk_1": 5, "r-2": 1}})
+        priorities = prioritise(objectives, decide(ALL_YES, objectives), severity, {}, odd)
+        assert priorities            # no raise: the graph's ids are the authority
 
 
 RISKS = [
@@ -108,6 +115,16 @@ class TestTiering:
         assert any("rubber-stamp" in r for r in by_id["R1.1"].reasons)
         # and the objectives answering the risk rated 1 are pushed out of it
         assert by_id["R2.3"].tier == 2
+
+    def test_a_marginal_risk_cannot_put_a_binding_duty_in_tier_one(self, objectives, verdicts):
+        """The binding bonus is a tiebreak among work, and it was being added
+        before the threshold test, so +1 lifted a risk rated 2 over the line."""
+        binding = next(o for o in objectives if "Binding" in o.grounding_tier_flag)
+        mapped = {"risk2": _maps("risk2", binding.id, "R1.1")}
+        severity = Severity.model_validate({"ratings": {"risk2": 2}})
+        by_id = {p.objective_id: p for p in prioritise(objectives, verdicts, severity, mapped, RISKS)}
+        assert by_id[binding.id].tier == 2
+        assert by_id["R1.1"].tier == 2
 
     def test_tier_one_holds_only_risk_driven_work(self, objectives, verdicts):
         """Padding the budget with objectives nothing points at would make

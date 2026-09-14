@@ -14,18 +14,17 @@ from __future__ import annotations
 
 import json
 import re
-from pathlib import Path
 from collections.abc import Iterator, Sequence
 from typing import Literal, Protocol
 
 from pydantic import BaseModel
 
 from wizard.llm import Completer, parse_into
+from wizard.rounds import MAX_ATTEMPTS, Stop, review
+from wizard.skills import load_skill
 from wizard.models.profile import Fact, Profile
 from wizard.models.system_card import SystemCard
 
-SKILLS = Path(__file__).resolve().parent / "skills"
-MAX_ATTEMPTS = 3
 
 Flag = Literal["quote-not-in-card", "quote-missing", "annex-point-missing"]
 
@@ -52,12 +51,18 @@ def _strings(value: object) -> Iterator[str]:
             yield from _strings(item)
 
 
+#: Joins the card's fields so a quote cannot straddle two of them. A model
+#: cannot produce this, so a "span" made of one field's tail and another's head
+#: no longer passes the only deterministic guard on its claims.
+FIELD_BREAK = "\n\u0000\n"
+
+
 def card_text(card: SystemCard) -> str:
     """Every string in the card, so a quote can be checked wherever it came
     from. Derived from the same dump `ProfileExtractor` shows the model, so a
     field added to SystemCard reaches both and a genuine quote from it is never
     flagged quote-not-in-card."""
-    return "\n".join(_strings(card.model_dump()))
+    return FIELD_BREAK.join(_strings(card.model_dump()))
 
 
 def _normalise(text: str) -> str:
@@ -90,16 +95,6 @@ def run_controls(profile: Profile, card: SystemCard) -> list[Finding]:
 
 
 # ── the model side ─────────────────────────────────────────────────────────
-
-
-def load_skill(name: str) -> str:
-    """A skill's body with its frontmatter stripped. Markdown on disk, so the
-    behaviour can be changed without touching Python."""
-    path = SKILLS / f"{name}.md"
-    if not path.is_file():
-        raise FileNotFoundError(f"skill {name!r} not found at {path}")
-    text = path.read_text(encoding="utf-8")
-    return re.sub(r"^---\s*\n.*?\n---\s*\n", "", text, count=1, flags=re.DOTALL).strip()
 
 
 class Extractor(Protocol):
@@ -144,7 +139,7 @@ class ProfileRun(BaseModel):
     #: Findings still open on the published profile.
     findings: list[Finding] = []
     attempts: int = 0
-    stop: Literal["clean", "fixpoint", "cap", "failed"] = "clean"
+    stop: Stop = "clean"
     error: str = ""
 
 
@@ -155,31 +150,26 @@ def _signature(findings: Sequence[Finding]) -> frozenset[tuple[str, str]]:
 def extract_profile(
     card: SystemCard, extractor: Extractor, max_attempts: int = MAX_ATTEMPTS
 ) -> ProfileRun:
-    """Propose, check, re-propose the failing facts; bounded; always publishes."""
-    findings: list[Finding] = []
-    previous: frozenset[tuple[str, str]] | None = None
-    profile = Profile()
+    """Propose the profile, check it, re-propose the failing facts. Bounded and
+    always publishing: see wizard.rounds for the rules."""
 
-    for attempt in range(1, max_attempts + 1):
-        try:
-            proposed = extractor.propose(card, findings)
-            if not isinstance(proposed, Profile):
-                raise TypeError(f"extractor returned {type(proposed).__name__}, not a Profile")
-        except Exception as exc:  # a dead provider must still publish something
-            # ...and what it publishes is the last proposal it had, with that
-            # proposal's findings, not three empty facts.
-            return ProfileRun(
-                profile=profile, findings=findings, attempts=attempt, stop="failed", error=str(exc)
-            )
-        profile = proposed
+    def propose(findings):
+        proposed = extractor.propose(card, findings)
+        if not isinstance(proposed, Profile):
+            raise TypeError(f"extractor returned {type(proposed).__name__}, not a Profile")
+        return proposed
 
-        findings = run_controls(profile, card)
-        if not findings:
-            return ProfileRun(profile=profile, attempts=attempt, stop="clean")
-
-        signature = _signature(findings)
-        if signature == previous:
-            return ProfileRun(profile=profile, findings=findings, attempts=attempt, stop="fixpoint")
-        previous = signature
-
-    return ProfileRun(profile=profile, findings=findings, attempts=max_attempts, stop="cap")
+    round_ = review(
+        propose=propose,
+        check=lambda profile: run_controls(profile, card),
+        empty=Profile,
+        signature=_signature,
+        max_attempts=max_attempts,
+    )
+    return ProfileRun(
+        profile=round_.proposal,
+        findings=round_.findings if round_.stop != "clean" else [],
+        attempts=round_.attempts,
+        stop=round_.stop,
+        error=round_.error,
+    )

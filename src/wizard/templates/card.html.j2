@@ -97,7 +97,9 @@
             {%- if view.risk.vulnerability %}<dt>Vulnerability</dt><dd>{{ view.risk.vulnerability }}</dd>{% endif %}
             {%- if view.risk.consequence %}<dt>Consequence</dt><dd>{{ view.risk.consequence }}</dd>{% endif %}
             {%- if view.risk.control %}<dt>Declared control</dt><dd>{{ view.risk.control }}</dd>{% endif %}
-            {%- if view.risk.areas %}<dt>Impact</dt><dd>{{ view.risk.areas | join(', ') }}{% if view.risk.affected %} · borne by the {{ view.risk.affected }}{% endif %}</dd>{% endif %}
+            {%- if view.risk.areas %}<dt>Impact</dt><dd>{{ view.risk.areas | join(', ') }}</dd>{% endif %}
+            {%- if view.risk.stakeholder %}<dt>Borne by</dt><dd>{{ view.risk.stakeholder }}</dd>{% endif %}
+            {%- if view.risk.vair_terms %}<dt>Typed in VAIR</dt><dd>{{ view.risk.vair_terms | join(', ') }}</dd>{% endif %}
           </dl>
           <p class="co-reason">
             {%- if view.mapped %}Mitigated by

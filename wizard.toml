@@ -12,7 +12,9 @@
 #   provider = "ollama"     model = "mistral:latest"         (no key at all)
 #   provider = "compatible" model = "<anything>"             (BAF_LLM_BASE_URL)
 #
-# Defaults to a model on this machine, so the wizard runs with no credential.
+# A hosted model, because this machine has no GPU and a local 7B could not
+# finish one card inside five minutes. `provider = "ollama"` is the
+# no-credential fallback; see README.
 provider = "openai"
 model = "gpt-4o"
 

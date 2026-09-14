@@ -44,11 +44,17 @@ class TestDotenv:
     not surfaces only as an opaque provider error on a card page."""
 
     def _load(self, tmp_path, monkeypatch, text):
+        """monkeypatch.setenv, not os.environ directly: _load_dotenv writes
+        through setdefault, so without this the keys leak into every later
+        test in the session and the class becomes order-dependent."""
         monkeypatch.setattr(server, "_repo_root", lambda: tmp_path)
         (tmp_path / ".env").write_text(text)
         for name in ("A_KEY", "B_KEY", "C_KEY", "D_KEY"):
             monkeypatch.delenv(name, raising=False)
         server._load_dotenv()
+        for name in ("A_KEY", "B_KEY", "C_KEY", "D_KEY"):
+            if name in os.environ:
+                monkeypatch.setenv(name, os.environ[name])
 
     def test_plain_assignment(self, tmp_path, monkeypatch):
         self._load(tmp_path, monkeypatch, "A_KEY=plain\n")

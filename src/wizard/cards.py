@@ -125,7 +125,21 @@ def add_ontology(
     """Attach the system's filled AIRO graph and map its risks onto the
     objectives. The tiers follow; what applies does not change."""
     run = map_risks(ontology.risks, mapper, catalogue)
-    updated = record.model_copy(update={"ontology": ontology, "mapping_run": run})
+    # A re-export can drop or rename a risk. Ratings name risks, so the ones
+    # that no longer exist are dropped with them: keeping them would make every
+    # re-attach fail, and the graph is the authority on what risks there are.
+    kept = {
+        risk_id: rating
+        for risk_id, rating in record.severity.ratings.items()
+        if risk_id in {risk.id for risk in ontology.risks}
+    }
+    updated = record.model_copy(
+        update={
+            "ontology": ontology,
+            "mapping_run": run,
+            "severity": Severity(ratings=kept),
+        }
+    )
     updated.priorities = _retiered(updated, catalogue)
     return updated
 

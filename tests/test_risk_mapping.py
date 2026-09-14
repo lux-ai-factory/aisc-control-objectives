@@ -163,6 +163,45 @@ class TestTheLoop:
         assert run.mappings["risk2"].stop == "fixpoint"
         assert run.mappings["risk3"].stop == "clean"
 
+    def test_a_failed_attempt_publishes_no_rejected_objective(self, objectives):
+        """The fixpoint path filters what the controls rejected; the failure
+        path must too, or an invented id renders as mitigating work."""
+        bad = _mapping(_good("R42.9"))
+        run = map_risks([RUBBER_STAMP], FakeMapper(bad, raise_on=2,
+                                                   error=RuntimeError("rate limit")), objectives)
+        assert run.stop == "failed"
+        assert [o.objective_id for o in run.mappings["risk2"].objectives] == []
+        assert run.mappings["risk2"].stop == "failed"
+
+    def test_one_failed_risk_does_not_abandon_the_others(self, objectives):
+        """"Every exit publishes" has to hold per risk: a transient provider
+        error on risk 1 of 3 must not leave risks 2 and 3 unmapped and
+        unexplained."""
+        second = RUBBER_STAMP.model_copy(update={"id": "risk3"})
+        third = RUBBER_STAMP.model_copy(update={"id": "risk4"})
+
+        class FailsFirstOnly:
+            def __init__(self):
+                self.seen = []
+
+            def propose(self, risk, findings=()):
+                self.seen.append(risk.id)
+                if risk.id == "risk2":
+                    raise RuntimeError("rate limit")
+                return _mapping(_good())
+
+        run = map_risks([RUBBER_STAMP, second, third], FailsFirstOnly(), objectives)
+        assert run.stop == "failed"
+        assert set(run.mappings) == {"risk2", "risk3", "risk4"}
+        assert run.mappings["risk3"].objectives      # the others were still mapped
+        assert run.mappings["risk4"].objectives
+
+    def test_the_findings_of_a_failed_risk_are_not_dropped(self, objectives):
+        bad = _mapping(_good("R42.9"))
+        run = map_risks([RUBBER_STAMP], FakeMapper(bad, raise_on=2,
+                                                   error=RuntimeError("boom")), objectives)
+        assert any(f.flag == "unknown-objective" for f in run.findings)
+
     def test_every_risk_is_attempted(self, objectives):
         second = RUBBER_STAMP.model_copy(update={"id": "risk3", "text": "Something else entirely"})
         mapper = FakeMapper(_mapping(_good()))

@@ -84,6 +84,16 @@ class TestControls:
         findings = run_controls(profile, mcas_card)
         assert [(f.fact, f.flag) for f in findings] == [("high_risk", "annex-point-missing")]
 
+    def test_a_quote_straddling_two_fields_is_not_a_span_of_either(self, mcas_card):
+        """The only deterministic guard on the model's claims is that the quote
+        is real. Joining the fields with a space lets a fabricated span made of
+        one field's tail and another's head pass as support."""
+        profile = good_profile()
+        first, second = mcas_card.description, mcas_card.overview
+        profile.personal_data.quote = f"{first[-40:]} {second[:40]}"
+        findings = run_controls(profile, mcas_card)
+        assert [f.flag for f in findings] == ["quote-not-in-card"]
+
     def test_quote_matching_ignores_whitespace_and_case(self, mcas_card):
         profile = good_profile()
         profile.high_risk.quote = "  evaluates   creditworthiness for €100–€5,000 consumer loans "

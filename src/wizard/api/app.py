@@ -181,10 +181,12 @@ def _register_pages(app, objectives, store, extractor, mapper, source_name, root
         record = _record_or_404(record_id)
         form = await request.form()
         risks = record.ontology.risks if record.ontology else []
-        ratings = {risk.id: int(form[risk.id]) for risk in risks if form.get(risk.id)}
         try:
+            ratings = {risk.id: int(form[risk.id]) for risk in risks if form.get(risk.id)}
             store.save(rate_severity(record, ratings, objectives))
-        except ValidationError as exc:
+        except (ValidationError, ValueError) as exc:
+            # A value that is not 1-5, or not a number at all: the form's
+            # problem, not the server's.
             return PlainTextResponse(f"Invalid rating: {exc}", status_code=400)
         return RedirectResponse(url=f"{root_path}/cards/{record_id}", status_code=303)
 
@@ -246,6 +248,13 @@ def _register_card_api(app, objectives, store, extractor, mapper, _record_or_404
     def add_ontology_json(record_id: str, ontology: Any = Body(...)) -> CardRecord:
         """Attach the filled AIRO graph whose risks drive the tiers."""
         record = _record_or_404(record_id)
+        if not Ontology.looks_like_one(ontology):
+            # Without this, a string or a bare list parses to an empty Ontology
+            # and replaces the real graph, and its mapping run, with nothing.
+            raise HTTPException(
+                status_code=422,
+                detail="that body names no AIRO classes, so it is not an ontology export",
+            )
         updated = add_ontology(
             record, Ontology.from_jsonld(ontology), mapper, objectives
         )

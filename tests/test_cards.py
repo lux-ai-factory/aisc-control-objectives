@@ -236,6 +236,52 @@ class TestRisksAndTiers:
         )
         assert response.status_code == 422
 
+    def test_the_json_route_rejects_what_is_not_a_graph(self, client, mcas_raw):
+        """The HTML twin guards this; the JSON one must too. A string or a bare
+        list currently stores an empty Ontology and wipes the real one."""
+        record = _upload(client, mcas_raw)
+        for body in ({"hello": "world"}, "a string", [1, 2, 3]):
+            response = client.post(f"/api/cards/{record['id']}/ontology", json=body)
+            assert response.status_code == 422, body
+
+    def test_a_bad_upload_does_not_destroy_the_graph_already_attached(
+        self, client, mcas_raw, fixtures_dir
+    ):
+        record = _upload(client, mcas_raw)
+        client.post(f"/api/cards/{record['id']}/ontology", json=self._ontology(fixtures_dir))
+        client.post(f"/api/cards/{record['id']}/ontology", json="rubbish")
+        kept = client.get(f"/api/cards/{record['id']}").json()
+        assert len(kept["ontology"]["risks"]) == 5
+
+    def test_a_corrected_graph_can_be_attached_after_rating(
+        self, client, mcas_raw, fixtures_dir
+    ):
+        """Ratings name risks; a re-export that drops or renames one must not
+        500 and lose the upload. The stale rating is dropped, not the graph."""
+        record = _upload(client, mcas_raw)
+        cid = record["id"]
+        client.post(f"/api/cards/{cid}/ontology", json=self._ontology(fixtures_dir))
+        client.post(f"/api/cards/{cid}/severity", json={"ratings": {"risk4": 5, "risk2": 4}})
+        smaller = [
+            n for n in self._ontology(fixtures_dir)
+            if not str(n.get("@id", "")).endswith("risk4")
+        ]
+        response = client.post(f"/api/cards/{cid}/ontology", json=smaller)
+        assert response.status_code == 200
+        record = response.json()
+        assert "risk4" not in record["severity"]["ratings"]
+        assert record["severity"]["ratings"]["risk2"] == 4
+
+    def test_a_severity_that_is_not_a_number_is_a_client_error(
+        self, client, mcas_raw, fixtures_dir
+    ):
+        record = _upload(client, mcas_raw)
+        client.post(f"/api/cards/{record['id']}/ontology", json=self._ontology(fixtures_dir))
+        response = client.post(
+            f"/cards/{record['id']}/severity", data={"risk0": "three"}
+        )
+        assert response.status_code == 400
+
     def test_a_system_card_is_not_accepted_as_an_ontology(self, client, mcas_raw):
         """Both are JSON about one system; the message has to say which is
         wanted and where to get it."""
@@ -327,6 +373,17 @@ class TestPages:
         page = client.get(f"/cards/{_upload(client, mcas_raw)['id']}").text
         assert "qualification" in page.lower()
         assert 'type="file"' in page
+
+    def test_the_page_says_who_bears_each_risk(self, client, mcas_raw, fixtures_dir):
+        """A field renamed in the model left the template reading an attribute
+        that no longer exists, and Jinja resolved it to Undefined in silence."""
+        record = _upload(client, mcas_raw)
+        client.post(
+            f"/api/cards/{record['id']}/ontology",
+            json=json.loads((fixtures_dir / "mcas.ontology.jsonld").read_text()),
+        )
+        page = client.get(f"/cards/{record['id']}").text
+        assert "borne by" in page.lower()
 
     def test_the_page_lists_the_risks_with_their_chain_and_a_rating(
         self, client, mcas_raw, fixtures_dir

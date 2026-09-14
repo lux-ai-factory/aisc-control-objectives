@@ -26,9 +26,8 @@ from pydantic import BaseModel, Field
 from wizard.control_objectives import ControlObjectiveCatalogue
 from wizard.llm import Completer, parse_into
 from wizard.models.ontology import OntologyRisk
-from wizard.profiling import load_skill
-
-MAX_ATTEMPTS = 3
+from wizard.rounds import MAX_ATTEMPTS, Stop, review, worse
+from wizard.skills import load_skill
 
 Flag = Literal[
     "unknown-objective", "quote-not-in-risk", "quote-missing",
@@ -48,11 +47,6 @@ class MappedObjective(BaseModel):
     #: A literal span of the risk chain: what in the risk this objective answers.
     quote: str = ""
     rationale: str = ""
-
-
-#: Worst last: a run's stop is the worst any of its risks reached.
-STOPS = ("clean", "fixpoint", "cap", "failed")
-Stop = Literal["clean", "fixpoint", "cap", "failed"]
 
 
 class Mapping(BaseModel):
@@ -165,44 +159,31 @@ def _map_one(
     catalogue: ControlObjectiveCatalogue,
     max_attempts: int,
 ) -> tuple[Mapping, list[Finding], Stop, str, int]:
-    """One risk's rounds: propose, check, re-propose what failed.
+    """One risk's rounds. Whatever happened, what comes back is publishable:
+    the controls' rejections are stripped out on every path, including the
+    failure one, so an invented objective id can never reach the page."""
 
-    Returns what to publish whatever happened, which is the point: a mapping
-    that hit its cap is worth more to a reviewer, with its findings attached,
-    than nothing at all.
-    """
-    mapping = Mapping(risk_id=risk.id)
-    findings: list[Finding] = []
-    previous: frozenset[tuple[str, str, str]] | None = None
-    stop: Stop = "clean"
-    attempt = 0
+    def propose(findings):
+        proposed = mapper.propose(risk, findings)
+        if not isinstance(proposed, Mapping):
+            raise TypeError(f"mapper returned {type(proposed).__name__}, not a Mapping")
+        return proposed
 
-    for attempt in range(1, max_attempts + 1):
-        try:
-            proposed = mapper.propose(risk, findings)
-            if not isinstance(proposed, Mapping):
-                raise TypeError(f"mapper returned {type(proposed).__name__}, not a Mapping")
-        except Exception as exc:
-            return mapping, findings, "failed", str(exc), attempt
-        mapping = proposed
-
-        findings = run_controls(mapping, risk, catalogue)
-        if not findings:
-            break
-        signature = _signature(findings)
-        if signature == previous:
-            stop = "fixpoint"
-            break
-        previous = signature
-    else:
-        stop = "cap"
+    round_ = review(
+        propose=propose,
+        check=lambda mapping: run_controls(mapping, risk, catalogue),
+        empty=lambda: Mapping(risk_id=risk.id),
+        signature=_signature,
+        max_attempts=max_attempts,
+    )
 
     # Keep only what survived the controls: an objective that does not exist,
     # or that nothing in the risk supports, is not a mapping.
-    rejected = {finding.objective_id for finding in findings if finding.objective_id}
+    mapping = round_.proposal
+    rejected = {finding.objective_id for finding in round_.findings if finding.objective_id}
     mapping.objectives = [o for o in mapping.objectives if o.objective_id not in rejected]
-    mapping.stop = stop
-    return mapping, findings, stop, "", attempt
+    mapping.stop = round_.stop
+    return mapping, round_.findings, round_.stop, round_.error, round_.attempts
 
 
 def map_risks(
@@ -211,15 +192,19 @@ def map_risks(
     catalogue: ControlObjectiveCatalogue,
     max_attempts: int = MAX_ATTEMPTS,
 ) -> MappingRun:
-    """Map every risk, one at a time, bounded, always publishing."""
+    """Map every risk, one at a time, bounded, always publishing.
+
+    A risk that fails does not abandon the ones after it: a transient provider
+    error on risk 3 of 5 would otherwise leave 4 and 5 with no mapping and no
+    explanation on the page.
+    """
     run = MappingRun()
     for risk in risks:
         mapping, findings, stop, error, attempts = _map_one(risk, mapper, catalogue, max_attempts)
         run.mappings[risk.id] = mapping
         run.attempts = max(run.attempts, attempts)
-        run.stop = max(run.stop, stop, key=STOPS.index)
-        if stop == "failed":
-            run.error = error
-            return run
+        run.stop = worse(run.stop, stop)
         run.findings.extend(findings)
+        if error and not run.error:
+            run.error = error
     return run

@@ -27,7 +27,6 @@ it binds nobody, so it cannot displace a legal duty.
 
 from __future__ import annotations
 
-import re
 from collections.abc import Mapping as MappingABC
 from collections.abc import Sequence
 
@@ -58,9 +57,6 @@ BINDING_WEIGHT = 1.0
 #: Voluntary objectives sort below every legal duty, whatever the risks say.
 VOLUNTARY_FLOOR = -100.0
 
-_RISK_ID = re.compile(r"^risk\d+$")
-
-
 class Severity(BaseModel):
     """How severe each of this system's risks is: 1 (marginal) to 5 (decisive)."""
 
@@ -69,9 +65,10 @@ class Severity(BaseModel):
     @field_validator("ratings")
     @classmethod
     def _within_the_scale(cls, ratings: dict[str, int]) -> dict[str, int]:
+        # No pattern on the id: it is whatever the exporter named the node,
+        # and `prioritise` rejects one this system's graph does not have. A
+        # pattern of ours would reject a valid graph with nothing to say.
         for risk_id, rating in ratings.items():
-            if not _RISK_ID.match(risk_id):
-                raise ValueError(f"{risk_id!r} is not a risk id")
             if not (isinstance(rating, int) and 1 <= rating <= 5):
                 raise ValueError(f"{risk_id}: severity {rating!r} is not 1-5")
         return ratings
@@ -82,6 +79,10 @@ class Severity(BaseModel):
 
 class Priority(BaseModel):
     objective_id: str
+    #: The severity of the worst risk driving it, before any tiebreak. The
+    #: threshold for Tier 1 reads this, not `score`: the binding bonus is a
+    #: tiebreak among work, and adding it first let a risk rated 2 over the line.
+    driving_severity: int = 0
     #: 1 start here, 2 next, 3 later. None when the objective does not apply.
     tier: int | None = None
     score: float = 0.0
@@ -153,10 +154,10 @@ def _assign_tiers(scored: list[tuple[float, tuple[int, int], Priority]], budget:
     """
     scored.sort(key=lambda row: (-row[0], row[1]))
     urgent = 0
-    for score, _, priority in scored:
+    for _score, _, priority in scored:
         if priority.non_binding or not priority.risk_ids:
             priority.tier = 3
-        elif score >= DEFAULT_SEVERITY and urgent < budget:
+        elif priority.driving_severity >= DEFAULT_SEVERITY and urgent < budget:
             priority.tier = 1
             urgent += 1
         else:
@@ -191,6 +192,7 @@ def prioritise(
             continue
         entries = driving.get(objective.id, [])
         priority.risk_ids = [risk.id for _, risk in entries]
+        priority.driving_severity = entries[0][0] if entries else 0
         priority.score, priority.reasons = _score(objective, severity, entries, verdict.non_binding)
         # catalogue order breaks ties, so the same input always tiers the same
         scored.append((priority.score, objective.sort_key, priority))
