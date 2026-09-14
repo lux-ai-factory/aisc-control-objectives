@@ -6,12 +6,12 @@ No network: the extractor is driven by fakes.
 
 from __future__ import annotations
 
-import json
 
 import pytest
 
 from wizard.models.profile import Fact, Profile
 from wizard.profiling import (
+    Finding,
     ProfileExtractor,
     ProfileRun,
     card_text,
@@ -156,51 +156,82 @@ class TestExtractProfile:
         assert "Profile" in run.error
 
 
-class FakeClient:
-    """A parse-shaped LLM client that returns a queued Profile and records the call."""
+class FakeCompleter:
+    """Records (system, user) and returns a queued answer, the way BAF's
+    text-in/text-out predict does."""
 
-    def __init__(self, profile: Profile):
-        self.calls: list[dict] = []
-        outer = self
+    def __init__(self, answer: str | None = None):
+        self.answer = answer if answer is not None else good_profile().model_dump_json()
+        self.calls: list[tuple[str, str]] = []
 
-        class _Messages:
-            def parse(self, **kwargs):
-                outer.calls.append(kwargs)
-                return type("Parsed", (), {"parsed_output": profile})()
-
-        self.messages = _Messages()
+    def __call__(self, system: str, user: str, temperature: float = 0) -> str:
+        self.calls.append((system, user))
+        return self.answer
 
 
 class TestProfileExtractor:
-    def test_it_asks_for_a_profile_with_the_skill_as_system_prompt(self, mcas_card):
-        client = FakeClient(good_profile())
-        extractor = ProfileExtractor(client=client, model="openai/gpt-4o")
-        profile = extractor.propose(mcas_card)
+    def test_it_puts_the_skill_in_the_system_prompt(self, mcas_card):
+        complete = FakeCompleter()
+        profile = ProfileExtractor(complete=complete).propose(mcas_card)
         assert profile == good_profile()
-        call = client.calls[0]
-        assert call["model"] == "openai/gpt-4o"
-        assert call["output_format"] is Profile
-        assert "Annex III" in call["system"]
-        assert "---" not in call["system"][:5]          # frontmatter stripped
+        system, _ = complete.calls[0]
+        assert "Annex III" in system
+        assert not system.startswith("---")          # frontmatter stripped
 
     def test_the_user_message_carries_the_whole_card(self, mcas_card):
-        client = FakeClient(good_profile())
-        ProfileExtractor(client=client, model="m").propose(mcas_card)
-        text = json.dumps(client.calls[0]["messages"])
-        assert mcas_card.system_name in text
-        assert mcas_card.open_issues[0][:40] in text
+        complete = FakeCompleter()
+        ProfileExtractor(complete=complete).propose(mcas_card)
+        _, user = complete.calls[0]
+        assert mcas_card.system_name in user
+        assert mcas_card.open_issues[0][:40] in user
 
     def test_on_a_retry_the_findings_are_in_the_message(self, mcas_card):
-        from wizard.profiling import Finding
-
-        client = FakeClient(good_profile())
-        ProfileExtractor(client=client, model="m").propose(
+        complete = FakeCompleter()
+        ProfileExtractor(complete=complete).propose(
             mcas_card,
             findings=[Finding(fact="personal_data", flag="quote-not-in-card", detail="x")],
         )
-        text = json.dumps(client.calls[0]["messages"])
-        assert "quote-not-in-card" in text
-        assert "personal_data" in text
+        _, user = complete.calls[0]
+        assert "quote-not-in-card" in user
+        assert "personal_data" in user
+
+    def test_a_fenced_answer_with_prose_around_it_still_parses(self, mcas_card):
+        answer = "Sure!\n```json\n" + good_profile().model_dump_json() + "\n```\nHope that helps."
+        profile = ProfileExtractor(complete=FakeCompleter(answer)).propose(mcas_card)
+        assert profile.high_risk.value == "yes"
+
+    def test_an_answer_with_no_json_raises_so_the_loop_can_publish_the_failure(self, mcas_card):
+        with pytest.raises(ValueError, match="no JSON object"):
+            ProfileExtractor(complete=FakeCompleter("I cannot help with that.")).propose(mcas_card)
+
+    def test_the_skill_carries_a_literal_answer_schema(self):
+        """Nothing constrains the answer provider-side any more, so the skill
+        has to show the exact object, and that example has to be valid JSON
+        with every fact and every field of a fact in it."""
+        import json as _json
+        import re as _re
+
+        skill = load_skill(ProfileExtractor.SKILL)
+        blocks = _re.findall(r"```(?:json)?\s*(\{.*?\})\s*```", skill, _re.DOTALL)
+        assert blocks, "the skill shows no JSON object"
+        example = _json.loads(blocks[-1])
+        assert set(example) == set(Profile.FACTS)
+        for fact, shape in example.items():
+            assert {"value", "quote", "source", "rationale"} <= set(shape), fact
+        assert "annex_iii_point" in example["high_risk"]
+
+    def test_the_examples_shape_is_a_valid_profile(self):
+        """The shape the skill asks for must be the shape the model accepts."""
+        import json as _json
+        import re as _re
+
+        skill = load_skill(ProfileExtractor.SKILL)
+        example = _json.loads(
+            _re.findall(r"```(?:json)?\s*(\{.*?\})\s*```", skill, _re.DOTALL)[-1]
+        )
+        for fact in example.values():
+            fact["value"] = "undetermined"
+        assert Profile.model_validate(example)
 
 
 def test_the_skill_ships_with_the_package_and_states_the_rules():

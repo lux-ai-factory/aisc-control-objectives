@@ -57,6 +57,38 @@ person confirming your profile will read the quote and trust it.
 One sentence per fact, in `rationale`, saying why the quote settles it. Not a
 summary of the system.
 
+## Answer format
+
+A single JSON object, nothing before it and nothing after it. No prose, no
+markdown fence, no explanation. Exactly these three keys, exactly these fields:
+
+```json
+{
+  "high_risk": {
+    "value": "yes | no | undetermined",
+    "quote": "<a literal span of the card, empty when undetermined>",
+    "source": "<the field the quote came from>",
+    "rationale": "<one sentence on why the quote settles it>",
+    "annex_iii_point": "<the Annex III point, e.g. 5(b); empty unless value is yes>"
+  },
+  "personal_data": {
+    "value": "yes | no | undetermined",
+    "quote": "",
+    "source": "",
+    "rationale": ""
+  },
+  "interacts_with_natural_persons": {
+    "value": "yes | no | undetermined",
+    "quote": "",
+    "source": "",
+    "rationale": ""
+  }
+}
+```
+
+`value` is one of those three words and nothing else. Do not add keys, do not
+rename them, do not nest them differently, and do not answer with a list.
+
 ## What you cannot do
 
 - You cannot cite a field that is not in the card you were given.

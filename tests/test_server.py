@@ -1,22 +1,28 @@
-"""Composition root (server) — the LLM client is always the LiteLLM gateway.
+"""Composition root (server): the model is built BAF's way, once, at startup.
 
-No network: constructing the client does not call any provider, and no key is
-required at construction (LiteLLM reads the model's provider key at call time).
+No network: building a local model's wrapper contacts no provider.
 """
 
 import os
 
+import pytest
+
 from wizard import server
-from wizard.llm_client import LiteLLMClient
+from wizard.config import RunConfig
 
 
-def test_build_client_is_litellm(monkeypatch):
-    # no provider key set — construction must still succeed
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+def test_the_completer_is_built_from_the_configured_provider(monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    client = server._build_client()
-    assert isinstance(client, LiteLLMClient)
-    assert hasattr(client.messages, "parse")
+    complete = server._build_completer(RunConfig(provider="ollama", model="mistral:latest"))
+    assert callable(complete)
+
+
+def test_a_provider_missing_its_key_fails_at_startup_naming_the_variable(monkeypatch):
+    """Better here, where the message is readable, than as a provider error on
+    every card page."""
+    monkeypatch.delenv("MISTRAL_API_KEY", raising=False)
+    with pytest.raises(ValueError, match="MISTRAL_API_KEY"):
+        server._build_completer(RunConfig(provider="mistral", model="mistral-large-latest"))
 
 
 def test_a_blank_objectives_file_variable_means_the_bundled_csv():

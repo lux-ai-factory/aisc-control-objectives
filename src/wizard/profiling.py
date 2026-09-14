@@ -20,6 +20,7 @@ from typing import Literal, Protocol
 
 from pydantic import BaseModel
 
+from wizard.llm import Completer, parse_into
 from wizard.models.profile import Fact, Profile
 from wizard.models.system_card import SystemCard
 
@@ -106,13 +107,16 @@ class Extractor(Protocol):
 
 
 class ProfileExtractor:
-    """The writer: asks the model for a Profile, with the skill as system prompt."""
+    """The writer: asks the model for a Profile, with the skill as system prompt.
+
+    BAF is text in, text out, so the answer is parsed and validated here; the
+    skill states the shape the model has to produce.
+    """
 
     SKILL = "extracting-the-applicability-profile"
 
-    def __init__(self, client, model: str, skill: str | None = None):
-        self._client = client
-        self._model = model
+    def __init__(self, complete: Completer, skill: str | None = None):
+        self._complete = complete
         self._skill = skill if skill is not None else load_skill(self.SKILL)
 
     def propose(self, card: SystemCard, findings: Sequence[Finding] = ()) -> Profile:
@@ -129,14 +133,7 @@ class ProfileExtractor:
                 "",
             ]
         lines.append("Now produce the profile.")
-        result = self._client.messages.parse(
-            model=self._model,
-            system=self._skill,
-            messages=[{"role": "user", "content": [{"type": "text", "text": "\n".join(lines)}]}],
-            output_format=Profile,
-            temperature=0,
-        )
-        return result.parsed_output
+        return parse_into(self._complete(self._skill, "\n".join(lines)), Profile)
 
 
 # ── the loop ───────────────────────────────────────────────────────────────

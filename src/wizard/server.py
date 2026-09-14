@@ -1,20 +1,20 @@
 """Composition root + runnable entrypoint.
 
 Loads the control objectives (bundled CSV, no network and no database) and
-serves them: an HTML page at the root, plus the JSON API. The LLM client
-drives the profile extractor (the model proposes the three applicability facts
-from an uploaded card); every model runs through LiteLLM, so the model string carries the provider
-(e.g. "anthropic/claude-opus-4-8", "openai/gpt-4o-mini") and LiteLLM reads the
-matching key from the environment.
+serves them: an HTML page at the root, plus the JSON API. The model proposes
+the three applicability facts from an uploaded card, and it is reached BAF's
+way (see wizard.llm): BAF_LLM_PROVIDER and BAF_LLM_MODEL name it, and the
+provider's own variable carries the key.
 
 Env:
   WIZARD_CONFIG_FILE       path to the TOML config (default <repo>/wizard.toml)
   WIZARD_OBJECTIVES_FILE   override the bundled objectives CSV
-  ANTHROPIC_API_KEY / OPENAI_API_KEY / …  provider key (read by LiteLLM per model)
+  BAF_LLM_PROVIDER / BAF_LLM_MODEL        which model, BAF's names
+  BAF_LLM_BASE_URL         endpoint for the ollama / compatible providers
+  MISTRAL_API_KEY / OPENAI_API_KEY / …    the provider's own key
   WIZARD_PORT              port to serve on (default 8090)
   WIZARD_ROOT_PATH         sub-path when behind a reverse proxy
   WIZARD_CORS_ORIGINS      comma-separated allowlist (default permissive)
-  WIZARD_MODEL             RunConfig override (see wizard.config)
 
 A `.env` file next to the repo root is loaded if present (simple KEY=VALUE
 lines), so API keys can live in a file instead of the shell environment.
@@ -72,13 +72,16 @@ def _load_dotenv() -> None:
         os.environ.setdefault(key.strip(), value)
 
 
-def _build_client():
-    """The single LLM client: LiteLLM. The provider is selected by the model
-    string (e.g. "anthropic/…", "openai/…") and LiteLLM reads the matching key
-    from the environment (.env)."""
-    from wizard.llm_client import LiteLLMClient
+def _build_completer(config: RunConfig):
+    """The one way to a model: a BAF wrapper, per wizard.llm.
 
-    return LiteLLMClient()
+    A provider that is missing its key raises here, at startup, where the
+    message says which variable; the alternative is every upload failing with
+    a provider error on the card page.
+    """
+    from wizard.llm import build_llm, completer
+
+    return completer(build_llm(config.provider, config.model))
 
 
 def build_app():
@@ -94,10 +97,7 @@ def build_app():
 
     cors_env = os.environ.get("WIZARD_CORS_ORIGINS", "").strip()
     cors_origins = [o.strip() for o in cors_env.split(",") if o.strip()] or None
-    # The model proposes the applicability profile; LiteLLM reads the provider
-    # key at call time, and a missing key surfaces as a failed run on the card
-    # page rather than a crash here.
-    extractor = ProfileExtractor(client=_build_client(), model=config.model)
+    extractor = ProfileExtractor(complete=_build_completer(config))
     return create_app(
         objectives,
         base_config=config,

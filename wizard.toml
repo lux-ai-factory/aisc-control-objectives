@@ -1,15 +1,20 @@
-# Wizard configuration — the model lives here; API keys live in .env.
+# Wizard configuration — which model, and where the objectives come from.
+# API keys live in .env, under the provider's own variable name.
 #
 # Loaded at startup (override the path with WIZARD_CONFIG_FILE). Environment
-# variables (WIZARD_*) override anything set here.
+# variables override anything set here: BAF_LLM_PROVIDER and BAF_LLM_MODEL.
 
-# The model. Every model runs through LiteLLM, so the string carries the
-# provider; LiteLLM reads the matching API key from .env:
-#   "anthropic/claude-opus-4-8"   (needs ANTHROPIC_API_KEY)
-#   "openai/gpt-4o-mini"          (needs OPENAI_API_KEY)
-#   "gemini/gemini-1.5-pro"       (needs GEMINI_API_KEY)
-#   "azure/<deployment>" | "bedrock/anthropic.claude-3-5-..." | "ollama/llama3.1"
-model = "openai/gpt-4o"
+# The model, named BAF's way, exactly as the qualification filler names it.
+# One mechanism for the platform: see src/wizard/llm.py for the providers.
+#   provider = "mistral"    model = "mistral-large-latest"   (MISTRAL_API_KEY)
+#   provider = "anthropic"  model = "claude-opus-4-8"        (ANTHROPIC_API_KEY)
+#   provider = "openai"     model = "gpt-4o-mini"            (OPENAI_API_KEY)
+#   provider = "ollama"     model = "mistral:latest"         (no key at all)
+#   provider = "compatible" model = "<anything>"             (BAF_LLM_BASE_URL)
+#
+# Defaults to a model on this machine, so the wizard runs with no credential.
+provider = "ollama"
+model = "mistral:latest"
 
 # The control objectives are bundled with the package
 # (src/wizard/data/ai_act_control_objectives.csv); point WIZARD_OBJECTIVES_FILE

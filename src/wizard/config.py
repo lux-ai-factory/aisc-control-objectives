@@ -1,7 +1,8 @@
 """Run configuration.
 
 Every operator-owned knob lives here. Precedence: environment > TOML file >
-defaults, resolved once at startup by `RunConfig.load`.
+defaults, resolved once at startup by `RunConfig.load`. The model is named the
+way BAF names it, because BAF is what reaches the model.
 
 The knobs of the retired recommendation pipeline (review rounds, guards, the
 high-risk floor) are gone with it; what is left is the model the service talks
@@ -17,21 +18,23 @@ from typing import Any
 
 from pydantic import BaseModel
 
-# Every model runs through LiteLLM, so the model string carries the provider:
-# "anthropic/claude-opus-4-8", "openai/gpt-4o-mini", "gemini/gemini-1.5-pro",
-# "azure/<deployment>", "bedrock/...", "ollama/llama3.1", … The key lives in .env.
-DEFAULT_MODEL = "anthropic/claude-opus-4-8"
+from wizard.llm import DEFAULT_MODEL, DEFAULT_PROVIDER
 
-
+# The model is named BAF's way: a provider and a model name, the same two
+# variables the qualification filler reads, so a deployment configures both
+# services alike. wizard.llm.PROVIDERS is the list of providers.
 class RunConfig(BaseModel):
+    provider: str = DEFAULT_PROVIDER
     model: str = DEFAULT_MODEL
 
     @staticmethod
     def _env_overrides(env: Mapping[str, str]) -> dict[str, Any]:
-        """The partial config implied by the WIZARD_* env vars (set keys only)."""
+        """The partial config implied by BAF's env vars (set keys only)."""
         data: dict[str, Any] = {}
-        if "WIZARD_MODEL" in env:
-            data["model"] = env["WIZARD_MODEL"]
+        if env.get("BAF_LLM_PROVIDER"):
+            data["provider"] = env["BAF_LLM_PROVIDER"]
+        if env.get("BAF_LLM_MODEL"):
+            data["model"] = env["BAF_LLM_MODEL"]
         return data
 
     @classmethod

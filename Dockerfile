@@ -1,6 +1,6 @@
-# Wizard service — FastAPI service over the AI Act control objectives
-# (LiteLLM in-process). Follows the aisc app pattern (see apps/qualification):
-# a self-contained container joined to the platform networks.
+# Wizard service — FastAPI service over the AI Act control objectives, with
+# BAF in-process for the model. Follows the aisc app pattern (see
+# apps/qualification): a self-contained container joined to the platform networks.
 FROM python:3.12-slim
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
@@ -23,6 +23,7 @@ ENV PYTHONPATH=/app/src \
 
 EXPOSE 8090
 
-# wizard.server reads WIZARD_PORT / WIZARD_ROOT_PATH / WIZARD_OBJECTIVES_FILE
-# and the provider key from the environment (injected by the platform/compose).
+# wizard.server reads WIZARD_PORT / WIZARD_ROOT_PATH / WIZARD_OBJECTIVES_FILE,
+# BAF_LLM_PROVIDER / BAF_LLM_MODEL and the provider's key from the environment
+# (injected by the platform / compose).
 CMD ["python", "-m", "wizard.server"]

@@ -116,12 +116,21 @@ Three layers, lowest to highest: **built-in defaults → `wizard.toml` →
 |---|---|---|
 | `WIZARD_CONFIG_FILE` | `<repo>/wizard.toml` | config file path |
 | `WIZARD_OBJECTIVES_FILE` | bundled CSV | serve a different objectives export |
-| `WIZARD_MODEL` | `anthropic/claude-opus-4-8` | model, provider-prefixed for LiteLLM |
+| `BAF_LLM_PROVIDER` | `mistral` | which provider, BAF's name for it |
+| `BAF_LLM_MODEL` | `mistral-large-latest` | which model |
+| `BAF_LLM_BASE_URL` | *(unset)* | endpoint for `ollama` / `compatible` |
 | `WIZARD_PORT` | `8090` | port |
 | `WIZARD_ROOT_PATH` | *(empty)* | sub-path when behind a reverse proxy |
 | `WIZARD_CORS_ORIGINS` | *(permissive)* | comma-separated allowlist |
 
-API keys live in `.env`; LiteLLM reads the one matching the model's provider.
+API keys live in `.env`, each provider under its own variable
+(`MISTRAL_API_KEY`, `OPENAI_API_KEY`, …), read through BAF's property store.
+
+**The model is reached BAF's way**, the same framework, version and variables
+the qualification app's ontology filler uses, so the platform has one mechanism
+and one place a model is named. `src/wizard/llm.py` holds the provider table.
+`provider = "ollama"` runs against a model on this machine with no credential
+at all, which is the committed default.
 
 ---
 
