@@ -1,9 +1,14 @@
-"""The AIRO graph the qualification app exports, and the risks in it.
+"""The AI Card, and the risks in it.
 
-`ontology.jsonld` is expanded JSON-LD: a flat list of nodes, each with an
-`@id`, its `@type`s as full URIs, and its predicates as full URIs too. That is
-the system's card in the sense the qualification app means it ("the filled
-AIRO graph IS the card"), and it is where the risks live.
+What an assessor uploads is a system's **AI Card**: the qualification app's own
+position is that the filled AIRO graph IS the card, and it exports it two ways.
+`ai-card.json` wraps the graph together with the form's facts and the view a
+reader sees; `ontology.jsonld` is the graph on its own. Both are the same card,
+and either is accepted.
+
+The graph is expanded JSON-LD: a flat list of nodes, each with an `@id`, its
+`@type`s as full URIs, and its predicates as full URIs too. It is where the
+risks live.
 
 Parsed by hand rather than with rdflib: expanded JSON-LD is plain JSON with
 predictable edges, and a graph library would be a large dependency for one
@@ -211,9 +216,26 @@ class Ontology(BaseModel):
         return next((risk for risk in self.risks if risk.id == risk_id), None)
 
     @staticmethod
+    def graph_in(raw: Any) -> list | None:
+        """The AIRO node list inside whatever was uploaded, or None.
+
+        Three shapes reach us: the bare expanded graph, a graph under `@graph`,
+        and an `ai-card.json` whose `ontology_graph` holds it. A card without
+        its graph is a card a reader can read and the wizard cannot work from,
+        so it is not accepted.
+        """
+        if isinstance(raw, dict):
+            for key in ("ontology_graph", "@graph"):
+                inner = raw.get(key)
+                if inner is not None:
+                    return Ontology.graph_in(inner)
+            return None
+        return raw if isinstance(raw, list) else None
+
+    @staticmethod
     def looks_like_one(raw: Any) -> bool:
         """An AIRO graph names AIRO classes; no other artefact here does."""
-        nodes = raw.get("@graph") if isinstance(raw, dict) else raw
+        nodes = Ontology.graph_in(raw)
         if not isinstance(nodes, list):
             return False
         return any(
@@ -224,7 +246,8 @@ class Ontology(BaseModel):
 
     @classmethod
     def from_jsonld(cls, raw: Any) -> Ontology:
-        graph = _Graph(raw.get("@graph") if isinstance(raw, dict) else raw)
+        """Parse an AI Card, in whichever shape it arrives."""
+        graph = _Graph(cls.graph_in(raw) or [])
         system = next(iter(graph.of_class("AISystem")), None)
         return cls(
             qualification_id=_literal(system or {}, QUAL + "qualificationId"),

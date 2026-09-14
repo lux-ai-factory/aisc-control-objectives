@@ -24,7 +24,7 @@
       <span class="co-door-count">{{ projects_count }}</span>
       <h2>Projects</h2>
       <p>{% if projects_count %}{{ projects_count }} system{{ 's' if projects_count != 1 }} under assessment.{% else %}No systems under assessment yet.{% endif %}
-         Upload a system's ontology export, answer the three Annex III questions, and the
+         Upload a system's AI Card, answer the three Annex III questions, and the
          wizard works out what is owed and where to start.</p>
       <span class="co-door-go">
         {%- if projects_count %}Open the projects →{% else %}Assess a system →{% endif %}
@@ -35,13 +35,13 @@
   <div class="qf-section">
     <h2>How an assessment runs</h2>
     <ol class="co-steps">
-      <li><strong>Upload the system's ontology export</strong> (<code>ontology.jsonld</code>
-          from its card in the qualification app). It carries what the system is and the
-          risks its assessor identified.</li>
-      <li><strong>Answer three questions.</strong> A model reads the graph and proposes
+      <li><strong>Upload the system's AI Card</strong> from the qualification app. The
+          card is the system's filled AIRO graph: what it is, and the risks its assessor
+          identified.</li>
+      <li><strong>Answer three questions.</strong> A model reads the card and proposes
           whether the system is high-risk under Annex III, processes personal data, and
-          interacts with natural persons, each on a quote you can check. You confirm or
-          refuse; the answer is yours.</li>
+          interacts with natural persons, each on a quote from the card you can check.
+          You confirm or refuse; the answer is yours.</li>
       <li><strong>The risks are mapped to the objectives</strong> that would mitigate
           them, each on a quote from the risk's own chain.</li>
       <li><strong>Rate the risks</strong> 1 to 5 for this system. The objectives answering

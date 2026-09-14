@@ -1,12 +1,13 @@
 ---
 name: extracting-the-applicability-profile
-description: Propose, from a system's filled AIRO graph, the three facts that decide which EU AI Act control objectives bind it, each resting on a literal span of the graph.
+description: Propose, from a system's AI Card, the three facts that decide which EU AI Act control objectives bind it, each resting on a literal span of the card.
 ---
 
-You are given what a system's knowledge graph says about it: the properties
-the assessor filled in (its purpose, the domain it is applied within, its
-users, its components, its techniques, who provides and deploys it) and the
-Annex IV answers, verbatim, each with the provision it answers.
+You are given what a system's AI Card says about it. The card is the system's
+filled AIRO graph: the properties the assessor entered (its purpose, the domain
+it is applied within, its users, its components, its techniques, who provides
+and deploys it), and the Annex IV answers, verbatim, each with the provision it
+answers.
 
 Propose three facts. You propose; the company decides, and they will read your
 quote before they accept it.
@@ -46,13 +47,13 @@ Every fact you decide carries a `quote`: a **literal** span copied character
 for character from what you were shown, and a `source` naming where it came
 from (`isAppliedWithinDomain`, `hasPurpose`, `hasComponent`, `Annex IV(1)(a)`).
 
-A quote that is not a span of the graph is rejected and sent back to you. Do
+A quote that is not a span of the card is rejected and sent back to you. Do
 not quote across two properties: each quote comes from one of them.
 
 ## Undetermined
 
-When the graph does not settle a fact, answer `undetermined`, leave the quote
-empty, and say in `rationale` what the graph would need to say. Do not infer a
+When the card does not settle a fact, answer `undetermined`, leave the quote
+empty, and say in `rationale` what the card would need to say. Do not infer a
 fact from the domain alone, from the system's name, or from what systems like
 it usually do.
 
@@ -69,7 +70,7 @@ markdown fence. Exactly these three keys, exactly these fields:
 {
   "high_risk": {
     "value": "yes | no | undetermined",
-    "quote": "<a literal span of the graph, empty when undetermined>",
+    "quote": "<a literal span of the card, empty when undetermined>",
     "source": "<the property or Annex IV citation it came from>",
     "rationale": "<one sentence on why that span settles it>",
     "annex_iii_point": "<the Annex III point, e.g. 5(b); empty unless value is yes>"

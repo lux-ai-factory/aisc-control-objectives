@@ -21,6 +21,37 @@ def mcas(fixtures_dir):
     return Ontology.from_jsonld(json.loads((fixtures_dir / "mcas.ontology.jsonld").read_text()))
 
 
+class TestTheAiCard:
+    """What an assessor uploads is the system's AI Card. The qualification app
+    exports it two ways, and both are the same card: `ai-card.json`, which
+    wraps the graph with the form's facts, and `ontology.jsonld`, the graph on
+    its own. The wizard takes either."""
+
+    def test_the_graph_on_its_own_is_a_card(self, fixtures_dir):
+        raw = json.loads((fixtures_dir / "mcas.ontology.jsonld").read_text())
+        assert Ontology.looks_like_one(raw)
+        assert len(Ontology.from_jsonld(raw).risks) == 5
+
+    def test_an_ai_card_json_wrapping_the_graph_is_a_card(self, fixtures_dir):
+        graph = json.loads((fixtures_dir / "mcas.ontology.jsonld").read_text())
+        card = {
+            "system_name": "MicroCredit Assist Score (MCAS)",
+            "qualification_id": "cmtvvrnw50000jzyvas8gmn3u",
+            "ontology": {"chains": [], "rows": []},
+            "ontology_graph": graph,
+            "ontology_problems": [],
+        }
+        assert Ontology.looks_like_one(card)
+        assert len(Ontology.from_jsonld(card).risks) == 5
+
+    def test_an_ai_card_with_no_graph_in_it_is_not_enough(self, fixtures_dir):
+        """The PDF's payload without its graph: a card a reader can read and
+        the wizard cannot work from."""
+        assert not Ontology.looks_like_one(
+            {"system_name": "X", "ontology": {"chains": []}, "ontology_graph": None}
+        )
+
+
 class TestRecognising:
     def test_the_real_export_is_recognised(self, fixtures_dir):
         raw = json.loads((fixtures_dir / "mcas.ontology.jsonld").read_text())

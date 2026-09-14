@@ -2,7 +2,7 @@
 
 The flow, and where each part of it lives:
 
-    upload ontology.jsonld ──► create()          the graph is stored as uploaded
+    upload the AI Card ──────► create()          stored as the bytes uploaded
              │
              ▼
     AGENTIC 1  extract_profile()                 three facts, each on a quote
@@ -78,7 +78,7 @@ class Projects:
     # ── the flow ──────────────────────────────────────────────────────────
 
     def create(self, name: str, jsonld: str, raw: object) -> ProjectView:
-        """Upload, then run the first workflow. The profile run is saved
+        """Take the AI Card, then run the first workflow. The profile run is saved
         whatever happened to it: a failed extraction still leaves a project
         whose three questions a person can answer by hand."""
         ontology = Ontology.from_jsonld(raw)

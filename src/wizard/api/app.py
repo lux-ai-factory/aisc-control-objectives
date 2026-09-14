@@ -5,7 +5,7 @@ Two things to look at, and one project at a time:
     /                      the way in
     /objectives            the 50 control objectives, as a reference
     /projects              the systems being assessed
-    /projects/{id}         upload · three questions · Confirm/Refuse · map · tiers
+    /projects/{id}         the AI Card · three questions · Confirm/Refuse · map · tiers
 
 The JSON API mirrors the pages. Everything is persisted, so a restart loses
 nothing.
@@ -40,9 +40,9 @@ from wizard.rendering import (
 #: answers to both, so the partitions overlap rather than splitting the set.
 ModeFilter = Literal["control", "test"]
 
-GRAPH_WANTED = (
-    "that names no AIRO classes, so it is not an ontology export. Download "
-    "ontology.jsonld from the system's card in the qualification app."
+CARD_WANTED = (
+    "is not an AI Card. Download the AI Card from the system's page in the "
+    "qualification app: either ai-card.json, or ontology.jsonld."
 )
 
 
@@ -126,7 +126,7 @@ def _register_pages(app, objectives, projects, _view_or_404, source_name, root_p
     @app.post("/projects", include_in_schema=False)
     async def create_project_form(request: Request):
         form = await request.form()
-        upload: UploadFile = form["ontology"]
+        upload: UploadFile = form["card"]
         name = str(form.get("name") or "").strip()
         raw_bytes = upload.file.read()
         try:
@@ -134,7 +134,7 @@ def _register_pages(app, objectives, projects, _view_or_404, source_name, root_p
         except ValueError:
             return PlainTextResponse("The uploaded file is not valid JSON.", status_code=400)
         if not Ontology.looks_like_one(raw):
-            return PlainTextResponse(f"That JSON {GRAPH_WANTED}", status_code=400)
+            return PlainTextResponse(f"That file {CARD_WANTED}", status_code=400)
         view = projects.create(name=name, jsonld=raw_bytes.decode("utf-8"), raw=raw)
         return RedirectResponse(url=f"{root_path}/projects/{view.record.id}", status_code=303)
 
@@ -237,15 +237,15 @@ def _register_project_api(app, projects, _view_or_404):
             "can_map": view.can_map,
         }
 
-    def _graph_or_422(raw: object) -> None:
+    def _card_or_422(raw: object) -> None:
         if not Ontology.looks_like_one(raw):
-            raise HTTPException(status_code=422, detail=f"that body {GRAPH_WANTED}")
+            raise HTTPException(status_code=422, detail=f"that body {CARD_WANTED}")
 
     @app.post("/api/projects", status_code=201)
-    def create_project(ontology: Any = Body(...), name: str = Query("")) -> dict:
-        """Upload a filled AIRO graph; the first workflow runs on it."""
-        _graph_or_422(ontology)
-        return payload(projects.create(name=name, jsonld=json.dumps(ontology), raw=ontology))
+    def create_project(card: Any = Body(...), name: str = Query("")) -> dict:
+        """Upload a system's AI Card; the first workflow runs on it."""
+        _card_or_422(card)
+        return payload(projects.create(name=name, jsonld=json.dumps(card), raw=card))
 
     @app.get("/api/projects")
     def list_projects() -> list[dict]:
@@ -255,13 +255,12 @@ def _register_project_api(app, projects, _view_or_404):
     def get_project(project_id: str) -> dict:
         return payload(_view_or_404(project_id))
 
-    @app.post("/api/projects/{project_id}/ontology")
-    def replace_graph(project_id: str, ontology: Any = Body(...)) -> dict:
+    @app.post("/api/projects/{project_id}/card")
+    def replace_card(project_id: str, card: Any = Body(...)) -> dict:
+        """A corrected AI Card for a system already under assessment."""
         _view_or_404(project_id)
-        _graph_or_422(ontology)
-        return payload(
-            projects.replace_graph(project_id, jsonld=json.dumps(ontology), raw=ontology)
-        )
+        _card_or_422(card)
+        return payload(projects.replace_graph(project_id, jsonld=json.dumps(card), raw=card))
 
     @app.post("/api/projects/{project_id}/answer")
     def answer(project_id: str, body: AnswerBody) -> dict:

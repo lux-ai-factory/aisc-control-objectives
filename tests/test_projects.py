@@ -80,9 +80,25 @@ class TestStartingAProject:
         assert project["profile_run"]["stop"] == "clean"
         assert project["profile_run"]["profile"]["high_risk"]["quote"] == CREDIT
 
-    def test_what_is_not_a_graph_is_refused(self, client):
+    def test_what_is_not_an_ai_card_is_refused(self, client):
         for body in ({"hello": "world"}, "a string", [1, 2, 3]):
-            assert client.post("/api/projects", json=body).status_code == 422
+            response = client.post("/api/projects", json=body)
+            assert response.status_code == 422, body
+            # the message says what is wanted and where to get it
+            assert "AI Card" in response.text
+            assert "ai-card.json" in response.text
+
+    def test_an_ai_card_json_is_accepted(self, client, graph):
+        """The export that wraps the graph with the form's facts, which is what
+        the qualification app's Download JSON gives you."""
+        card = {
+            "system_name": "MicroCredit Assist Score (MCAS)",
+            "qualification_id": "cmtvvrnw50000jzyvas8gmn3u",
+            "ontology": {"chains": [], "rows": []},
+            "ontology_graph": graph,
+        }
+        project = client.post("/api/projects?name=from+card", json=card).json()
+        assert len(project["risks"]) == 5
 
     def test_a_project_survives_a_restart(self, client, graph):
         project = _start(client, graph)

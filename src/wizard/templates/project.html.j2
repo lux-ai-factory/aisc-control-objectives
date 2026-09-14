@@ -20,10 +20,10 @@
     </div>
 
     {%- if record.profile_run and record.profile_run.stop == "failed" %}
-    <div class="error">The model could not read the graph ({{ record.profile_run.error }}).
+    <div class="error">The model could not read the AI Card ({{ record.profile_run.error }}).
        Answer the three questions yourself below.</div>
     {%- elif not view.can_map %}
-    <div class="notice">Proposed by the model from this system's graph, each on a quote you
+    <div class="notice">Proposed by the model from this system's AI Card, each on a quote you
        can check. <strong>You have the final word</strong>: confirm what it read, or refuse
        it and answer the other way. Nothing is mapped or tiered until all three are answered.</div>
     {%- else %}
@@ -39,14 +39,14 @@
           <h3>{{ question }}</h3>
           {%- if fact.value == "undetermined" %}
           <p class="q"><strong>The model could not tell.</strong>
-             {{ fact.rationale or "The graph does not settle this." }}
+             {{ fact.rationale or "The card does not settle this." }}
              You decide.</p>
           {%- else %}
           <p class="q">The model reads this as <strong>{{ fact.value }}</strong>.
              {{ fact.rationale }}</p>
           {%- if fact.quote %}
           <blockquote class="co-quote">“{{ fact.quote }}”
-            <small>{{ fact.source or "the graph" }}{% if name == "high_risk" and fact.annex_iii_point %} · Annex III point {{ fact.annex_iii_point }}{% endif %}</small>
+            <small>{{ fact.source or "the card" }}{% if name == "high_risk" and fact.annex_iii_point %} · Annex III point {{ fact.annex_iii_point }}{% endif %}</small>
           </blockquote>
           {%- endif %}
           {%- endif %}
@@ -75,8 +75,8 @@
   <div class="qf-section">
     <div class="co-macro-head">
       <span class="co-macro-id">2</span>
-      <h2>The system's risks</h2>
-      <span class="n">{{ record.ontology.risks | length }} from the graph</span>
+      <h2>The risks on the card</h2>
+      <span class="n">{{ record.ontology.risks | length }} from the AI Card</span>
     </div>
 
     {%- if not view.can_map %}
@@ -173,7 +173,7 @@
   {%- endfor %}
 
   <p class="co-count">
-    Graph <code>{{ record.digest[:12] }}</code> · catalogue <code>{{ record.objectives_digest[:12] }}</code>
+    Card <code>{{ record.digest[:12] }}</code> · catalogue <code>{{ record.objectives_digest[:12] }}</code>
     {%- if record.profile_run %} · profile run {{ record.profile_run.attempts }} attempt{{ 's' if record.profile_run.attempts != 1 }}, <code>{{ record.profile_run.stop }}</code>{% endif %}
     {%- if record.mapping_run %} · mapping {{ record.mapping_run.attempts }} attempt{{ 's' if record.mapping_run.attempts != 1 }}, <code>{{ record.mapping_run.stop }}</code>, {{ record.mapping_run.model }}{% endif %}
   </p>
