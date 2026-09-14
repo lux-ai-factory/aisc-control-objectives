@@ -91,7 +91,10 @@
   </div>
   {%- endif %}
 
-  {# ── 3. the objectives, in tiers ────────────────────────────────────── #}
+  {# ── 3. the objectives, in tiers ─────────────────────────────────────
+     Only once the mapping has run: before that nothing orders the 50, and an
+     unordered 50 is what /objectives already is. #}
+  {%- if view.mapped %}
   <div class="co-stats">
     <div class="co-stat co-stat--tier1"><div class="v">{{ counts.tier1 }}</div><div class="k">Tier 1 · start here</div></div>
     <div class="co-stat"><div class="v">{{ counts.tier2 }}</div><div class="k">Tier 2 · next</div></div>
@@ -120,6 +123,7 @@
     {%- endfor %}
   </section>
   {%- endfor %}
+  {%- endif %}
 
   <p class="co-count">
     Card <code>{{ record.digest[:12] }}</code> · catalogue <code>{{ record.objectives_digest[:12] }}</code>

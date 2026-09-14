@@ -222,6 +222,21 @@ class TestThePages:
         for gone in ("the three questions", 'type="radio"', "/answer", "Confirm"):
             assert gone not in page, gone
 
+    def test_no_tiers_are_shown_before_the_mapping_is_run(self, client, graph):
+        """Nothing is ordered until the risks have been read against the
+        objectives, and the unordered list of 50 is what /objectives is for."""
+        project = _start(client, graph)
+        page = client.get(f"/projects/{project['id']}").text
+        for gone in ("Tier 1 · start here", 'id="tier-1"', 'id="tier-3"', 'class="co-obj-id"'):
+            assert gone not in page, gone
+
+    def test_the_tiers_appear_once_it_has(self, client, graph):
+        project = _start(client, graph)
+        client.post(f"/projects/{project['id']}/map", follow_redirects=False)
+        page = client.get(f"/projects/{project['id']}").text
+        assert "Tier 1 · start here" in page
+        assert 'id="tier-1"' in page
+
     def test_ranking_from_the_page_re_tiers_it(self, client, graph):
         project = _start(client, graph)
         client.post(f"/projects/{project['id']}/map", follow_redirects=False)
