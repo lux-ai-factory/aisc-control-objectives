@@ -135,6 +135,25 @@ class TestJsonObject:
     def test_an_object_with_prose_around_it(self):
         assert json_object('Here you go:\n{"a": 1}\nHope that helps!') == {"a": 1}
 
+    def test_a_trailing_brace_does_not_ruin_it(self):
+        """Observed from a local model on its first answer: one brace too many.
+        Scanning to the LAST brace makes that unparseable and fails the run."""
+        assert json_object('{"ok": true}}') == {"ok": True}
+
+    def test_trailing_prose_after_the_object(self):
+        assert json_object('{"ok": true}\n\nLet me know if you need more!') == {"ok": True}
+
+    def test_a_nested_object_is_not_truncated(self):
+        answer = '{"a": {"b": 1}, "c": {"d": 2}}'
+        assert json_object(answer) == {"a": {"b": 1}, "c": {"d": 2}}
+
+    def test_a_nested_object_inside_a_fence_is_not_truncated(self):
+        answer = '```json\n{"a": {"b": 1}, "c": {"d": 2}}\n```'
+        assert json_object(answer) == {"a": {"b": 1}, "c": {"d": 2}}
+
+    def test_a_brace_in_prose_before_the_object_is_skipped(self):
+        assert json_object('I thought about {this} and decided:\n{"ok": true}') == {"ok": True}
+
     def test_a_refusal_is_not_an_object(self):
         assert json_object("I cannot help with that.") == {}
 

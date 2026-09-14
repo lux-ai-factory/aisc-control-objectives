@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 from typing import Any, Callable, TypeVar
 
 from baf import nlp
@@ -144,21 +143,25 @@ def completer(llm) -> Completer:
 def json_object(text: str) -> dict:
     """The first JSON object in a model's answer, or an empty one.
 
-    Models fence their JSON, introduce it, and apologise after it. All three
-    are fine; anything else yields {} and is handled as an empty result.
+    Models fence their JSON, introduce it, apologise after it, and sometimes
+    close it twice. So this scans forward from each "{" and keeps the first
+    one that decodes as a complete object, ignoring whatever follows it: a
+    local model's very first answer here was `{"ok": true}}`, and taking
+    everything up to the LAST brace would have made that unparseable and
+    failed the run.
     """
-    fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text or "", re.DOTALL)
-    candidate = fenced.group(1) if fenced else None
-    if candidate is None:
-        start, end = (text or "").find("{"), (text or "").rfind("}")
-        candidate = text[start : end + 1] if 0 <= start < end else None
-    if not candidate:
-        return {}
-    try:
-        parsed = json.loads(candidate)
-    except json.JSONDecodeError:
-        return {}
-    return parsed if isinstance(parsed, dict) else {}
+    text = text or ""
+    decoder = json.JSONDecoder()
+    position = text.find("{")
+    while position != -1:
+        try:
+            parsed, _ = decoder.raw_decode(text, position)
+        except json.JSONDecodeError:
+            parsed = None
+        if isinstance(parsed, dict):
+            return parsed
+        position = text.find("{", position + 1)
+    return {}
 
 
 def _try_json(value: Any) -> Any:

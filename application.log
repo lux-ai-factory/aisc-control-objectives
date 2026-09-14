@@ -86,3 +86,35 @@
 2026-09-14 10:13:29,357 - BESSER Agentic Framework - WARNING - cv2 dependencies in WebSocketPlatform could not be imported. You can install them from the requirements/requirements-extras.txt file
 2026-09-14 10:13:29,357 - BESSER Agentic Framework - WARNING - plotly dependencies in WebSocketPlatform could not be imported. You can install them from the requirements/requirements-extras.txt file
 2026-09-14 10:13:29,357 - BESSER Agentic Framework - WARNING - librosa dependencies in WebSocketPlatform could not be imported. You can install them from the requirements/requirements-extras.txt file
+2026-09-14 10:15:45,183 - BESSER Agentic Framework - WARNING - besser GUI dependencies could not be imported. GUI features will be unavailable. Install with 'pip install --no-deps besser'.
+2026-09-14 10:15:46,536 - BESSER Agentic Framework - WARNING - langchain dependencies in RAG could not be imported. You can install them from the requirements/requirements-extras.txt file
+2026-09-14 10:15:48,637 - BESSER Agentic Framework - WARNING - besser dependencies in gui_serializer.py could not be imported. You can install them with 'pip install --no-deps besser'
+2026-09-14 10:15:49,068 - BESSER Agentic Framework - WARNING - cv2 dependencies in websocket_callbacks.py could not be imported. You can install them from the requirements/requirements-extras.txt file
+2026-09-14 10:15:49,069 - BESSER Agentic Framework - WARNING - plotly dependencies in websocket_callbacks.py could not be imported. You can install them from the requirements/requirements-extras.txt file
+2026-09-14 10:15:49,099 - BESSER Agentic Framework - WARNING - cv2 dependencies in WebSocketPlatform could not be imported. You can install them from the requirements/requirements-extras.txt file
+2026-09-14 10:15:49,099 - BESSER Agentic Framework - WARNING - plotly dependencies in WebSocketPlatform could not be imported. You can install them from the requirements/requirements-extras.txt file
+2026-09-14 10:15:49,100 - BESSER Agentic Framework - WARNING - librosa dependencies in WebSocketPlatform could not be imported. You can install them from the requirements/requirements-extras.txt file
+2026-09-14 10:16:35,109 - BESSER Agentic Framework - WARNING - besser GUI dependencies could not be imported. GUI features will be unavailable. Install with 'pip install --no-deps besser'.
+2026-09-14 10:16:36,587 - BESSER Agentic Framework - WARNING - langchain dependencies in RAG could not be imported. You can install them from the requirements/requirements-extras.txt file
+2026-09-14 10:16:40,156 - BESSER Agentic Framework - WARNING - besser dependencies in gui_serializer.py could not be imported. You can install them with 'pip install --no-deps besser'
+2026-09-14 10:16:40,604 - BESSER Agentic Framework - WARNING - cv2 dependencies in websocket_callbacks.py could not be imported. You can install them from the requirements/requirements-extras.txt file
+2026-09-14 10:16:40,606 - BESSER Agentic Framework - WARNING - plotly dependencies in websocket_callbacks.py could not be imported. You can install them from the requirements/requirements-extras.txt file
+2026-09-14 10:16:40,639 - BESSER Agentic Framework - WARNING - cv2 dependencies in WebSocketPlatform could not be imported. You can install them from the requirements/requirements-extras.txt file
+2026-09-14 10:16:40,640 - BESSER Agentic Framework - WARNING - plotly dependencies in WebSocketPlatform could not be imported. You can install them from the requirements/requirements-extras.txt file
+2026-09-14 10:16:40,640 - BESSER Agentic Framework - WARNING - librosa dependencies in WebSocketPlatform could not be imported. You can install them from the requirements/requirements-extras.txt file
+2026-09-14 10:16:55,666 - BESSER Agentic Framework - WARNING - besser GUI dependencies could not be imported. GUI features will be unavailable. Install with 'pip install --no-deps besser'.
+2026-09-14 10:16:57,031 - BESSER Agentic Framework - WARNING - langchain dependencies in RAG could not be imported. You can install them from the requirements/requirements-extras.txt file
+2026-09-14 10:16:59,305 - BESSER Agentic Framework - WARNING - besser dependencies in gui_serializer.py could not be imported. You can install them with 'pip install --no-deps besser'
+2026-09-14 10:16:59,760 - BESSER Agentic Framework - WARNING - cv2 dependencies in websocket_callbacks.py could not be imported. You can install them from the requirements/requirements-extras.txt file
+2026-09-14 10:16:59,761 - BESSER Agentic Framework - WARNING - plotly dependencies in websocket_callbacks.py could not be imported. You can install them from the requirements/requirements-extras.txt file
+2026-09-14 10:16:59,783 - BESSER Agentic Framework - WARNING - cv2 dependencies in WebSocketPlatform could not be imported. You can install them from the requirements/requirements-extras.txt file
+2026-09-14 10:16:59,784 - BESSER Agentic Framework - WARNING - plotly dependencies in WebSocketPlatform could not be imported. You can install them from the requirements/requirements-extras.txt file
+2026-09-14 10:16:59,784 - BESSER Agentic Framework - WARNING - librosa dependencies in WebSocketPlatform could not be imported. You can install them from the requirements/requirements-extras.txt file
+2026-09-14 10:17:17,109 - BESSER Agentic Framework - WARNING - besser GUI dependencies could not be imported. GUI features will be unavailable. Install with 'pip install --no-deps besser'.
+2026-09-14 10:17:18,454 - BESSER Agentic Framework - WARNING - langchain dependencies in RAG could not be imported. You can install them from the requirements/requirements-extras.txt file
+2026-09-14 10:17:20,735 - BESSER Agentic Framework - WARNING - besser dependencies in gui_serializer.py could not be imported. You can install them with 'pip install --no-deps besser'
+2026-09-14 10:17:21,175 - BESSER Agentic Framework - WARNING - cv2 dependencies in websocket_callbacks.py could not be imported. You can install them from the requirements/requirements-extras.txt file
+2026-09-14 10:17:21,176 - BESSER Agentic Framework - WARNING - plotly dependencies in websocket_callbacks.py could not be imported. You can install them from the requirements/requirements-extras.txt file
+2026-09-14 10:17:21,201 - BESSER Agentic Framework - WARNING - cv2 dependencies in WebSocketPlatform could not be imported. You can install them from the requirements/requirements-extras.txt file
+2026-09-14 10:17:21,202 - BESSER Agentic Framework - WARNING - plotly dependencies in WebSocketPlatform could not be imported. You can install them from the requirements/requirements-extras.txt file
+2026-09-14 10:17:21,202 - BESSER Agentic Framework - WARNING - librosa dependencies in WebSocketPlatform could not be imported. You can install them from the requirements/requirements-extras.txt file
