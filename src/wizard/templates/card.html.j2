@@ -136,11 +136,10 @@
   </div>
 
   {%- for macro in macros %}
-  <section class="qf-section" id="{{ macro.id }}">
+  <section class="qf-section co-tier--{{ macro.key }}" id="tier-{{ macro.key }}">
     <div class="co-macro-head">
-      <span class="co-macro-id">{{ macro.id }}</span>
       <h2>{{ macro.title }}</h2>
-      <span class="n">{{ macro.in_scope }} of {{ macro.objectives | length }} to achieve</span>
+      <span class="n">{{ macro.subtitle }} · {{ macro.objectives | length }}</span>
     </div>
 
     {%- for objective, verdict, priority in macro.objectives %}
@@ -148,6 +147,7 @@
       <div class="co-obj-head">
         <span class="co-obj-id">{{ objective.id }}</span>
         <h3>{{ objective.sub_requirement_label }}</h3>
+        <span class="co-family">{{ objective.macro_id }} {{ objective.macro_title }}</span>
         {%- if priority and priority.tier %}
         <span class="qf-tag qf-tag--tier{{ priority.tier }}">Tier {{ priority.tier }}</span>
         {%- endif %}

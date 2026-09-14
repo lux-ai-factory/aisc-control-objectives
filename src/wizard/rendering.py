@@ -58,12 +58,25 @@ def render_objectives_page(
     )
 
 
+#: The card's sections, in the order an assessor works through them. The last
+#: two are not tiers: they are what is out of scope and what is unsettled, kept
+#: on the page because "not applicable" is a finding a reader should be able to
+#: check, not something to hide.
+TIER_SECTIONS = (
+    (1, "Tier 1", "Start here"),
+    (2, "Tier 2", "Next"),
+    (3, "Tier 3", "Later"),
+    ("no", "Not applicable", "Out of scope for this system"),
+    ("undetermined", "Pending", "Waiting on the applicability profile"),
+)
+
+
 @dataclass
-class _MacroView:
-    id: str
+class _TierView:
+    key: object
     title: str
+    subtitle: str
     objectives: list[tuple] = field(default_factory=list)  # (objective, verdict, priority)
-    in_scope: int = 0
 
 
 @dataclass
@@ -113,26 +126,31 @@ def render_card_page(
     verdicts = {v.objective_id: v for v in record.verdicts}
     priorities = {p.objective_id: p for p in record.priorities}
     counts = _Counts()
-    macros: list[_MacroView] = []
-    for macro in catalogue.macro_requirements():
-        rows = []
-        in_scope = 0
-        for objective in macro.objectives:
-            verdict = verdicts[objective.id]
-            priority = priorities.get(objective.id)
-            rows.append((objective, verdict, priority))
-            if priority and priority.tier:
-                setattr(counts, f"tier{priority.tier}", getattr(counts, f"tier{priority.tier}") + 1)
-            if verdict.non_binding:
-                counts.non_binding += 1
-            elif verdict.applies == "yes":
-                counts.to_achieve += 1
-                in_scope += 1
-            elif verdict.applies == "no":
-                counts.not_applicable += 1
-            else:
-                counts.pending += 1
-        macros.append(_MacroView(id=macro.id, title=macro.title, objectives=rows, in_scope=in_scope))
+    sections = {key: _TierView(key, title, subtitle) for key, title, subtitle in TIER_SECTIONS}
+
+    # Ordered by tier, then by score within a tier, then by requirement order:
+    # the page is a work list, and a work list reads top to bottom.
+    rows = []
+    for objective in catalogue:
+        verdict = verdicts[objective.id]
+        priority = priorities.get(objective.id)
+        rows.append((objective, verdict, priority))
+        if priority and priority.tier:
+            setattr(counts, f"tier{priority.tier}", getattr(counts, f"tier{priority.tier}") + 1)
+        if verdict.non_binding:
+            counts.non_binding += 1
+        elif verdict.applies == "yes":
+            counts.to_achieve += 1
+        elif verdict.applies == "no":
+            counts.not_applicable += 1
+        else:
+            counts.pending += 1
+
+    rows.sort(key=lambda row: (-(row[2].score if row[2] else 0), row[0].sort_key))
+    for objective, verdict, priority in rows:
+        key = priority.tier if priority and priority.tier else verdict.applies
+        sections[key].objectives.append((objective, verdict, priority))
+    macros = [section for section in sections.values() if section.objectives]
 
     template = _environment().get_template("card.html.j2")
     return template.render(

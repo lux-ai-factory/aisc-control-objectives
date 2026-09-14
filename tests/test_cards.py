@@ -325,6 +325,41 @@ class TestPages:
         for risk_id in ("risk0", "risk2", "risk4"):
             assert f'name="{risk_id}"' in page                            # a 1-5 select each
 
+    def test_the_objectives_are_grouped_by_tier_worst_first(self, client, mcas_raw, fixtures_dir):
+        """A work list reads top to bottom: everything to start now, then next,
+        then later. Grouping by requirement family buries Tier 1 across eleven
+        sections."""
+        record = _upload(client, mcas_raw)
+        client.post(
+            f"/api/cards/{record['id']}/ontology",
+            json=json.loads((fixtures_dir / "mcas.ontology.jsonld").read_text()),
+        )
+        page = client.get(f"/cards/{record['id']}").text
+        order = [page.index(marker) for marker in ("Start here", "Next", "Later")]
+        assert order == sorted(order)
+        # and the seven Tier 1 objectives sit together, above every Tier 2 one.
+        # Matched on the chip itself: the class alone also appears in the
+        # stylesheet at the top of the document.
+        tier1, tier2 = 'qf-tag--tier1">Tier 1</span>', 'qf-tag--tier2">Tier 2</span>'
+        assert page.count(tier1) == 7
+        assert page.rindex(tier1) < page.index(tier2)
+
+    def test_each_objective_still_names_its_requirement_family(self, client, mcas_raw):
+        """Grouped by tier, an objective has to carry its own R-number: the
+        section heading no longer says which family it belongs to."""
+        record = _upload(client, mcas_raw)
+        page = client.get(f"/cards/{record['id']}").text
+        assert "Human Agency and Oversight" in page
+        assert "Risk Management" in page
+
+    def test_what_does_not_apply_is_last_and_counted(self, client, mcas_raw):
+        record = _upload(client, mcas_raw)
+        record = client.post(
+            f"/api/cards/{record['id']}/profile", json={"high_risk": "no"}
+        ).json()
+        page = client.get(f"/cards/{record['id']}").text
+        assert page.index("Later") < page.index("Not applicable</h2>")
+
     def test_the_page_shows_the_tier_of_each_objective(self, client, mcas_raw):
         record = _upload(client, mcas_raw)
         page = client.get(f"/cards/{record['id']}").text
