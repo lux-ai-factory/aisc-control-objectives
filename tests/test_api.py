@@ -16,9 +16,15 @@ from wizard.models.control_objective import ControlObjective
 from wizard.control_objectives import ControlObjectiveCatalogue
 
 
-@pytest.fixture(scope="module")
-def client(objectives):
-    return TestClient(create_app(objectives, base_config=RunConfig()))
+@pytest.fixture()
+def client(objectives, repository):
+    """The catalogue routes need no models; a Projects with stand-ins is
+    enough, and the project flow is exercised in test_projects.py."""
+    from wizard.api.app import NoMapper, NoModel
+    from wizard.projects import Projects
+
+    projects = Projects(repository, objectives, NoModel(), NoMapper())
+    return TestClient(create_app(objectives, projects, base_config=RunConfig()))
 
 
 class TestConfig:
@@ -80,7 +86,7 @@ def test_health_is_served(client):
 class TestObjectivesPage:
     """The root is the interface: every objective rendered server-side."""
 
-    @pytest.fixture(scope="class")
+    @pytest.fixture()
     def page(self, client):
         response = client.get("/")
         assert response.status_code == 200
@@ -141,7 +147,7 @@ class TestObjectivesPage:
         assert "/api/control-objectives" not in page
         assert "/docs" not in page
 
-    def test_markup_is_escaped_not_injected(self):
+    def test_markup_is_escaped_not_injected(self, repository):
         """Objective text is data: a CSV carrying markup must not become markup.
 
         Built from its own row rather than by mutating a loaded catalogue: the
@@ -163,16 +169,24 @@ class TestObjectivesPage:
                 )
             ]
         )
-        page = TestClient(create_app(catalogue, base_config=RunConfig())).get("/").text
+        from wizard.api.app import NoMapper, NoModel
+        from wizard.projects import Projects
+
+        app = create_app(
+            catalogue,
+            Projects(repository, catalogue, NoModel(), NoMapper()),
+            base_config=RunConfig(),
+        )
+        page = TestClient(app).get("/").text
         assert "<script>alert(1)</script>" not in page
         assert "&lt;script&gt;" in page
 
 
 def test_the_three_facts_are_declared_once():
     """Every place that enumerates the facts derives from Profile.FACTS."""
-    from wizard.api.app import ProfileAnswers
+    from wizard.api.app import AnswerBody
     from wizard.models.profile import Profile
     from wizard.rendering import FACT_QUESTIONS
 
-    assert tuple(ProfileAnswers.model_fields) == Profile.FACTS
+    assert tuple(AnswerBody.model_fields) == Profile.FACTS
     assert tuple(name for name, _ in FACT_QUESTIONS) == Profile.FACTS

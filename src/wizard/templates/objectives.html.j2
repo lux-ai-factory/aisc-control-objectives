@@ -13,17 +13,10 @@
   </div>
 
   <div class="qf-section">
-    <h2>Assess an AI system</h2>
-    <p class="qf-help">Upload the system card (JSON) produced by the qualification module. The
-       wizard proposes the three facts that decide which objectives bind the system, for you to
-       confirm, and lists the objectives to achieve.</p>
-    <form method="post" action="{{ root_path }}/cards" enctype="multipart/form-data">
-      <div class="field">
-        <label for="card">System card</label>
-        <input id="card" name="card" type="file" accept="application/json,.json" required>
-      </div>
-      <div class="qf-actions"><button class="btn" type="submit">Assess</button></div>
-    </form>
+    <h2>Assessing a system</h2>
+    <p class="qf-help">This page is the catalogue: what the objectives are, independent of
+       any system. To work out which of them a particular system owes, and which to start
+       with, open <a href="{{ root_path }}/projects">Projects</a>.</p>
   </div>
 
   <div class="qf-section">

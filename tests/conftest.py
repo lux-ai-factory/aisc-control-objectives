@@ -27,6 +27,16 @@ def mcas_card(mcas_raw) -> SystemCard:
 
 
 @pytest.fixture(scope="session")
+def mcas_graph():
+    """The MCAS system's filled AIRO graph, as its qualification exports it."""
+    import json
+
+    from wizard.models.ontology import Ontology
+
+    return Ontology.from_jsonld(json.loads((FIXTURES / "mcas.ontology.jsonld").read_text()))
+
+
+@pytest.fixture(scope="session")
 def objectives():
     return load_control_objectives()
 

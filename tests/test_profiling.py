@@ -1,7 +1,9 @@
 """The profile extractor: the model proposes three facts with quotes; the
 controls check the quotes; the loop is bounded and always publishes.
 
-No network: the extractor is driven by fakes.
+It reads the system's filled AIRO graph, not the prose card: the graph is the
+assessor's own words, typed and cited, where the card is an LLM's summary of
+them. No network: the extractor is driven by fakes.
 """
 
 from __future__ import annotations
@@ -14,7 +16,6 @@ from wizard.profiling import (
     Finding,
     ProfileExtractor,
     ProfileRun,
-    card_text,
     extract_profile,
     load_skill,
     run_controls,
@@ -23,145 +24,123 @@ from wizard.profiling import (
 from helpers import FakeExtractor, good_profile  # noqa: E402
 
 
-class TestCardText:
-    def test_covers_every_string_the_model_is_shown(self, mcas_card):
-        """The prompt shows the model the whole card; a quote from any part of
-        it must be checkable, so the haystack is derived from the same dump
-        rather than from a hand-kept field list that can fall behind."""
-        def leaves(value):
-            if isinstance(value, str):
-                if value.strip():
-                    yield value
-            elif isinstance(value, dict):
-                for item in value.values():
-                    yield from leaves(item)
-            elif isinstance(value, list):
-                for item in value:
-                    yield from leaves(item)
-
-        text = card_text(mcas_card)
-        for leaf in leaves(mcas_card.model_dump()):
-            assert leaf in text, leaf[:60]
-
-    def test_contains_every_prose_field_and_every_finding_point(self, mcas_card):
-        text = card_text(mcas_card)
-        assert mcas_card.description in text
-        assert mcas_card.target_use_case in text
-        for finding in mcas_card.findings:
-            assert finding.summary in text
-            for point in finding.points:
-                assert point in text
-        for issue in mcas_card.open_issues:
-            assert issue in text
+class TestTheGraphAsAPassage:
+    def test_it_carries_what_the_three_questions_are_answered_from(self, mcas_graph):
+        text = mcas_graph.as_text()
+        assert "Finance and insurance" in text            # the Annex III domain
+        assert "Evaluates creditworthiness" in text       # the purpose
+        assert "Hosted explanation LLM" in text           # the Art. 50 component
+        assert "Annex IV" in text                         # the answers, cited
 
 
 class TestControls:
-    def test_a_clean_profile_raises_nothing(self, mcas_card):
-        assert run_controls(good_profile(), mcas_card) == []
+    def test_a_clean_profile_raises_nothing(self, mcas_graph):
+        assert run_controls(good_profile(), mcas_graph) == []
 
-    def test_a_quote_not_in_the_card_is_a_finding(self, mcas_card):
+    def test_a_quote_not_in_the_card_is_a_finding(self, mcas_graph):
         profile = good_profile()
         profile.personal_data.quote = "processes the applicant's blood type"
-        findings = run_controls(profile, mcas_card)
-        assert [(f.fact, f.flag) for f in findings] == [("personal_data", "quote-not-in-card")]
+        findings = run_controls(profile, mcas_graph)
+        assert [(f.fact, f.flag) for f in findings] == [("personal_data", "quote-not-in-graph")]
 
-    def test_a_decided_fact_without_a_quote_is_a_finding(self, mcas_card):
+    def test_a_decided_fact_without_a_quote_is_a_finding(self, mcas_graph):
         profile = good_profile()
         profile.interacts_with_natural_persons.quote = ""
-        findings = run_controls(profile, mcas_card)
+        findings = run_controls(profile, mcas_graph)
         assert [(f.fact, f.flag) for f in findings] == [
             ("interacts_with_natural_persons", "quote-missing")
         ]
 
-    def test_an_undetermined_fact_needs_no_quote(self, mcas_card):
+    def test_an_undetermined_fact_needs_no_quote(self, mcas_graph):
         profile = good_profile()
         profile.personal_data = Fact(value="undetermined")
-        assert run_controls(profile, mcas_card) == []
+        assert run_controls(profile, mcas_graph) == []
 
-    def test_high_risk_yes_must_cite_an_annex_iii_point(self, mcas_card):
+    def test_high_risk_yes_must_cite_an_annex_iii_point(self, mcas_graph):
         profile = good_profile()
         profile.high_risk.annex_iii_point = ""
-        findings = run_controls(profile, mcas_card)
+        findings = run_controls(profile, mcas_graph)
         assert [(f.fact, f.flag) for f in findings] == [("high_risk", "annex-point-missing")]
 
-    def test_a_quote_straddling_two_fields_is_not_a_span_of_either(self, mcas_card):
+    def test_a_quote_straddling_two_properties_is_not_a_span_of_either(self, mcas_graph):
         """The only deterministic guard on the model's claims is that the quote
-        is real. Joining the fields with a space lets a fabricated span made of
-        one field's tail and another's head pass as support."""
+        is real. Joining the properties with a space would let a fabricated
+        span made of one's tail and another's head pass as support."""
         profile = good_profile()
-        first, second = mcas_card.description, mcas_card.overview
-        profile.personal_data.quote = f"{first[-40:]} {second[:40]}"
-        findings = run_controls(profile, mcas_card)
-        assert [f.flag for f in findings] == ["quote-not-in-card"]
+        first = mcas_graph.property("isAppliedWithinDomain").labels[0]
+        second = mcas_graph.property("hasComponent").labels[0]
+        profile.personal_data.quote = f"{first} {second}"
+        findings = run_controls(profile, mcas_graph)
+        assert [f.flag for f in findings] == ["quote-not-in-graph"]
 
-    def test_quote_matching_ignores_whitespace_and_case(self, mcas_card):
+    def test_quote_matching_ignores_whitespace_and_case(self, mcas_graph):
         profile = good_profile()
         profile.high_risk.quote = "  evaluates   creditworthiness for €100–€5,000 consumer loans "
-        assert run_controls(profile, mcas_card) == []
+        assert run_controls(profile, mcas_graph) == []
 
 
 class TestExtractProfile:
-    def test_a_clean_first_attempt_stops_clean(self, mcas_card):
-        run = extract_profile(mcas_card, FakeExtractor(good_profile()))
+    def test_a_clean_first_attempt_stops_clean(self, mcas_graph):
+        run = extract_profile(mcas_graph, FakeExtractor(good_profile()))
         assert isinstance(run, ProfileRun)
         assert run.stop == "clean"
         assert run.attempts == 1
         assert run.findings == []
 
-    def test_findings_go_back_to_the_extractor_and_a_fixed_attempt_stops_clean(self, mcas_card):
+    def test_findings_go_back_to_the_extractor_and_a_fixed_attempt_stops_clean(self, mcas_graph):
         bad = good_profile()
         bad.personal_data.quote = "not in the card"
         extractor = FakeExtractor(bad, good_profile())
-        run = extract_profile(mcas_card, extractor)
+        run = extract_profile(mcas_graph, extractor)
         assert run.stop == "clean"
         assert run.attempts == 2
         # second call was told what was wrong with the first
-        assert [f.flag for f in extractor.calls[1]] == ["quote-not-in-card"]
+        assert [f.flag for f in extractor.calls[1]] == ["quote-not-in-graph"]
 
-    def test_the_same_findings_twice_running_is_a_fixpoint(self, mcas_card):
+    def test_the_same_findings_twice_running_is_a_fixpoint(self, mcas_graph):
         bad = good_profile()
         bad.personal_data.quote = "not in the card"
-        run = extract_profile(mcas_card, FakeExtractor(bad))
+        run = extract_profile(mcas_graph, FakeExtractor(bad))
         assert run.stop == "fixpoint"
         assert run.attempts == 2
-        assert [f.flag for f in run.findings] == ["quote-not-in-card"]
+        assert [f.flag for f in run.findings] == ["quote-not-in-graph"]
 
-    def test_the_attempt_cap_publishes_with_open_findings(self, mcas_card):
+    def test_the_attempt_cap_publishes_with_open_findings(self, mcas_graph):
         one, two, three = good_profile(), good_profile(), good_profile()
         one.personal_data.quote = "wrong one"
         two.high_risk.quote = "wrong two"
         three.interacts_with_natural_persons.quote = "wrong three"
-        run = extract_profile(mcas_card, FakeExtractor(one, two, three, three), max_attempts=3)
+        run = extract_profile(mcas_graph, FakeExtractor(one, two, three, three), max_attempts=3)
         assert run.stop == "cap"
         assert run.attempts == 3
         assert run.findings  # the last attempt's, attached to the published profile
 
-    def test_a_model_failing_on_the_first_attempt_publishes_an_undetermined_profile(self, mcas_card):
-        run = extract_profile(mcas_card, FakeExtractor(error=RuntimeError("no key")))
+    def test_a_model_failing_on_the_first_attempt_publishes_an_undetermined_profile(self, mcas_graph):
+        run = extract_profile(mcas_graph, FakeExtractor(error=RuntimeError("no key")))
         assert run.stop == "failed"
         assert "no key" in run.error
         assert run.profile == Profile()
         assert run.attempts == 1
 
-    def test_a_model_failing_on_a_retry_keeps_the_last_proposal_and_its_findings(self, mcas_card):
+    def test_a_model_failing_on_a_retry_keeps_the_last_proposal_and_its_findings(self, mcas_graph):
         """Every exit publishes what it has: the person gets the good facts and
         the flagged one, not three empty selects."""
         first = good_profile()
         first.personal_data.quote = "not in the card"
-        run = extract_profile(mcas_card, FakeExtractor(first, raise_on=2, error=RuntimeError("rate limit")))
+        run = extract_profile(mcas_graph, FakeExtractor(first, raise_on=2, error=RuntimeError("rate limit")))
         assert run.stop == "failed"
         assert "rate limit" in run.error
         assert run.attempts == 2
         assert run.profile.high_risk.value == "yes"
         assert run.profile.high_risk.annex_iii_point == "5(b)"
-        assert [f.flag for f in run.findings] == ["quote-not-in-card"]
+        assert [f.flag for f in run.findings] == ["quote-not-in-graph"]
 
-    def test_an_extractor_returning_nothing_is_a_failed_run_not_a_crash(self, mcas_card):
+    def test_an_extractor_returning_nothing_is_a_failed_run_not_a_crash(self, mcas_graph):
         class Nothing:
             def propose(self, card, findings=()):
                 return None
 
-        run = extract_profile(mcas_card, Nothing())
+        run = extract_profile(mcas_graph, Nothing())
         assert run.stop == "failed"
         assert "Profile" in run.error
 
@@ -180,39 +159,40 @@ class FakeCompleter:
 
 
 class TestProfileExtractor:
-    def test_it_puts_the_skill_in_the_system_prompt(self, mcas_card):
+    def test_it_puts_the_skill_in_the_system_prompt(self, mcas_graph):
         complete = FakeCompleter()
-        profile = ProfileExtractor(complete=complete).propose(mcas_card)
+        profile = ProfileExtractor(complete=complete).propose(mcas_graph)
         assert profile == good_profile()
         system, _ = complete.calls[0]
         assert "Annex III" in system
         assert not system.startswith("---")          # frontmatter stripped
 
-    def test_the_user_message_carries_the_whole_card(self, mcas_card):
+    def test_the_user_message_carries_what_the_graph_says(self, mcas_graph):
         complete = FakeCompleter()
-        ProfileExtractor(complete=complete).propose(mcas_card)
+        ProfileExtractor(complete=complete).propose(mcas_graph)
         _, user = complete.calls[0]
-        assert mcas_card.system_name in user
-        assert mcas_card.open_issues[0][:40] in user
+        assert mcas_graph.system_name in user
+        assert "Finance and insurance" in user
+        assert mcas_graph.answers[0].text[:40] in user
 
-    def test_on_a_retry_the_findings_are_in_the_message(self, mcas_card):
+    def test_on_a_retry_the_findings_are_in_the_message(self, mcas_graph):
         complete = FakeCompleter()
         ProfileExtractor(complete=complete).propose(
-            mcas_card,
-            findings=[Finding(fact="personal_data", flag="quote-not-in-card", detail="x")],
+            mcas_graph,
+            findings=[Finding(fact="personal_data", flag="quote-not-in-graph", detail="x")],
         )
         _, user = complete.calls[0]
-        assert "quote-not-in-card" in user
+        assert "quote-not-in-graph" in user
         assert "personal_data" in user
 
-    def test_a_fenced_answer_with_prose_around_it_still_parses(self, mcas_card):
+    def test_a_fenced_answer_with_prose_around_it_still_parses(self, mcas_graph):
         answer = "Sure!\n```json\n" + good_profile().model_dump_json() + "\n```\nHope that helps."
-        profile = ProfileExtractor(complete=FakeCompleter(answer)).propose(mcas_card)
+        profile = ProfileExtractor(complete=FakeCompleter(answer)).propose(mcas_graph)
         assert profile.high_risk.value == "yes"
 
-    def test_an_answer_with_no_json_raises_so_the_loop_can_publish_the_failure(self, mcas_card):
+    def test_an_answer_with_no_json_raises_so_the_loop_can_publish_the_failure(self, mcas_graph):
         with pytest.raises(ValueError, match="no JSON object"):
-            ProfileExtractor(complete=FakeCompleter("I cannot help with that.")).propose(mcas_card)
+            ProfileExtractor(complete=FakeCompleter("I cannot help with that.")).propose(mcas_graph)
 
     def test_the_skill_carries_a_literal_answer_schema(self):
         """Nothing constrains the answer provider-side any more, so the skill

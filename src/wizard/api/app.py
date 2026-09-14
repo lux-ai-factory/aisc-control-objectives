@@ -1,8 +1,13 @@
 """Wizard service — app factory.
 
-Pages: the objectives (with the upload form) at the root, and one page per
-assessed card where a person confirms the profile and reads the verdicts. The
-JSON API mirrors both. Uploads live in memory, so a restart loses them.
+Two things to look at, and one project at a time:
+
+    /                      the 50 control objectives, as a reference
+    /projects              the systems being assessed
+    /projects/{id}         upload · three questions · Confirm/Refuse · map · tiers
+
+The JSON API mirrors the pages. Everything is persisted, so a restart loses
+nothing.
 """
 
 from __future__ import annotations
@@ -14,44 +19,44 @@ from fastapi import Body, FastAPI, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import ValidationError, create_model
+from pydantic import BaseModel
 
-from wizard.cards import (
-    CardRecord,
-    CardStore,
-    add_ontology,
-    assess_card,
-    confirm_profile,
-    rate_severity,
-)
 from wizard.config import RunConfig
 from wizard.control_objectives import ControlObjectiveCatalogue
 from wizard.models.control_objective import ControlObjective, MacroRequirement
-from wizard.models.profile import Answer, Profile
-from wizard.prioritising import Severity
 from wizard.models.ontology import Ontology
-from wizard.models.system_card import SystemCard
-from wizard.profiling import Extractor
-from wizard.risk_mapping import Mapper
-from wizard.rendering import STATIC, render_card_page, render_objectives_page
+from wizard.models.profile import Profile
+from wizard.projects import Projects
+from wizard.rendering import (
+    STATIC,
+    render_objectives_page,
+    render_project_page,
+    render_projects_page,
+)
 
 #: Filter over the assessment mode. A paired ("Control + Test") objective
 #: answers to both, so the partitions overlap rather than splitting the set.
 ModeFilter = Literal["control", "test"]
 
-
-#: A person's confirmation: any subset of the facts, derived from Profile.FACTS
-#: so the API cannot drift from the profile.
-ProfileAnswers = create_model(
-    "ProfileAnswers", **{name: (Answer | None, None) for name in Profile.FACTS}
+GRAPH_WANTED = (
+    "that names no AIRO classes, so it is not an ontology export. Download "
+    "ontology.jsonld from the system's card in the qualification app."
 )
+
+
+class AnswerBody(BaseModel):
+    """The company's decision. Booleans: a model may be unsure, a register may not."""
+
+    high_risk: bool
+    personal_data: bool
+    interacts_with_natural_persons: bool
 
 
 class NoModel:
     """Stand-in when no extractor is wired: every fact comes back undetermined
-    and the person fills the profile in by hand."""
+    and the company answers all three by hand."""
 
-    def propose(self, card: SystemCard, findings=()) -> Profile:
+    def propose(self, ontology, findings=()) -> Profile:
         return Profile()
 
 
@@ -67,45 +72,38 @@ class NoMapper:
 
 def create_app(
     objectives: ControlObjectiveCatalogue,
+    projects: Projects,
     *,
     base_config: RunConfig | None = None,
     root_path: str = "",
     cors_origins: list[str] | None = None,
     source_name: str = "ai_act_control_objectives.csv",
-    extractor: Extractor | None = None,
-    mapper: Mapper | None = None,
-    store: CardStore | None = None,
 ) -> FastAPI:
     config = base_config or RunConfig()
-    extractor = extractor or NoModel()
-    mapper = mapper or NoMapper()
-    store = store or CardStore()
     app = FastAPI(title="Wizard", root_path=root_path)
 
-    # Permissive by default for dev; tighten per deploy with an allowlist.
     app.add_middleware(
         CORSMiddleware,
         allow_origins=cors_origins or ["*"],
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    # Brand assets for the pages (the Luxembourg AI Factory mark).
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
-    def _record_or_404(record_id: str) -> CardRecord:
-        record = store.get(record_id)
-        if record is None:
-            raise HTTPException(status_code=404, detail=f"Unknown card {record_id}")
-        return record
+    def _view_or_404(project_id: str):
+        view = projects.view(project_id)
+        if view is None:
+            raise HTTPException(status_code=404, detail=f"Unknown project {project_id}")
+        return view
 
-    _register_pages(app, objectives, store, extractor, mapper, source_name, root_path, _record_or_404)
+    _register_pages(app, objectives, projects, _view_or_404, source_name, root_path)
     _register_objective_api(app, objectives, config)
-    _register_card_api(app, objectives, store, extractor, mapper, _record_or_404)
+    _register_project_api(app, projects, _view_or_404)
     return app
 
 
-def _register_pages(app, objectives, store, extractor, mapper, source_name, root_path, _record_or_404):
-    """The two pages and the three forms that post to them."""
+def _register_pages(app, objectives, projects, _view_or_404, source_name, root_path):
+    """The three pages, and the forms that post to them."""
 
     @app.get("/", include_in_schema=False, response_class=HTMLResponse)
     def objectives_page() -> HTMLResponse:
@@ -113,82 +111,63 @@ def _register_pages(app, objectives, store, extractor, mapper, source_name, root
             render_objectives_page(objectives, source_name=source_name, root_path=root_path)
         )
 
-    @app.post("/cards", include_in_schema=False)
-    def upload_card_form(card: UploadFile):
-        """The upload form: parse, assess, land on the card's page.
+    @app.get("/projects", include_in_schema=False, response_class=HTMLResponse)
+    def projects_page() -> HTMLResponse:
+        return HTMLResponse(render_projects_page(projects.list(), root_path=root_path))
 
-        Deliberately not `async`: assess_card blocks for as long as the model
-        takes, and a coroutine would hold the event loop (and /health) for it.
-        A plain def runs in the threadpool, like the JSON twin below."""
-        raw = card.file.read()
-        try:
-            data = json.loads(raw)
-        except ValueError:
-            return PlainTextResponse("The uploaded file is not valid JSON.", status_code=400)
-        try:
-            system_card = SystemCard.from_card_json(data)
-        except ValidationError as exc:
-            return PlainTextResponse(
-                f"The JSON is not a system card: {exc.error_count()} field problem(s).\n{exc}",
-                status_code=400,
-            )
-        record = assess_card(system_card, extractor, objectives)
-        store.save(record)
-        return RedirectResponse(url=f"{root_path}/cards/{record.id}", status_code=303)
-
-    @app.get("/cards/{record_id}", include_in_schema=False, response_class=HTMLResponse)
-    def card_page(record_id: str) -> HTMLResponse:
-        record = _record_or_404(record_id)
-        return HTMLResponse(render_card_page(record, objectives, root_path=root_path))
-
-    @app.post("/cards/{record_id}/profile", include_in_schema=False)
-    async def confirm_profile_form(record_id: str, request: Request):
-        record = _record_or_404(record_id)
+    @app.post("/projects", include_in_schema=False)
+    async def create_project_form(request: Request):
         form = await request.form()
+        upload: UploadFile = form["ontology"]
+        name = str(form.get("name") or "").strip()
+        raw_bytes = upload.file.read()
         try:
-            answers = ProfileAnswers.model_validate(
-                {name: form.get(name) for name in Profile.FACTS if form.get(name)}
-            )
-        except ValidationError as exc:
-            return PlainTextResponse(f"Invalid answer: {exc}", status_code=400)
-        store.save(confirm_profile(record, answers.model_dump(exclude_none=True), objectives))
-        return RedirectResponse(url=f"{root_path}/cards/{record_id}", status_code=303)
-
-    @app.post("/cards/{record_id}/ontology", include_in_schema=False)
-    def add_ontology_form(record_id: str, ontology: UploadFile):
-        """Not async: mapping every risk blocks for as long as the model takes."""
-        record = _record_or_404(record_id)
-        try:
-            raw = json.loads(ontology.file.read())
+            raw = json.loads(raw_bytes)
         except ValueError:
             return PlainTextResponse("The uploaded file is not valid JSON.", status_code=400)
         if not Ontology.looks_like_one(raw):
-            return PlainTextResponse(
-                "That JSON names no AIRO classes, so it is not an ontology export. "
-                "Download it from the card page of the qualification app "
-                "(ontology.jsonld); the system card goes in the box on the front page.",
-                status_code=400,
-            )
-        try:
-            parsed = Ontology.from_jsonld(raw)
-        except ValidationError as exc:
-            return PlainTextResponse(f"Not an AIRO graph: {exc}", status_code=400)
-        store.save(add_ontology(record, parsed, mapper, objectives))
-        return RedirectResponse(url=f"{root_path}/cards/{record_id}", status_code=303)
+            return PlainTextResponse(f"That JSON {GRAPH_WANTED}", status_code=400)
+        view = projects.create(name=name, jsonld=raw_bytes.decode("utf-8"), raw=raw)
+        return RedirectResponse(url=f"{root_path}/projects/{view.record.id}", status_code=303)
 
-    @app.post("/cards/{record_id}/severity", include_in_schema=False)
-    async def rate_severity_form(record_id: str, request: Request):
-        record = _record_or_404(record_id)
+    @app.get("/projects/{project_id}", include_in_schema=False, response_class=HTMLResponse)
+    def project_page(project_id: str) -> HTMLResponse:
+        return HTMLResponse(
+            render_project_page(_view_or_404(project_id), objectives, root_path=root_path)
+        )
+
+    @app.post("/projects/{project_id}/answer", include_in_schema=False)
+    async def answer_form(project_id: str, request: Request):
+        _view_or_404(project_id)
         form = await request.form()
-        risks = record.ontology.risks if record.ontology else []
+        if not all(form.get(name) in {"yes", "no"} for name in Profile.FACTS):
+            return PlainTextResponse("Answer all three questions.", status_code=400)
+        projects.answer(project_id, {name: form[name] == "yes" for name in Profile.FACTS})
+        return RedirectResponse(url=f"{root_path}/projects/{project_id}", status_code=303)
+
+    @app.post("/projects/{project_id}/map", include_in_schema=False)
+    def map_form(project_id: str):
+        _view_or_404(project_id)
         try:
-            ratings = {risk.id: int(form[risk.id]) for risk in risks if form.get(risk.id)}
-            store.save(rate_severity(record, ratings, objectives))
-        except (ValidationError, ValueError) as exc:
-            # A value that is not 1-5, or not a number at all: the form's
-            # problem, not the server's.
+            projects.map_risks_of(project_id)
+        except PermissionError as exc:
+            return PlainTextResponse(str(exc), status_code=409)
+        return RedirectResponse(url=f"{root_path}/projects/{project_id}", status_code=303)
+
+    @app.post("/projects/{project_id}/severity", include_in_schema=False)
+    async def rate_form(project_id: str, request: Request):
+        view = _view_or_404(project_id)
+        form = await request.form()
+        try:
+            ratings = {
+                risk.id: int(form[risk.id])
+                for risk in view.record.ontology.risks
+                if form.get(risk.id)
+            }
+            projects.rate(project_id, ratings)
+        except ValueError as exc:
             return PlainTextResponse(f"Invalid rating: {exc}", status_code=400)
-        return RedirectResponse(url=f"{root_path}/cards/{record_id}", status_code=303)
+        return RedirectResponse(url=f"{root_path}/projects/{project_id}", status_code=303)
 
 
 def _register_objective_api(app, objectives, config):
@@ -226,62 +205,78 @@ def _register_objective_api(app, objectives, config):
         return objectives.macro_requirements()
 
 
-def _register_card_api(app, objectives, store, extractor, mapper, _record_or_404):
-    """One assessed system: its card, its graph, its ratings and its tiers."""
+def _register_project_api(app, projects, _view_or_404):
+    """One assessed system: its graph, its answer, its mapping, its tiers."""
 
-    @app.post("/api/cards", response_model=CardRecord, status_code=201)
-    def upload_card(card: SystemCard = Body(...)) -> CardRecord:
-        """Assess a system card: propose its profile, decide the objectives."""
-        record = assess_card(card, extractor, objectives)
-        store.save(record)
-        return record
+    def payload(view) -> dict:
+        record = view.record
+        return {
+            "id": record.id,
+            "name": record.name,
+            "system_name": record.system_name,
+            "qualification_id": record.qualification_id,
+            "digest": record.digest,
+            "objectives_digest": record.objectives_digest,
+            "created_at": record.created_at.isoformat(),
+            "updated_at": record.updated_at.isoformat(),
+            "risks": [risk.model_dump() for risk in record.ontology.risks],
+            "severity": record.severity.model_dump(),
+            "profile_run": record.profile_run.model_dump() if record.profile_run else None,
+            "answer": record.answer.__dict__ if record.answer else None,
+            "mapping_run": record.mapping_run.model_dump() if record.mapping_run else None,
+            "verdicts": [v.model_dump() for v in view.verdicts],
+            "priorities": [p.model_dump() for p in view.priorities],
+            "can_map": view.can_map,
+        }
 
-    @app.get("/api/cards", response_model=list[CardRecord])
-    def list_cards() -> list[CardRecord]:
-        return store.list()
+    def _graph_or_422(raw: object) -> None:
+        if not Ontology.looks_like_one(raw):
+            raise HTTPException(status_code=422, detail=f"that body {GRAPH_WANTED}")
 
-    @app.get("/api/cards/{record_id}", response_model=CardRecord)
-    def get_card(record_id: str) -> CardRecord:
-        return _record_or_404(record_id)
+    @app.post("/api/projects", status_code=201)
+    def create_project(ontology: Any = Body(...), name: str = Query("")) -> dict:
+        """Upload a filled AIRO graph; the first workflow runs on it."""
+        _graph_or_422(ontology)
+        return payload(projects.create(name=name, jsonld=json.dumps(ontology), raw=ontology))
 
-    @app.post("/api/cards/{record_id}/ontology", response_model=CardRecord)
-    def add_ontology_json(record_id: str, ontology: Any = Body(...)) -> CardRecord:
-        """Attach the filled AIRO graph whose risks drive the tiers."""
-        record = _record_or_404(record_id)
-        if not Ontology.looks_like_one(ontology):
-            # Without this, a string or a bare list parses to an empty Ontology
-            # and replaces the real graph, and its mapping run, with nothing.
-            raise HTTPException(
-                status_code=422,
-                detail="that body names no AIRO classes, so it is not an ontology export",
-            )
-        updated = add_ontology(
-            record, Ontology.from_jsonld(ontology), mapper, objectives
+    @app.get("/api/projects")
+    def list_projects() -> list[dict]:
+        return [payload(view) for view in projects.list()]
+
+    @app.get("/api/projects/{project_id}")
+    def get_project(project_id: str) -> dict:
+        return payload(_view_or_404(project_id))
+
+    @app.post("/api/projects/{project_id}/ontology")
+    def replace_graph(project_id: str, ontology: Any = Body(...)) -> dict:
+        _view_or_404(project_id)
+        _graph_or_422(ontology)
+        return payload(
+            projects.replace_graph(project_id, jsonld=json.dumps(ontology), raw=ontology)
         )
-        store.save(updated)
-        return updated
 
-    @app.post("/api/cards/{record_id}/severity", response_model=CardRecord)
-    def rate(record_id: str, severity: Severity) -> CardRecord:
-        """How severe each of this system's risks is, 1-5. The tiers follow;
-        what applies does not change."""
-        record = _record_or_404(record_id)
+    @app.post("/api/projects/{project_id}/answer")
+    def answer(project_id: str, body: AnswerBody) -> dict:
+        _view_or_404(project_id)
+        return payload(projects.answer(project_id, body.model_dump()))
+
+    @app.post("/api/projects/{project_id}/map")
+    def map_risks(project_id: str) -> dict:
+        _view_or_404(project_id)
         try:
-            updated = rate_severity(record, severity.ratings, objectives)
-        except ValueError as exc:
-            # A risk id this system's graph has no node for: the caller's
-            # mistake, and silently dropping it would leave their rating with
-            # no effect and no explanation.
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-        store.save(updated)
-        return updated
+            return payload(projects.map_risks_of(project_id))
+        except PermissionError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
 
-    @app.post("/api/cards/{record_id}/profile", response_model=CardRecord)
-    def confirm(record_id: str, answers: ProfileAnswers) -> CardRecord:  # type: ignore[valid-type]
-        """A person confirms or overrides the profile; the verdicts follow."""
-        record = _record_or_404(record_id)
-        updated = confirm_profile(
-            record, answers.model_dump(exclude_none=True), objectives
-        )
-        store.save(updated)
-        return updated
+    @app.post("/api/projects/{project_id}/severity")
+    def rate(project_id: str, ratings: dict[str, int] = Body(...)) -> dict:
+        _view_or_404(project_id)
+        try:
+            return payload(projects.rate(project_id, ratings))
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.delete("/api/projects/{project_id}", status_code=204)
+    def delete_project(project_id: str) -> None:
+        _view_or_404(project_id)
+        projects.delete(project_id)

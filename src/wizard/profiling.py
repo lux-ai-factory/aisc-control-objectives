@@ -1,4 +1,4 @@
-"""Propose the applicability profile from a system card, and check it.
+"""Propose the applicability profile from the system's graph, and check it.
 
 The shape is the qualification app's ontology filler: the model proposes, each
 fact carrying the literal span it relied on; deterministic controls check the
@@ -12,21 +12,20 @@ a second model.
 
 from __future__ import annotations
 
-import json
 import re
-from collections.abc import Iterator, Sequence
+from collections.abc import Sequence
 from typing import Literal, Protocol
 
 from pydantic import BaseModel
 
 from wizard.llm import Completer, parse_into
+from wizard.models.ontology import Ontology
 from wizard.rounds import MAX_ATTEMPTS, Stop, review
 from wizard.skills import load_skill
 from wizard.models.profile import Fact, Profile
-from wizard.models.system_card import SystemCard
 
 
-Flag = Literal["quote-not-in-card", "quote-missing", "annex-point-missing"]
+Flag = Literal["quote-not-in-graph", "quote-missing", "annex-point-missing"]
 
 
 class Finding(BaseModel):
@@ -38,42 +37,15 @@ class Finding(BaseModel):
 # ── the card as text, and the controls ────────────────────────────────────
 
 
-def _strings(value: object) -> Iterator[str]:
-    """Every non-blank string leaf of a dumped model."""
-    if isinstance(value, str):
-        if value.strip():
-            yield value
-    elif isinstance(value, dict):
-        for item in value.values():
-            yield from _strings(item)
-    elif isinstance(value, list):
-        for item in value:
-            yield from _strings(item)
-
-
-#: Joins the card's fields so a quote cannot straddle two of them. A model
-#: cannot produce this, so a "span" made of one field's tail and another's head
-#: no longer passes the only deterministic guard on its claims.
-FIELD_BREAK = "\n\u0000\n"
-
-
-def card_text(card: SystemCard) -> str:
-    """Every string in the card, so a quote can be checked wherever it came
-    from. Derived from the same dump `ProfileExtractor` shows the model, so a
-    field added to SystemCard reaches both and a genuine quote from it is never
-    flagged quote-not-in-card."""
-    return FIELD_BREAK.join(_strings(card.model_dump()))
-
-
 def _normalise(text: str) -> str:
     """Whitespace-collapsed, case-folded: a quote is still the card's span if
     the model changed a capital or a line break, not if it changed a word."""
     return re.sub(r"\s+", " ", text).strip().casefold()
 
 
-def run_controls(profile: Profile, card: SystemCard) -> list[Finding]:
+def run_controls(profile: Profile, ontology: Ontology) -> list[Finding]:
     """Every deterministic finding against a proposed profile."""
-    haystack = _normalise(card_text(card))
+    haystack = _normalise(ontology.as_text())
     findings: list[Finding] = []
     for name in Profile.FACTS:
         fact: Fact = profile.fact(name)
@@ -81,11 +53,11 @@ def run_controls(profile: Profile, card: SystemCard) -> list[Finding]:
             continue
         if not fact.quote.strip():
             findings.append(
-                Finding(fact=name, flag="quote-missing", detail=f"{name} is {fact.value!r} with no quote from the card")
+                Finding(fact=name, flag="quote-missing", detail=f"{name} is {fact.value!r} with no quote from the graph")
             )
         elif _normalise(fact.quote) not in haystack:
             findings.append(
-                Finding(fact=name, flag="quote-not-in-card", detail=f"the quote for {name} is not a span of the card: {fact.quote!r}")
+                Finding(fact=name, flag="quote-not-in-graph", detail=f"the quote for {name} is not a span of the graph: {fact.quote!r}")
             )
     if profile.high_risk.value == "yes" and not profile.high_risk.annex_iii_point.strip():
         findings.append(
@@ -98,7 +70,7 @@ def run_controls(profile: Profile, card: SystemCard) -> list[Finding]:
 
 
 class Extractor(Protocol):
-    def propose(self, card: SystemCard, findings: Sequence[Finding] = ()) -> Profile: ...
+    def propose(self, ontology: Ontology, findings: Sequence[Finding] = ()) -> Profile: ...
 
 
 class ProfileExtractor:
@@ -114,11 +86,11 @@ class ProfileExtractor:
         self._complete = complete
         self._skill = skill if skill is not None else load_skill(self.SKILL)
 
-    def propose(self, card: SystemCard, findings: Sequence[Finding] = ()) -> Profile:
+    def propose(self, ontology: Ontology, findings: Sequence[Finding] = ()) -> Profile:
         lines = [
-            "System card (JSON):",
-            # compact: the indentation was ~8% of the prompt's bytes
-            json.dumps(card.model_dump(), ensure_ascii=False),
+            "What the system's graph says about it:",
+            "",
+            ontology.as_text(),
             "",
         ]
         if findings:
@@ -148,20 +120,20 @@ def _signature(findings: Sequence[Finding]) -> frozenset[tuple[str, str]]:
 
 
 def extract_profile(
-    card: SystemCard, extractor: Extractor, max_attempts: int = MAX_ATTEMPTS
+    ontology: Ontology, extractor: Extractor, max_attempts: int = MAX_ATTEMPTS
 ) -> ProfileRun:
     """Propose the profile, check it, re-propose the failing facts. Bounded and
     always publishing: see wizard.rounds for the rules."""
 
     def propose(findings):
-        proposed = extractor.propose(card, findings)
+        proposed = extractor.propose(ontology, findings)
         if not isinstance(proposed, Profile):
             raise TypeError(f"extractor returned {type(proposed).__name__}, not a Profile")
         return proposed
 
     round_ = review(
         propose=propose,
-        check=lambda profile: run_controls(profile, card),
+        check=lambda profile: run_controls(profile, ontology),
         empty=Profile,
         signature=_signature,
         max_attempts=max_attempts,

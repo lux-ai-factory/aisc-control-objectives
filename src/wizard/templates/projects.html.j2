@@ -1,0 +1,66 @@
+{% extends "_base.html.j2" %}
+
+{% block title %}Projects · AI Act Control Objectives{% endblock %}
+
+{% block content %}
+  <div class="co-header">
+    <h1>Projects</h1>
+    <p>One project per AI system being assessed. Start it with the system's
+       <strong>ontology export</strong> from the qualification app, answer the three
+       Annex III questions, and the wizard works out which control objectives are owed
+       and which to start with.</p>
+  </div>
+
+  <div class="qf-section">
+    <h2>Assess a new system</h2>
+    <p class="qf-help">The <code>ontology.jsonld</code> on the system's card page: its
+       filled AIRO graph, carrying what the system is and the risks its assessor
+       identified.</p>
+    <form method="post" action="{{ root_path }}/projects" enctype="multipart/form-data">
+      <div class="field">
+        <label for="name">Project name <span style="text-transform:none">(optional, defaults to the system's name)</span></label>
+        <input id="name" name="name" type="text" placeholder="MCAS v1.2.0 pre-market assessment">
+      </div>
+      <div class="field">
+        <label for="ontology">Ontology export</label>
+        <input id="ontology" name="ontology" type="file" accept="application/json,.json,.jsonld" required>
+      </div>
+      <div class="qf-actions"><button class="btn" type="submit">Start the assessment</button></div>
+    </form>
+  </div>
+
+  {%- if projects %}
+  <div class="qf-section">
+    <div class="co-macro-head">
+      <h2>Under assessment</h2>
+      <span class="n">{{ projects | length }}</span>
+    </div>
+    {%- for view in projects %}
+    {%- set record = view.record %}
+    <article class="co-obj">
+      <div class="co-obj-head">
+        <h3><a href="{{ root_path }}/projects/{{ record.id }}">{{ record.name }}</a></h3>
+        {%- if not record.profile_run %}
+        <span class="qf-tag qf-tag--pending">Not yet assessed</span>
+        {%- elif not view.can_map %}
+        <span class="qf-tag qf-tag--pending">Awaiting your answer</span>
+        {%- elif not view.mapped %}
+        <span class="qf-tag qf-tag--in">Ready to map</span>
+        {%- else %}
+        <span class="qf-tag qf-tag--tier1">{{ view.priorities | selectattr('tier', 'equalto', 1) | list | length }} to start with</span>
+        {%- endif %}
+      </div>
+      <p class="co-reason">
+        {{ record.system_name or "unnamed system" }} ·
+        {{ record.ontology.risks | length }} risk{{ 's' if record.ontology.risks | length != 1 }} ·
+        updated {{ record.updated_at.strftime('%Y-%m-%d %H:%M') }}
+      </p>
+    </article>
+    {%- endfor %}
+  </div>
+  {%- else %}
+  <div class="qf-empty" style="display:block">
+    <p>No systems under assessment yet.</p>
+  </div>
+  {%- endif %}
+{% endblock %}

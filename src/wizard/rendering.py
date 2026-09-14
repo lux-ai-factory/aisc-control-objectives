@@ -16,7 +16,6 @@ from functools import lru_cache
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
-from wizard.cards import CardRecord
 from wizard.control_objectives import ControlObjectiveCatalogue
 
 TEMPLATES = Path(__file__).resolve().parent / "templates"
@@ -58,7 +57,7 @@ def render_objectives_page(
     )
 
 
-#: The card's sections, in the order an assessor works through them. The last
+#: A project's objective sections, in the order an assessor works through them. The last
 #: two are not tiers: they are what is out of scope and what is unsettled, kept
 #: on the page because "not applicable" is a finding a reader should be able to
 #: check, not something to hide.
@@ -91,7 +90,7 @@ class _RiskView:
 
 def _risk_views(record) -> list:
     """The risks worst-first, so the page reads as the assessor's ranking."""
-    if record.ontology is None:
+    if not record.ontology.risks:
         return []
     run = record.mapping_run
     views = []
@@ -119,12 +118,18 @@ class _Counts:
     tier3: int = 0
 
 
-def render_card_page(
-    record: CardRecord, catalogue: ControlObjectiveCatalogue, root_path: str = ""
-) -> str:
-    """One assessed card: its profile to confirm, and the verdict per objective."""
-    verdicts = {v.objective_id: v for v in record.verdicts}
-    priorities = {p.objective_id: p for p in record.priorities}
+def render_projects_page(views: list, root_path: str = "") -> str:
+    """The systems under assessment."""
+    return _environment().get_template("projects.html.j2").render(
+        projects=views, root_path=root_path
+    )
+
+
+def render_project_page(view, catalogue: ControlObjectiveCatalogue, root_path: str = "") -> str:
+    """One project: the three questions, its risks, and its tiers."""
+    record = view.record
+    verdicts = {v.objective_id: v for v in view.verdicts}
+    priorities = {p.objective_id: p for p in view.priorities}
     counts = _Counts()
     sections = {key: _TierView(key, title, subtitle) for key, title, subtitle in TIER_SECTIONS}
 
@@ -150,16 +155,28 @@ def render_card_page(
     for objective, verdict, priority in rows:
         key = priority.tier if priority and priority.tier else verdict.applies
         sections[key].objectives.append((objective, verdict, priority))
-    macros = [section for section in sections.values() if section.objectives]
+    ordered = [section for section in sections.values() if section.objectives]
 
-    template = _environment().get_template("card.html.j2")
+
+    answer = record.answer
+    proposal = record.profile_run.profile if record.profile_run else __import__(
+        "wizard.models.profile", fromlist=["Profile"]
+    ).Profile()
+
+    def answered(name: str):
+        """True, False, or None when the company has not answered yet."""
+        return getattr(answer, name) if answer is not None else None
+
+    template = _environment().get_template("project.html.j2")
     return template.render(
+        view=view,
         record=record,
-        macros=macros,
+        proposal=proposal,
+        answered=answered,
+        sections=ordered,
         counts=counts,
         facts=FACT_QUESTIONS,
         flag_tags=FLAG_TAGS,
-        severity=record.severity,
         risks=_risk_views(record),
         objective_labels={o.id: o.sub_requirement_label for o in catalogue},
         root_path=root_path,

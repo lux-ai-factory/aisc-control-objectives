@@ -50,6 +50,48 @@ class TestTheSystem:
         assert answer.text
 
 
+class TestTheSystemsProperties:
+    """What the graph says the system IS: the material the three Annex III
+    questions are answered from."""
+
+    def test_the_properties_are_parsed(self, mcas):
+        names = {prop.name for prop in mcas.properties}
+        assert {"hasPurpose", "isAppliedWithinDomain", "hasAIUser", "hasComponent"} <= names
+
+    def test_a_property_carries_its_nodes_labels(self, mcas):
+        domain = mcas.property("isAppliedWithinDomain")
+        assert domain.labels == ["Finance and insurance"]
+        # the full text, not the card's <=60 char label: more for the profile
+        # extractor to quote, and it is the assessor's own sentence
+        purpose = mcas.property("hasPurpose")
+        assert "Evaluates creditworthiness" in purpose.labels[0]
+
+    def test_the_users_and_components_are_there_for_the_art_50_question(self, mcas):
+        """Whether the system faces natural persons is answered from these."""
+        assert "bank customers aged 18+" in " ".join(mcas.property("hasAIUser").labels)
+        assert any("LLM" in label for label in mcas.property("hasComponent").labels)
+
+    def test_an_absent_property_is_none(self, mcas):
+        assert mcas.property("hasNothingLikeThis") is None
+
+    def test_the_graph_reads_as_one_passage_for_the_extractor(self, mcas):
+        text = mcas.as_text()
+        assert "Finance and insurance" in text          # the domain
+        assert "Evaluates creditworthiness" in text      # the purpose
+        assert mcas.answers[0].text[:40] in text        # the Annex IV answers
+        assert "Annex IV" in text                       # with their citations
+
+    def test_the_passage_keeps_field_boundaries(self, mcas):
+        """A quote may not straddle two unrelated things, or a fabricated span
+        passes the only real guard on the model's claims."""
+        from wizard.models.ontology import FIELD_BREAK
+
+        text = mcas.as_text()
+        assert FIELD_BREAK in text
+        # and it separates every property from the next
+        assert text.count(FIELD_BREAK) >= len(mcas.properties)
+
+
 class TestTheRisks:
     def test_every_risk_node_becomes_a_risk(self, mcas):
         assert len(mcas.risks) == 5

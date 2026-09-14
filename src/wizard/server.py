@@ -27,10 +27,13 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from wizard.api.app import create_app
+from wizard.db.repository import ProjectRepository
 from wizard.config import RunConfig
 from wizard.control_objectives import default_csv_path, load_control_objectives
 from wizard.profiling import ProfileExtractor
+from wizard.projects import Projects
 from wizard.risk_mapping import RiskMapper
+from wizard.settings import database_url
 
 
 def _repo_root() -> Path:
@@ -99,16 +102,21 @@ def build_app():
     cors_env = os.environ.get("WIZARD_CORS_ORIGINS", "").strip()
     cors_origins = [o.strip() for o in cors_env.split(",") if o.strip()] or None
     complete = _build_completer(config)
-    extractor = ProfileExtractor(complete=complete)
-    mapper = RiskMapper(complete=complete, catalogue=objectives)
+    repository = ProjectRepository(database_url(), objectives_digest=objectives.digest)
+    projects = Projects(
+        repository=repository,
+        catalogue=objectives,
+        extractor=ProfileExtractor(complete=complete),
+        mapper=RiskMapper(complete=complete, catalogue=objectives),
+        model=f"{config.provider}/{config.model}",
+    )
     return create_app(
         objectives,
+        projects,
         base_config=config,
         root_path=os.environ.get("WIZARD_ROOT_PATH", ""),
         cors_origins=cors_origins,
         source_name=source_name,
-        extractor=extractor,
-        mapper=mapper,
     )
 
 
