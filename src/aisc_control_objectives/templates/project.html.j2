@@ -1,0 +1,132 @@
+{% extends "_base.html.j2" %}
+
+{% block title %}{{ view.record.name }} · Control Objectives{% endblock %}
+
+{% block content %}
+  {%- set record = view.record %}
+  <a class="co-back" href="{{ root_path }}/projects">← Projects</a>
+
+  <div class="co-header">
+    <h1>{{ record.name }}</h1>
+    <p>{{ record.system_name }}{% if record.qualification_id %} · qualification {{ record.qualification_id }}{% endif %}</p>
+  </div>
+
+  {# ── 1. rank the risks ──────────────────────────────────────────────── #}
+  <div class="qf-section">
+    <div class="co-macro-head">
+      <span class="co-macro-id">1</span>
+      <h2>Rank the risks on the card</h2>
+      <span class="n">{{ view.rated }} of {{ record.ontology.risks | length }} rated</span>
+    </div>
+
+    {%- if not record.ontology.risks %}
+    <div class="error">This AI Card carries no risks, so there is nothing to rank and
+       nothing to order the objectives by. Upload a card whose AIRO graph has them.</div>
+    {%- else %}
+    <p class="qf-help">Rate each risk 1 (marginal for this system) to 5 (decisive).
+       The objectives answering the worst risks become Tier 1. Unrated risks count as 3.</p>
+    <form method="post" action="{{ root_path }}/projects/{{ record.id }}/severity">
+      {%- for risk in risks %}
+      <div class="co-risk">
+        <div class="co-risk-main">
+          <h3>{{ risk.risk.text }}</h3>
+          <dl class="qf-dl">
+            {%- if risk.risk.source %}<dt>Source</dt><dd>{{ risk.risk.source }}</dd>{% endif %}
+            {%- if risk.risk.vulnerability %}<dt>Vulnerability</dt><dd>{{ risk.risk.vulnerability }}</dd>{% endif %}
+            {%- if risk.risk.consequence %}<dt>Consequence</dt><dd>{{ risk.risk.consequence }}</dd>{% endif %}
+            {%- if risk.risk.control %}<dt>Declared control</dt><dd>{{ risk.risk.control }}</dd>{% endif %}
+            {%- if risk.risk.areas %}<dt>Impact</dt><dd>{{ risk.risk.areas | join(', ') }}</dd>{% endif %}
+            {%- if risk.risk.stakeholder %}<dt>Borne by</dt><dd>{{ risk.risk.stakeholder }}</dd>{% endif %}
+            {%- if risk.risk.vair_terms %}<dt>Typed in VAIR</dt><dd>{{ risk.risk.vair_terms | join(', ') }}</dd>{% endif %}
+          </dl>
+          {%- if view.mapped %}
+          <p class="co-reason">
+            {%- if risk.mapped %}Mitigated by
+            {%- for objective_id, rationale in risk.mapped %}
+            <span class="qf-tag qf-tag--in" title="{{ rationale }}">{{ objective_id }} {{ objective_labels[objective_id] }}</span>
+            {%- endfor %}
+            {%- else %}<em>No objective was mapped to this risk.</em>{% endif %}
+          </p>
+          {%- endif %}
+          {%- for finding in risk.findings %}
+          <p class="co-note co-note--flag"><b>{{ finding.flag }}:</b> {{ finding.detail }}</p>
+          {%- endfor %}
+        </div>
+        <div class="field">
+          <label for="{{ risk.risk.id }}">Severity</label>
+          <select id="{{ risk.risk.id }}" name="{{ risk.risk.id }}">
+            {%- for n in [5, 4, 3, 2, 1] %}
+            <option value="{{ n }}" {% if risk.rating == n %}selected{% endif %}>{{ n }}</option>
+            {%- endfor %}
+          </select>
+        </div>
+      </div>
+      {%- endfor %}
+      <div class="qf-actions"><button class="btn" type="submit">Save the ranking</button></div>
+    </form>
+    {%- endif %}
+  </div>
+
+  {# ── 2. map them to objectives ──────────────────────────────────────── #}
+  {%- if record.ontology.risks %}
+  <div class="qf-section">
+    <div class="co-macro-head">
+      <span class="co-macro-id">2</span>
+      <h2>Map the risks to control objectives</h2>
+      <span class="n">{% if view.mapped %}mapped{% else %}not yet mapped{% endif %}</span>
+    </div>
+
+    {%- if view.mapped and record.mapping_run.stop != "clean" %}
+    <div class="error">The mapping stopped on <code>{{ record.mapping_run.stop }}</code>{% if record.mapping_run.error %}: {{ record.mapping_run.error }}{% endif %}.
+       What survived its checks is above; what did not is listed with each risk.</div>
+    {%- endif %}
+    <p class="qf-help">Each risk is read against the 50 control objectives to find the ones
+       that would mitigate it, each resting on a quote from that risk's own chain.
+       {%- if view.mapped %} Re-running replaces the mapping; the ranking is kept.{% endif %}</p>
+    <form method="post" action="{{ root_path }}/projects/{{ record.id }}/map">
+      <div class="qf-actions">
+        <button class="btn" type="submit">{% if view.mapped %}Map again{% else %}Map the risks to objectives{% endif %}</button>
+      </div>
+    </form>
+  </div>
+  {%- endif %}
+
+  {# ── 3. the objectives, in tiers ─────────────────────────────────────
+     Only once the mapping has run: before that nothing orders the 50, and an
+     unordered 50 is what /objectives already is. #}
+  {%- if view.mapped %}
+  <div class="co-stats">
+    <div class="co-stat co-stat--tier1"><div class="v">{{ counts.tier1 }}</div><div class="k">Tier 1 · start here</div></div>
+    <div class="co-stat"><div class="v">{{ counts.tier2 }}</div><div class="k">Tier 2 · next</div></div>
+    <div class="co-stat"><div class="v">{{ counts.tier3 }}</div><div class="k">Tier 3 · later</div></div>
+  </div>
+
+  {%- for section in sections %}
+  <section class="qf-section co-tier--{{ section.key }}" id="tier-{{ section.key }}">
+    <div class="co-macro-head">
+      <h2>{{ section.title }}</h2>
+      <span class="n">{{ section.subtitle }} · {{ section.objectives | length }}</span>
+    </div>
+    {%- for objective, priority in section.objectives %}
+    <article class="co-obj">
+      <div class="co-obj-head">
+        <span class="co-obj-id">{{ objective.id }}</span>
+        <h3>{{ objective.sub_requirement_label }}</h3>
+        <span class="co-family">{{ objective.macro_id }} {{ objective.macro_title }}</span>
+        <span class="qf-tag qf-tag--tier{{ priority.tier }}">Tier {{ priority.tier }}</span>
+        {%- if priority.non_binding %}<span class="qf-tag qf-tag--voluntary">Non-binding</span>{% endif %}
+      </div>
+      <p class="co-reason co-why">{% if priority.tier == 1 %}<b>Start here.</b> {% endif %}{{ priority.reasons | join('; ') }}.</p>
+      <p class="co-text">{{ objective.text }}</p>
+      {% include "_objective_meta.html.j2" %}
+    </article>
+    {%- endfor %}
+  </section>
+  {%- endfor %}
+  {%- endif %}
+
+  <p class="co-count">
+    Card <code>{{ record.digest[:12] }}</code> · catalogue <code>{{ record.objectives_digest[:12] }}</code>
+    {%- if record.mapping_run %} · mapping {{ record.mapping_run.attempts }} attempt{{ 's' if record.mapping_run.attempts != 1 }}, <code>{{ record.mapping_run.stop }}</code>, {{ record.mapping_run.model }}{% endif %}
+  </p>
+{% endblock %}

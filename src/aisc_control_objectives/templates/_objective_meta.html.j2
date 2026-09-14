@@ -1,0 +1,17 @@
+{#- The part of an objective both pages show: its legal basis, its standards
+    grounding and the author's note. Expects `objective` and `flag_tags`. -#}
+<dl class="qf-dl">
+  <dt>Legal basis</dt>
+  <dd>{{ objective.legal_basis }}</dd>
+  {%- if objective.standards_grounding %}
+  <dt>Grounding</dt>
+  <dd>{{ objective.standards_grounding }}
+      <code title="how solidly a standard backs this objective, not its priority">grounding {{ objective.grounding_tier_flag }}</code></dd>
+  {%- endif %}
+</dl>
+{%- if objective.notes %}
+<p class="co-note {{ 'co-note--flag' if objective.note_tag in flag_tags else '' }}">
+  {%- if objective.note_tag %}<b>{{ objective.note_tag }}:</b>{{ objective.note_body }}
+  {%- else %}{{ objective.notes }}{% endif %}
+</p>
+{%- endif %}

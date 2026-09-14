@@ -1,0 +1,83 @@
+{% extends "_base.html.j2" %}
+
+{% block content %}
+  <div class="co-header">
+    <h1>Control Objectives</h1>
+    <p>The requirements an AI system has to satisfy under the EU AI Act, as {{ total }} control
+       objectives across {{ macros | length }} macro requirements.</p>
+  </div>
+
+  <div class="co-stats">
+    <div class="co-stat"><div class="v">{{ total }}</div><div class="k">Objectives</div></div>
+    <div class="co-stat"><div class="v">{{ macros | length }}</div><div class="k">Macro requirements</div></div>
+  </div>
+
+  <div class="qf-section">
+    <div class="field" style="margin-bottom: 0">
+      <label for="search">Search</label>
+      <input id="search" type="search" autocomplete="off"
+             placeholder="Objective, article, standard, requirement…">
+    </div>
+    <div class="co-count" id="resultcount">Showing all {{ total }} objectives</div>
+  </div>
+
+  {%- for macro in macros %}
+  <section class="qf-section" id="{{ macro.id }}" data-macro="{{ macro.id }}">
+    <div class="co-macro-head">
+      <span class="co-macro-id">{{ macro.id }}</span>
+      <h2>{{ macro.title }}</h2>
+      <span class="n">{{ macro.objectives | length }} objectives</span>
+    </div>
+
+    {%- for objective in macro.objectives %}
+    <article class="co-obj"
+             data-id="{{ objective.id }}"
+             data-haystack="{{ [objective.id, objective.sub_requirement_label, objective.text,
+                                objective.legal_basis, objective.standards_grounding,
+                                objective.macro_requirement, objective.notes] | join(' ') | lower }}">
+      <div class="co-obj-head">
+        <span class="co-obj-id">{{ objective.id }}</span>
+        <h3>{{ objective.sub_requirement_label }}</h3>
+      </div>
+
+      <p class="co-text">{{ objective.text }}</p>
+
+      {% include "_objective_meta.html.j2" %}
+    </article>
+    {%- endfor %}
+  </section>
+  {%- endfor %}
+
+  <div class="qf-empty" id="empty"><p>No objective matches that search.</p></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Filtering is pure display: every objective is already in the page, so the
+  // server stays the single source of truth and this never fetches.
+  const search = document.getElementById('search');
+  const objectives = Array.from(document.querySelectorAll('.co-obj'));
+  const sections = Array.from(document.querySelectorAll('section[data-macro]'));
+  const counter = document.getElementById('resultcount');
+  const empty = document.getElementById('empty');
+  const total = objectives.length;
+
+  function apply() {
+    const query = search.value.trim().toLowerCase();
+    let shown = 0;
+    for (const objective of objectives) {
+      const visible = !query || objective.dataset.haystack.includes(query);
+      objective.classList.toggle('is-hidden', !visible);
+      if (visible) shown++;
+    }
+    for (const section of sections) {
+      section.classList.toggle('is-hidden', section.querySelector('.co-obj:not(.is-hidden)') === null);
+    }
+    counter.textContent = shown === total
+      ? `Showing all ${total} objectives`
+      : `Showing ${shown} of ${total} objectives`;
+    empty.style.display = shown === 0 ? 'block' : 'none';
+  }
+  search.addEventListener('input', apply);
+</script>
+{% endblock %}

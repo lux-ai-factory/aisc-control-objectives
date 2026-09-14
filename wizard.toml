@@ -1,0 +1,23 @@
+# Wizard configuration — which model, and where the objectives come from.
+# API keys live in .env, under the provider's own variable name.
+#
+# Loaded at startup (override the path with WIZARD_CONFIG_FILE). Environment
+# variables override anything set here: BAF_LLM_PROVIDER and BAF_LLM_MODEL.
+
+# The model, named BAF's way, exactly as the qualification filler names it.
+# One mechanism for the platform: see src/wizard/llm.py for the providers.
+#   provider = "mistral"    model = "mistral-large-latest"   (MISTRAL_API_KEY)
+#   provider = "anthropic"  model = "claude-opus-4-8"        (ANTHROPIC_API_KEY)
+#   provider = "openai"     model = "gpt-4o-mini"            (OPENAI_API_KEY)
+#   provider = "ollama"     model = "mistral:latest"         (no key at all)
+#   provider = "compatible" model = "<anything>"             (BAF_LLM_BASE_URL)
+#
+# A hosted model, because this machine has no GPU and a local 7B could not
+# finish one card inside five minutes. `provider = "ollama"` is the
+# no-credential fallback; see README.
+provider = "openai"
+model = "gpt-4o"
+
+# The control objectives are bundled with the package
+# (src/wizard/data/ai_act_control_objectives.csv); point WIZARD_OBJECTIVES_FILE
+# at another CSV to serve a newer export without rebuilding.
