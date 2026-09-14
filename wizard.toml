@@ -13,8 +13,8 @@
 #   provider = "compatible" model = "<anything>"             (BAF_LLM_BASE_URL)
 #
 # Defaults to a model on this machine, so the wizard runs with no credential.
-provider = "ollama"
-model = "mistral:latest"
+provider = "openai"
+model = "gpt-4o"
 
 # The control objectives are bundled with the package
 # (src/wizard/data/ai_act_control_objectives.csv); point WIZARD_OBJECTIVES_FILE
