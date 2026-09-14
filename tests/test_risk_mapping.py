@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 
 
-from wizard.models.qualification import RiskRow
+from wizard.models.ontology import OntologyRisk
 from wizard.risk_mapping import (
     MAX_ATTEMPTS,
     Mapping,
@@ -21,15 +21,16 @@ from wizard.risk_mapping import (
     run_controls,
 )
 
-RUBBER_STAMP = RiskRow(
-    position=2,
-    risk="Loan officers rubber-stamp the recommendation instead of reviewing it",
+RUBBER_STAMP = OntologyRisk(
+    id="risk2",
+    text="Loan officers rubber-stamp the recommendation instead of reviewing it",
     source="Automation bias: agreeing with the model is faster than justifying a divergence",
     vulnerability="The dashboard presents the recommendation before the underlying factors",
     consequence="The mandatory human review becomes a formality",
-    affected="user",
-    impact_areas=["right", "freedom"],
+    stakeholder="Loan applicants and officers",
+    areas=["Fundamental rights", "Freedom"],
     control="Officer override rates are tracked against the branch median",
+    vair_terms=["Overreliance"],
 )
 
 
@@ -139,7 +140,7 @@ class TestTheLoop:
         assert run.mappings["risk2"].objectives == []
 
     def test_every_risk_is_attempted(self, objectives):
-        second = RUBBER_STAMP.model_copy(update={"position": 3, "risk": "Something else entirely"})
+        second = RUBBER_STAMP.model_copy(update={"id": "risk3", "text": "Something else entirely"})
         mapper = FakeMapper(_mapping(_good()))
         run = map_risks([RUBBER_STAMP, second], mapper, objectives)
         assert set(run.mappings) == {"risk2", "risk3"}

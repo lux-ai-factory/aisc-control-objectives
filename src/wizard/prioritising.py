@@ -33,7 +33,7 @@ from pydantic import BaseModel, Field, field_validator
 from wizard.applicability import Verdict
 from wizard.control_objectives import ControlObjectiveCatalogue
 from wizard.models.control_objective import ControlObjective
-from wizard.models.qualification import RiskRow
+from wizard.models.ontology import OntologyRisk
 from wizard.risk_mapping import Mapping
 
 #: What an unrated risk is worth, and what an objective no risk maps to gets:
@@ -86,7 +86,7 @@ class Priority(BaseModel):
 def _score(
     objective: ControlObjective,
     severity: Severity,
-    driving: list[tuple[int, RiskRow]],
+    driving: list[tuple[int, OntologyRisk]],
     non_binding: bool,
 ) -> tuple[float, list[str]]:
     if non_binding:
@@ -96,7 +96,7 @@ def _score(
         rating, risk = driving[0]
         score = float(rating)
         reasons = [
-            f"mitigates a risk rated {rating}/5: {risk.risk[:90]}"
+            f"mitigates a risk rated {rating}/5: {risk.text[:90]}"
             + (f" (and {len(driving) - 1} more)" if len(driving) > 1 else "")
         ]
     else:
@@ -114,7 +114,7 @@ def prioritise(
     verdicts: list[Verdict],
     severity: Severity,
     mappings: MappingABC[str, Mapping],
-    risks: Sequence[RiskRow],
+    risks: Sequence[OntologyRisk],
     budget: int = TIER_ONE_BUDGET,
 ) -> list[Priority]:
     """One Priority per objective, in catalogue order. Objectives that do not
@@ -127,7 +127,7 @@ def prioritise(
         )
 
     # objective id -> the risks it mitigates, worst first
-    driving: dict[str, list[tuple[int, RiskRow]]] = {}
+    driving: dict[str, list[tuple[int, OntologyRisk]]] = {}
     for risk_id, mapping in mappings.items():
         risk = risks_by_id.get(risk_id)
         if risk is None:

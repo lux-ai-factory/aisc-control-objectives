@@ -25,7 +25,7 @@ from pydantic import BaseModel, Field
 
 from wizard.control_objectives import ControlObjectiveCatalogue
 from wizard.llm import Completer, parse_into
-from wizard.models.qualification import RiskRow
+from wizard.models.ontology import OntologyRisk
 from wizard.profiling import load_skill
 
 MAX_ATTEMPTS = 3
@@ -68,7 +68,7 @@ def _normalise(text: str) -> str:
 
 
 def run_controls(
-    mapping: Mapping, risk: RiskRow, catalogue: ControlObjectiveCatalogue
+    mapping: Mapping, risk: OntologyRisk, catalogue: ControlObjectiveCatalogue
 ) -> list[Finding]:
     """Every deterministic finding against one risk's proposed mapping."""
     findings: list[Finding] = []
@@ -77,7 +77,7 @@ def run_controls(
             Finding(
                 risk_id=risk.id,
                 flag="risk-unmapped",
-                detail=f"nothing was proposed for {risk.risk[:60]!r}",
+                detail=f"nothing was proposed for {risk.text[:60]!r}",
             )
         ]
 
@@ -107,7 +107,7 @@ def run_controls(
 
 
 class Mapper(Protocol):
-    def propose(self, risk: RiskRow, findings: Sequence[Finding] = ()) -> Mapping: ...
+    def propose(self, risk: OntologyRisk, findings: Sequence[Finding] = ()) -> Mapping: ...
 
 
 class RiskMapper:
@@ -127,7 +127,7 @@ class RiskMapper:
             for o in self._catalogue
         )
 
-    def propose(self, risk: RiskRow, findings: Sequence[Finding] = ()) -> Mapping:
+    def propose(self, risk: OntologyRisk, findings: Sequence[Finding] = ()) -> Mapping:
         lines = [
             f"Risk id: {risk.id}",
             "",
@@ -152,7 +152,7 @@ def _signature(findings: Sequence[Finding]) -> frozenset[tuple[str, str, str]]:
 
 
 def map_risks(
-    risks: Sequence[RiskRow],
+    risks: Sequence[OntologyRisk],
     mapper: Mapper,
     catalogue: ControlObjectiveCatalogue,
     max_attempts: int = MAX_ATTEMPTS,

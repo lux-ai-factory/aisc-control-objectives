@@ -78,11 +78,11 @@ class _RiskView:
 
 def _risk_views(record) -> list:
     """The risks worst-first, so the page reads as the assessor's ranking."""
-    if record.qualification is None:
+    if record.ontology is None:
         return []
     run = record.mapping_run
     views = []
-    for risk in record.qualification.risks:
+    for risk in record.ontology.risks:
         mapping = run.mappings.get(risk.id) if run else None
         views.append(
             _RiskView(

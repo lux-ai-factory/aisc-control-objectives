@@ -158,30 +158,30 @@ class TestRisksAndTiers:
     """The system's own risks are what decide where the work starts."""
 
     @staticmethod
-    def _qualification(fixtures_dir):
-        return json.loads((fixtures_dir / "mcas.qualification.json").read_text())
+    def _ontology(fixtures_dir):
+        return json.loads((fixtures_dir / "mcas.ontology.jsonld").read_text())
 
     def test_a_card_alone_has_no_risks_and_still_tiers(self, client, mcas_raw):
         record = _upload(client, mcas_raw)
-        assert record["qualification"] is None
+        assert record["ontology"] is None
         assert record["mapping_run"] is None
         assert sum(p["tier"] == 1 for p in record["priorities"]) == 7
 
     def test_adding_the_qualification_maps_its_risks(self, client, mcas_raw, fixtures_dir):
         record = _upload(client, mcas_raw)
         response = client.post(
-            f"/api/cards/{record['id']}/qualification", json=self._qualification(fixtures_dir)
+            f"/api/cards/{record['id']}/ontology", json=self._ontology(fixtures_dir)
         )
         assert response.status_code == 200
         record = response.json()
-        assert len(record["qualification"]["risks"]) == 5
+        assert len(record["ontology"]["risks"]) == 5
         assert set(record["mapping_run"]["mappings"]) == {f"risk{n}" for n in range(5)}
 
     def test_the_objectives_a_risk_drives_are_named_on_it(self, client, mcas_raw, fixtures_dir, objectives):
         """Driven by a fake mapper, so this is the wiring, not the model."""
         record = _upload(client, mcas_raw)
         record = client.post(
-            f"/api/cards/{record['id']}/qualification", json=self._qualification(fixtures_dir)
+            f"/api/cards/{record['id']}/ontology", json=self._ontology(fixtures_dir)
         ).json()
         by_id = {p["objective_id"]: p for p in record["priorities"]}
         assert by_id["R1.1"]["risk_ids"] == ["risk2"]
@@ -190,7 +190,7 @@ class TestRisksAndTiers:
     def test_rating_a_risk_retiers_the_work(self, client, mcas_raw, fixtures_dir):
         record = _upload(client, mcas_raw)
         record = client.post(
-            f"/api/cards/{record['id']}/qualification", json=self._qualification(fixtures_dir)
+            f"/api/cards/{record['id']}/ontology", json=self._ontology(fixtures_dir)
         ).json()
         record = client.post(
             f"/api/cards/{record['id']}/severity", json={"ratings": {"risk2": 5, "risk4": 1}}
@@ -202,7 +202,7 @@ class TestRisksAndTiers:
     def test_reordering_the_risks_reorders_the_tiers(self, client, mcas_raw, fixtures_dir):
         record = _upload(client, mcas_raw)
         cid = record["id"]
-        client.post(f"/api/cards/{cid}/qualification", json=self._qualification(fixtures_dir))
+        client.post(f"/api/cards/{cid}/ontology", json=self._ontology(fixtures_dir))
         a = client.post(f"/api/cards/{cid}/severity", json={"ratings": {"risk2": 5, "risk4": 1}}).json()
         b = client.post(f"/api/cards/{cid}/severity", json={"ratings": {"risk2": 1, "risk4": 5}}).json()
         tier_a = {p["objective_id"] for p in a["priorities"] if p["tier"] == 1}
@@ -212,28 +212,31 @@ class TestRisksAndTiers:
 
     def test_a_rating_outside_the_scale_is_rejected(self, client, mcas_raw, fixtures_dir):
         record = _upload(client, mcas_raw)
-        client.post(f"/api/cards/{record['id']}/qualification", json=self._qualification(fixtures_dir))
+        client.post(f"/api/cards/{record['id']}/ontology", json=self._ontology(fixtures_dir))
         response = client.post(
             f"/api/cards/{record['id']}/severity", json={"ratings": {"risk0": 9}}
         )
         assert response.status_code == 422
 
-    def test_a_system_card_is_not_accepted_as_a_qualification(self, client, mcas_raw):
+    def test_a_system_card_is_not_accepted_as_an_ontology(self, client, mcas_raw):
+        """Both are JSON about one system; the message has to say which is
+        wanted and where to get it."""
         record = _upload(client, mcas_raw)
         response = client.post(
-            f"/cards/{record['id']}/qualification",
-            files={"qualification": ("card.json", json.dumps(mcas_raw), "application/json")},
+            f"/cards/{record['id']}/ontology",
+            files={"ontology": ("card.json", json.dumps(mcas_raw), "application/json")},
         )
         assert response.status_code == 400
-        assert "risks" in response.text
+        assert "AIRO" in response.text
+        assert "ontology.jsonld" in response.text
 
     def test_confirming_the_profile_keeps_the_risks(self, client, mcas_raw, fixtures_dir):
         record = _upload(client, mcas_raw)
-        client.post(f"/api/cards/{record['id']}/qualification", json=self._qualification(fixtures_dir))
+        client.post(f"/api/cards/{record['id']}/ontology", json=self._ontology(fixtures_dir))
         record = client.post(
             f"/api/cards/{record['id']}/profile", json={"high_risk": "no"}
         ).json()
-        assert len(record["qualification"]["risks"]) == 5
+        assert len(record["ontology"]["risks"]) == 5
         tiered = {p["objective_id"] for p in record["priorities"] if p["tier"] is not None}
         assert tiered == {"R3.3", "R3.4", "R3.5", "R11.4", "R4.4", "R6.1", "R6.2"}
 
@@ -312,8 +315,8 @@ class TestPages:
     ):
         record = _upload(client, mcas_raw)
         client.post(
-            f"/api/cards/{record['id']}/qualification",
-            json=json.loads((fixtures_dir / "mcas.qualification.json").read_text()),
+            f"/api/cards/{record['id']}/ontology",
+            json=json.loads((fixtures_dir / "mcas.ontology.jsonld").read_text()),
         )
         page = client.get(f"/cards/{record['id']}").text
         assert "Loan officers rubber-stamp the recommendation" in page   # the risk
@@ -339,8 +342,8 @@ class TestPages:
     def test_rating_through_the_form_retiers(self, client, mcas_raw, fixtures_dir):
         record = _upload(client, mcas_raw)
         client.post(
-            f"/api/cards/{record['id']}/qualification",
-            json=json.loads((fixtures_dir / "mcas.qualification.json").read_text()),
+            f"/api/cards/{record['id']}/ontology",
+            json=json.loads((fixtures_dir / "mcas.ontology.jsonld").read_text()),
         )
         response = client.post(
             f"/cards/{record['id']}/severity",

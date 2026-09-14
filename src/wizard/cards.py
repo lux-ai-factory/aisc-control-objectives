@@ -15,7 +15,7 @@ from wizard.applicability import Verdict, decide
 from wizard.control_objectives import ControlObjectiveCatalogue
 from wizard.models.profile import Answer, Profile
 from wizard.models.system_card import SystemCard
-from wizard.models.qualification import Qualification
+from wizard.models.ontology import Ontology
 from wizard.prioritising import Priority, Severity, prioritise
 from wizard.risk_mapping import Mapper, MappingRun, map_risks
 from wizard.profiling import Extractor, ProfileRun, extract_profile
@@ -43,9 +43,9 @@ class CardRecord(BaseModel):
     #: follow from it. Neutral until somebody rates it.
     severity: Severity = Severity()
     priorities: list[Priority] = []
-    #: The qualification's own risks, once one is added, and what the mapper
-    #: made of them. Absent until somebody uploads it.
-    qualification: Qualification | None = None
+    #: The system's filled AIRO graph, once one is added, and what the mapper
+    #: made of its risks. Absent until somebody uploads it.
+    ontology: Ontology | None = None
     mapping_run: MappingRun | None = None
 
 
@@ -72,7 +72,7 @@ def _retiered(record: CardRecord, catalogue: ControlObjectiveCatalogue) -> list[
         record.verdicts,
         record.severity,
         record.mapping_run.mappings if record.mapping_run else {},
-        record.qualification.risks if record.qualification else [],
+        record.ontology.risks if record.ontology else [],
     )
 
 
@@ -116,16 +116,16 @@ def confirm_profile(
     return updated
 
 
-def add_qualification(
+def add_ontology(
     record: CardRecord,
-    qualification: Qualification,
+    ontology: Ontology,
     mapper: Mapper,
     catalogue: ControlObjectiveCatalogue,
 ) -> CardRecord:
-    """Attach the system's own risks and map them onto the objectives. The
-    tiers follow; what applies does not change."""
-    run = map_risks(qualification.risks, mapper, catalogue)
-    updated = record.model_copy(update={"qualification": qualification, "mapping_run": run})
+    """Attach the system's filled AIRO graph and map its risks onto the
+    objectives. The tiers follow; what applies does not change."""
+    run = map_risks(ontology.risks, mapper, catalogue)
+    updated = record.model_copy(update={"ontology": ontology, "mapping_run": run})
     updated.priorities = _retiered(updated, catalogue)
     return updated
 

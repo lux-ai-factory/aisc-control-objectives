@@ -13,7 +13,7 @@ import pytest
 
 from wizard.applicability import decide
 from wizard.models.profile import Fact, HighRiskFact, Profile
-from wizard.models.qualification import RiskRow
+from wizard.models.ontology import OntologyRisk
 from wizard.prioritising import (
     DEFAULT_SEVERITY,
     TIER_ONE_BUDGET,
@@ -61,8 +61,8 @@ class TestSeverity:
 
 
 RISKS = [
-    RiskRow(position=2, risk="Loan officers rubber-stamp the recommendation"),
-    RiskRow(position=4, risk="Training data is poisoned through the bureau ingestion path"),
+    OntologyRisk(id="risk2", text="Loan officers rubber-stamp the recommendation"),
+    OntologyRisk(id="risk4", text="Training data is poisoned through the bureau ingestion path"),
 ]
 
 #: what a clean mapping run produces for those two risks

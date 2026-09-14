@@ -8,7 +8,7 @@ JSON API mirrors both. Uploads live in memory, so a restart loses them.
 from __future__ import annotations
 
 import json
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import Body, FastAPI, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,7 +19,7 @@ from pydantic import ValidationError, create_model
 from wizard.cards import (
     CardRecord,
     CardStore,
-    add_qualification,
+    add_ontology,
     assess_card,
     confirm_profile,
     rate_severity,
@@ -29,7 +29,7 @@ from wizard.control_objectives import ControlObjectiveCatalogue
 from wizard.models.control_objective import ControlObjective, MacroRequirement
 from wizard.models.profile import Answer, Profile
 from wizard.prioritising import Severity
-from wizard.models.qualification import Qualification
+from wizard.models.ontology import Ontology
 from wizard.models.system_card import SystemCard
 from wizard.profiling import Extractor
 from wizard.risk_mapping import Mapper
@@ -147,32 +147,33 @@ def create_app(
         store.save(confirm_profile(record, answers.model_dump(exclude_none=True), objectives))
         return RedirectResponse(url=f"{root_path}/cards/{record_id}", status_code=303)
 
-    @app.post("/cards/{record_id}/qualification", include_in_schema=False)
-    def add_qualification_form(record_id: str, qualification: UploadFile):
+    @app.post("/cards/{record_id}/ontology", include_in_schema=False)
+    def add_ontology_form(record_id: str, ontology: UploadFile):
         """Not async: mapping every risk blocks for as long as the model takes."""
         record = _record_or_404(record_id)
         try:
-            raw = json.loads(qualification.file.read())
+            raw = json.loads(ontology.file.read())
         except ValueError:
             return PlainTextResponse("The uploaded file is not valid JSON.", status_code=400)
-        if not Qualification.looks_like_one(raw):
+        if not Ontology.looks_like_one(raw):
             return PlainTextResponse(
-                "That JSON has no `risks`, so it is not a qualification export. "
-                "The system card goes in the box on the front page.",
+                "That JSON names no AIRO classes, so it is not an ontology export. "
+                "Download it from the card page of the qualification app "
+                "(ontology.jsonld); the system card goes in the box on the front page.",
                 status_code=400,
             )
         try:
-            parsed = Qualification.from_export(raw)
+            parsed = Ontology.from_jsonld(raw)
         except ValidationError as exc:
-            return PlainTextResponse(f"Not a qualification export: {exc}", status_code=400)
-        store.save(add_qualification(record, parsed, mapper, objectives))
+            return PlainTextResponse(f"Not an AIRO graph: {exc}", status_code=400)
+        store.save(add_ontology(record, parsed, mapper, objectives))
         return RedirectResponse(url=f"{root_path}/cards/{record_id}", status_code=303)
 
     @app.post("/cards/{record_id}/severity", include_in_schema=False)
     async def rate_severity_form(record_id: str, request: Request):
         record = _record_or_404(record_id)
         form = await request.form()
-        risks = record.qualification.risks if record.qualification else []
+        risks = record.ontology.risks if record.ontology else []
         ratings = {risk.id: int(form[risk.id]) for risk in risks if form.get(risk.id)}
         try:
             store.save(rate_severity(record, ratings, objectives))
@@ -228,12 +229,12 @@ def create_app(
     def get_card(record_id: str) -> CardRecord:
         return _record_or_404(record_id)
 
-    @app.post("/api/cards/{record_id}/qualification", response_model=CardRecord)
-    def add_qualification_json(record_id: str, qualification: dict = Body(...)) -> CardRecord:
-        """Attach the qualification export whose risks drive the tiers."""
+    @app.post("/api/cards/{record_id}/ontology", response_model=CardRecord)
+    def add_ontology_json(record_id: str, ontology: Any = Body(...)) -> CardRecord:
+        """Attach the filled AIRO graph whose risks drive the tiers."""
         record = _record_or_404(record_id)
-        updated = add_qualification(
-            record, Qualification.from_export(qualification), mapper, objectives
+        updated = add_ontology(
+            record, Ontology.from_jsonld(ontology), mapper, objectives
         )
         store.save(updated)
         return updated

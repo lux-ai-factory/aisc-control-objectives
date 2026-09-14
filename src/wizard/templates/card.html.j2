@@ -57,20 +57,21 @@
     </form>
   </div>
 
-  {%- if not record.qualification %}
+  {%- if not record.ontology %}
   <div class="qf-section">
-    <h2>Add the system's risks</h2>
+    <h2>Add the system's filled AIRO graph</h2>
     <p class="qf-help">Every objective above is owed, which is no help in deciding where to
-       start. Upload this system's <strong>qualification export</strong>: the risks the
-       assessor identified, each with its source, the weakness it exploits, what follows,
-       and the control the provider says is already in place. The wizard maps each risk
+       start. Upload this system's <strong>ontology export</strong> (the
+       <code>ontology.jsonld</code> on its card page): the risks the assessor identified,
+       each with its source, the weakness it exploits, what follows, the control the
+       provider says is in place, and how the graph types them in VAIR. The wizard maps each risk
        onto the objectives that mitigate it, you say how severe each risk is, and the
        objectives answering the worst risks become Tier 1.</p>
-    <form method="post" action="{{ root_path }}/cards/{{ record.id }}/qualification"
+    <form method="post" action="{{ root_path }}/cards/{{ record.id }}/ontology"
           enctype="multipart/form-data">
       <div class="field">
-        <label for="qualification">Qualification export (JSON)</label>
-        <input id="qualification" name="qualification" type="file" accept="application/json,.json" required>
+        <label for="ontology">Ontology export (ontology.jsonld)</label>
+        <input id="ontology" name="ontology" type="file" accept="application/json,.json,.jsonld" required>
       </div>
       <div class="qf-actions"><button class="btn" type="submit">Map the risks</button></div>
     </form>
@@ -90,13 +91,13 @@
       {%- for view in risks %}
       <div class="co-risk">
         <div class="co-risk-main">
-          <h3>{{ view.risk.risk }}</h3>
+          <h3>{{ view.risk.text }}</h3>
           <dl class="qf-dl">
             {%- if view.risk.source %}<dt>Source</dt><dd>{{ view.risk.source }}</dd>{% endif %}
             {%- if view.risk.vulnerability %}<dt>Vulnerability</dt><dd>{{ view.risk.vulnerability }}</dd>{% endif %}
             {%- if view.risk.consequence %}<dt>Consequence</dt><dd>{{ view.risk.consequence }}</dd>{% endif %}
             {%- if view.risk.control %}<dt>Declared control</dt><dd>{{ view.risk.control }}</dd>{% endif %}
-            {%- if view.risk.impact_areas %}<dt>Impact</dt><dd>{{ view.risk.impact_areas | join(', ') }}{% if view.risk.affected %} · borne by the {{ view.risk.affected }}{% endif %}</dd>{% endif %}
+            {%- if view.risk.areas %}<dt>Impact</dt><dd>{{ view.risk.areas | join(', ') }}{% if view.risk.affected %} · borne by the {{ view.risk.affected }}{% endif %}</dd>{% endif %}
           </dl>
           <p class="co-reason">
             {%- if view.mapped %}Mitigated by
