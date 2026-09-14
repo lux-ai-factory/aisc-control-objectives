@@ -93,6 +93,18 @@ class FakeMapper:
         return self._mappings.pop(0) if len(self._mappings) > 1 else self._mappings[0]
 
 
+OTHER_RISK = RUBBER_STAMP.model_copy(update={"id": "risk3"})
+
+
+class PerRiskMapper:
+    """risk2 keeps naming an objective that does not exist; risk3 is clean."""
+
+    def propose(self, risk, findings=()):
+        if risk.id == "risk2":
+            return _mapping(_good("R42.9"))
+        return _mapping(_good())
+
+
 class TestTheLoop:
     def test_a_clean_first_attempt(self, objectives):
         run = map_risks([RUBBER_STAMP], FakeMapper(_mapping(_good())), objectives)
@@ -138,6 +150,18 @@ class TestTheLoop:
         assert run.stop == "failed"
         assert "no key" in run.error
         assert run.mappings["risk2"].objectives == []
+
+    def test_the_run_reports_the_worst_stop_not_the_last(self, objectives):
+        """One risk struggling and a later one settling cleanly is still a run
+        that did not fully succeed, so the last risk must not overwrite it."""
+        run = map_risks([RUBBER_STAMP, OTHER_RISK], PerRiskMapper(), objectives)
+        assert run.stop == "fixpoint"
+
+    def test_each_mapping_records_how_it_stopped(self, objectives):
+        """The run has one stop; a reader needs to know WHICH risk struggled."""
+        run = map_risks([RUBBER_STAMP, OTHER_RISK], PerRiskMapper(), objectives)
+        assert run.mappings["risk2"].stop == "fixpoint"
+        assert run.mappings["risk3"].stop == "clean"
 
     def test_every_risk_is_attempted(self, objectives):
         second = RUBBER_STAMP.model_copy(update={"id": "risk3", "text": "Something else entirely"})

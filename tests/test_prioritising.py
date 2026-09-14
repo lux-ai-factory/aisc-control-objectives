@@ -65,15 +65,17 @@ RISKS = [
     OntologyRisk(id="risk4", text="Training data is poisoned through the bureau ingestion path"),
 ]
 
-#: what a clean mapping run produces for those two risks
+def _maps(risk_id, *objective_ids):
+    return Mapping(risk_id=risk_id, objectives=[
+        MappedObjective(objective_id=oid, quote="q", rationale="because") for oid in objective_ids
+    ])
+
+
+#: What a clean run produces for those two risks. Deliberately more than the
+#: Tier 1 budget between them, so the budget actually has to choose.
 MAPPINGS = {
-    "risk2": Mapping(risk_id="risk2", objectives=[
-        MappedObjective(objective_id="R1.1", quote="q", rationale="oversight is defeated"),
-        MappedObjective(objective_id="R1.4", quote="q", rationale="rubber-stamping is invisible"),
-    ]),
-    "risk4": Mapping(risk_id="risk4", objectives=[
-        MappedObjective(objective_id="R2.3", quote="q", rationale="poisoning is a security control"),
-    ]),
+    "risk2": _maps("risk2", "R1.1", "R1.2", "R1.3", "R1.4", "R4.1"),
+    "risk4": _maps("risk4", "R2.3", "R2.2", "R3.1", "R3.6", "R9.8"),
 }
 
 
@@ -104,6 +106,21 @@ class TestTiering:
         assert by_id["R1.1"].tier == 1
         assert by_id["R1.4"].tier == 1
         assert any("rubber-stamp" in r for r in by_id["R1.1"].reasons)
+        # and the objectives answering the risk rated 1 are pushed out of it
+        assert by_id["R2.3"].tier == 2
+
+    def test_tier_one_holds_only_risk_driven_work(self, objectives, verdicts):
+        """Padding the budget with objectives nothing points at would make
+        "start here" mean "these seven, some for no reason"."""
+        priorities = prioritise(objectives, verdicts, Severity(), MAPPINGS, RISKS)
+        assert all(p.risk_ids for p in priorities if p.tier == 1)
+
+    def test_tier_one_is_smaller_than_the_budget_when_little_is_driven(
+        self, objectives, verdicts
+    ):
+        few = {"risk2": _maps("risk2", "R1.1", "R1.4")}
+        priorities = prioritise(objectives, verdicts, Severity(), few, RISKS)
+        assert sum(p.tier == 1 for p in priorities) == 2
 
     def test_reordering_the_risks_reorders_the_work(self, objectives, verdicts):
         """The whole point: the same 50 duties, a different place to start."""
@@ -112,13 +129,12 @@ class TestTiering:
         a = {p.objective_id: p.tier for p in prioritise(objectives, verdicts, oversight_first, MAPPINGS, RISKS)}
         b = {p.objective_id: p.tier for p in prioritise(objectives, verdicts, poisoning_first, MAPPINGS, RISKS)}
         assert a["R1.1"] == 1 and b["R2.3"] == 1
-        assert b["R1.1"] > a["R1.1"]
+        assert b["R1.1"] > a["R1.1"]      # oversight drops out of Tier 1
+        assert a["R2.3"] > b["R2.3"]      # and poisoning takes its place
 
     def test_an_objective_mitigating_two_risks_takes_the_worse_one(self, objectives, verdicts):
         both = dict(MAPPINGS)
-        both["risk4"] = Mapping(risk_id="risk4", objectives=[
-            MappedObjective(objective_id="R1.1", quote="q", rationale="also this"),
-        ])
+        both["risk4"] = _maps("risk4", "R1.1")
         severity = Severity.model_validate({"ratings": {"risk2": 1, "risk4": 5}})
         by_id = {p.objective_id: p for p in prioritise(objectives, verdicts, severity, both, RISKS)}
         assert by_id["R1.1"].score >= 5
@@ -130,11 +146,32 @@ class TestTiering:
         assert by_id["R8.1"].tier != 1
         assert any("no identified risk" in r for r in by_id["R8.1"].reasons)
 
-    def test_with_no_mappings_at_all_everything_falls_back_to_neutral(self, objectives, verdicts):
-        """A qualification with no risks, or a mapping run that failed: the
-        tiers must still exist rather than the page going blank."""
+    def test_an_unmapped_objective_sorts_below_every_mapped_one(self, objectives, verdicts):
+        """Owed, but not where this system's danger is: that is Later, not
+        Next. Sharing a score with a mapped objective would put "nothing points
+        at this" alongside "a risk you rated 4 points at this"."""
+        severity = Severity.model_validate({"ratings": {"risk2": 1, "risk4": 1}})
+        by_id = {p.objective_id: p for p in prioritise(objectives, verdicts, severity, MAPPINGS, RISKS)}
+        mapped = by_id["R1.1"]          # driven by risk2, rated 1 (the lowest)
+        unmapped = by_id["R8.1"]        # driven by nothing
+        assert mapped.score > unmapped.score
+        assert unmapped.tier == 3
+
+    def test_the_tiers_read_as_driven_then_undriven(self, objectives, verdicts):
+        severity = Severity.model_validate({"ratings": {"risk2": 5, "risk4": 4}})
+        priorities = prioritise(objectives, verdicts, severity, MAPPINGS, RISKS)
+        driven = {p.objective_id for p in priorities if p.risk_ids}
+        tier3 = {p.objective_id for p in priorities if p.tier == 3}
+        # nothing a risk drives is relegated to Later
+        assert not (driven & tier3)
+
+    def test_with_no_mappings_at_all_nothing_is_tier_one(self, objectives, verdicts):
+        """A graph with no risks, or a mapping run that failed: everything is
+        owed and nothing is urgent, which is the honest answer. The page still
+        renders rather than going blank."""
         priorities = prioritise(objectives, verdicts, Severity(), {}, [])
-        assert sum(p.tier == 1 for p in priorities) == 7
+        assert sum(p.tier == 1 for p in priorities) == 0
+        assert sum(p.tier == 3 for p in priorities) == 50
 
     def test_a_binding_duty_breaks_a_tie(self, objectives, verdicts):
         priorities = {p.objective_id: p for p in prioritise(objectives, verdicts, Severity(), {}, [])}

@@ -43,6 +43,53 @@ def _refs(node: dict, predicate: str) -> list[str]:
     return [entry["@id"] for entry in _values(node, predicate) if "@id" in entry]
 
 
+class _Graph:
+    """The node table, with the four questions this parser asks of it.
+
+    A tiny class rather than five closures inside the parser: the traversal
+    reads as a walk over the graph once the graph can answer for itself.
+    """
+
+    def __init__(self, nodes: list):
+        self.by_id: dict[str, dict] = {
+            node["@id"]: node for node in nodes if isinstance(node, dict) and "@id" in node
+        }
+
+    def of_class(self, name: str) -> list[dict]:
+        return [node for node in self.by_id.values() if name in self.classes(node)]
+
+    @staticmethod
+    def classes(node: dict) -> set[str]:
+        return {_local(t) for t in (node.get("@type") or [])}
+
+    @staticmethod
+    def vair(node: dict | None) -> list[str]:
+        return [
+            _local(t)
+            for t in ((node or {}).get("@type") or [])
+            if str(t).startswith(VAIR)
+        ]
+
+    @staticmethod
+    def text(node: dict | None) -> str:
+        """The assessor's own sentence where there is one, else the card label."""
+        return _literal(node or {}, QUAL + "fullLabel") or _literal(node or {}, LABEL)
+
+    def target(self, node: dict | None, predicate: str) -> dict | None:
+        """The node this one's `predicate` points at."""
+        refs = _refs(node or {}, predicate)
+        return self.by_id.get(refs[0]) if refs else None
+
+    def source_of(self, node: dict, predicate: str) -> dict | None:
+        """The node whose `predicate` points AT this one. AIRO attaches a risk's
+        source and its control that way round, so a forward-only walk misses
+        both."""
+        return next(
+            (other for other in self.by_id.values() if node["@id"] in _refs(other, predicate)),
+            None,
+        )
+
+
 class Answer(BaseModel):
     """One Annex IV answer, verbatim, with the provision it answers."""
 
@@ -81,11 +128,14 @@ class OntologyRisk(BaseModel):
         what its quotes have to be spans of. Absent links are left out rather
         than labelled, so the model is never shown an empty heading."""
         parts = [f"Risk: {self.text}"]
+        # The AIRO builder names the Impact node after the risk it realises, so
+        # an impact that only echoes the risk is not worth a second line.
+        impact = "" if self.impact.strip() == self.text.strip() else self.impact
         for label, value in (
             ("Source", self.source),
             ("Vulnerability", self.vulnerability),
             ("Consequence", self.consequence),
-            ("Impact", self.impact),
+            ("Impact", impact),
             ("Declared control", self.control),
             ("Follow-up control", self.follow_up_control),
         ):
@@ -125,88 +175,58 @@ class Ontology(BaseModel):
 
     @classmethod
     def from_jsonld(cls, raw: Any) -> Ontology:
-        nodes = raw.get("@graph") if isinstance(raw, dict) else raw
-        by_id: dict[str, dict] = {
-            node["@id"]: node for node in nodes if isinstance(node, dict) and "@id" in node
-        }
-
-        def classes(node: dict) -> set[str]:
-            return {_local(t) for t in (node.get("@type") or [])}
-
-        def vair_of(node: dict | None) -> list[str]:
-            if not node:
-                return []
-            return [_local(t) for t in (node.get("@type") or []) if str(t).startswith(VAIR)]
-
-        def text_of(node: dict | None) -> str:
-            if not node:
-                return ""
-            return _literal(node, QUAL + "fullLabel") or _literal(node, LABEL)
-
-        def first(node: dict | None, predicate: str) -> dict | None:
-            if not node:
-                return None
-            refs = _refs(node, predicate)
-            return by_id.get(refs[0]) if refs else None
-
-        def pointing_at(target_id: str, predicate: str) -> dict | None:
-            """The node whose `predicate` points at this one: the source and the
-            control are attached that way round in AIRO."""
-            for node in by_id.values():
-                if target_id in _refs(node, predicate):
-                    return node
-            return None
-
-        system = next((n for n in by_id.values() if "AISystem" in classes(n)), None)
-        answers = [
-            Answer(
-                citation=_literal(node, QUAL + "citation"),
-                question_id=_literal(node, QUAL + "questionId"),
-                text=_literal(node, QUAL + "text"),
-            )
-            for node in by_id.values()
-            if _literal(node, QUAL + "text")
-        ]
-
-        risks: list[OntologyRisk] = []
-        for node in by_id.values():
-            if "Risk" not in classes(node):
-                continue
-            risk_id = _local(node["@id"])
-            source = pointing_at(node["@id"], AIRO + "isRiskSourceFor")
-            vulnerability = first(source, AIRO + "exploitsVulnerability")
-            consequence = first(node, AIRO + "hasConsequence")
-            impact = first(consequence, AIRO + "hasImpact")
-            stakeholder = first(impact, AIRO + "hasImpactOnStakeholder")
-            control = pointing_at(node["@id"], AIRO + "modifiesRiskConcept")
-            follow_up = first(control, AIRO + "isFollowedByControl")
-            areas = [
-                text_of(by_id.get(ref))
-                for ref in _refs(impact or {}, AIRO + "hasImpactOnArea")
-            ]
-            chain = [node, source, vulnerability, consequence, impact, control, follow_up]
-            risks.append(
-                OntologyRisk(
-                    id=risk_id,
-                    text=text_of(node),
-                    short_label=_literal(node, LABEL),
-                    source=text_of(source),
-                    vulnerability=text_of(vulnerability),
-                    consequence=text_of(consequence),
-                    impact=text_of(impact),
-                    stakeholder=text_of(stakeholder),
-                    areas=[area for area in areas if area],
-                    control=text_of(control),
-                    follow_up_control=text_of(follow_up),
-                    vair_terms=sorted({term for member in chain for term in vair_of(member)}),
-                    provenance=_literal(node, QUAL + "provenance") or "form",
-                )
-            )
-
-        risks.sort(key=lambda risk: risk.position)
+        graph = _Graph(raw.get("@graph") if isinstance(raw, dict) else raw)
+        system = next(iter(graph.of_class("AISystem")), None)
         return cls(
             qualification_id=_literal(system or {}, QUAL + "qualificationId"),
-            system_name=text_of(system),
-            risks=risks,
-            answers=answers,
+            system_name=graph.text(system),
+            risks=sorted(
+                (cls._risk(graph, node) for node in graph.of_class("Risk")),
+                key=lambda risk: risk.position,
+            ),
+            answers=[
+                Answer(
+                    citation=_literal(node, QUAL + "citation"),
+                    question_id=_literal(node, QUAL + "questionId"),
+                    text=_literal(node, QUAL + "text"),
+                )
+                for node in graph.by_id.values()
+                if _literal(node, QUAL + "text")
+            ],
+        )
+
+    @staticmethod
+    def _risk(graph: _Graph, node: dict) -> OntologyRisk:
+        """One risk, walked out to the ends of its chain."""
+        source = graph.source_of(node, AIRO + "isRiskSourceFor")
+        vulnerability = graph.target(source, AIRO + "exploitsVulnerability")
+        consequence = graph.target(node, AIRO + "hasConsequence")
+        impact = graph.target(consequence, AIRO + "hasImpact")
+        stakeholder = graph.target(impact, AIRO + "hasImpactOnStakeholder")
+        control = graph.source_of(node, AIRO + "modifiesRiskConcept")
+        follow_up = graph.target(control, AIRO + "isFollowedByControl")
+        chain = (node, source, vulnerability, consequence, impact, control, follow_up)
+
+        return OntologyRisk(
+            id=_local(node["@id"]),
+            text=graph.text(node),
+            short_label=_literal(node, LABEL),
+            source=graph.text(source),
+            vulnerability=graph.text(vulnerability),
+            consequence=graph.text(consequence),
+            impact=graph.text(impact),
+            # The short label, not the full text: a stakeholder node's full text
+            # is the form's whole target-users answer, the same for every risk,
+            # so it identifies nothing about this one and is a span the mapper
+            # could wrongly quote as support.
+            stakeholder=_literal(stakeholder or {}, LABEL),
+            areas=[
+                area
+                for ref in _refs(impact or {}, AIRO + "hasImpactOnArea")
+                if (area := graph.text(graph.by_id.get(ref)))
+            ],
+            control=graph.text(control),
+            follow_up_control=graph.text(follow_up),
+            vair_terms=sorted({term for member in chain for term in graph.vair(member)}),
+            provenance=_literal(node, QUAL + "provenance") or "form",
         )

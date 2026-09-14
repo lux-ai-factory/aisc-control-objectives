@@ -21,12 +21,14 @@ class FakeMapper:
     """Maps the MCAS risks the way a competent reading would, so the wiring can
     be tested without a model."""
 
+    #: Three to five objectives per risk, as the real mapper produces, so the
+    #: Tier 1 budget has to choose between risks rather than fitting them all.
     BY_RISK = {
-        "risk0": [("R3.1", "bureau coverage is incomplete or stale")],
-        "risk1": [("R5.1", "act as proxies for ethnicity"), ("R5.2", "act as proxies for ethnicity")],
-        "risk2": [("R1.1", "rubber-stamp the recommendation"), ("R1.4", "rubber-stamp the recommendation")],
-        "risk3": [("R4.1", "cites the wrong policy clause")],
-        "risk4": [("R2.3", "Training data is poisoned")],
+        "risk0": [("R3.1", "wrongly ranked"), ("R5.1", "wrongly ranked"), ("R2.5", "wrongly ranked")],
+        "risk1": [("R5.1", "diverge across"), ("R5.2", "diverge across"), ("R5.3", "diverge across")],
+        "risk2": [("R1.1", "rubber-stamp"), ("R1.4", "rubber-stamp"), ("R1.2", "rubber-stamp")],
+        "risk3": [("R4.1", "wrong policy clause"), ("R4.3", "wrong policy clause"), ("R2.2", "wrong policy clause")],
+        "risk4": [("R2.3", "poisoned"), ("R3.6", "poisoned"), ("R3.1", "poisoned")],
     }
 
     def propose(self, risk, findings=()):
@@ -161,11 +163,13 @@ class TestRisksAndTiers:
     def _ontology(fixtures_dir):
         return json.loads((fixtures_dir / "mcas.ontology.jsonld").read_text())
 
-    def test_a_card_alone_has_no_risks_and_still_tiers(self, client, mcas_raw):
+    def test_a_card_alone_has_no_risks_so_nothing_is_urgent(self, client, mcas_raw):
+        """Everything applies and nothing is prioritised: that is the honest
+        state before the graph arrives, not a Tier 1 of seven arbitrary rows."""
         record = _upload(client, mcas_raw)
         assert record["ontology"] is None
         assert record["mapping_run"] is None
-        assert sum(p["tier"] == 1 for p in record["priorities"]) == 7
+        assert sum(p["tier"] == 1 for p in record["priorities"]) == 0
 
     def test_adding_the_qualification_maps_its_risks(self, client, mcas_raw, fixtures_dir):
         record = _upload(client, mcas_raw)
@@ -209,6 +213,20 @@ class TestRisksAndTiers:
         tier_b = {p["objective_id"] for p in b["priorities"] if p["tier"] == 1}
         assert tier_a != tier_b
         assert "R2.3" in tier_b
+
+    def test_a_rating_for_a_risk_this_system_does_not_have_is_rejected(
+        self, client, mcas_raw, fixtures_dir
+    ):
+        """A hand-made call naming a risk the graph has no node for is a client
+        error, not a server one, and silently ignoring it would mean the
+        assessor's rating never took effect."""
+        record = _upload(client, mcas_raw)
+        client.post(f"/api/cards/{record['id']}/ontology", json=self._ontology(fixtures_dir))
+        response = client.post(
+            f"/api/cards/{record['id']}/severity", json={"ratings": {"risk99": 5}}
+        )
+        assert response.status_code == 422
+        assert "risk99" in response.text
 
     def test_a_rating_outside_the_scale_is_rejected(self, client, mcas_raw, fixtures_dir):
         record = _upload(client, mcas_raw)
@@ -360,8 +378,12 @@ class TestPages:
         page = client.get(f"/cards/{record['id']}").text
         assert page.index("Later") < page.index("Not applicable</h2>")
 
-    def test_the_page_shows_the_tier_of_each_objective(self, client, mcas_raw):
+    def test_the_page_shows_the_tier_of_each_objective(self, client, mcas_raw, fixtures_dir):
         record = _upload(client, mcas_raw)
+        client.post(
+            f"/api/cards/{record['id']}/ontology",
+            json=json.loads((fixtures_dir / "mcas.ontology.jsonld").read_text()),
+        )
         page = client.get(f"/cards/{record['id']}").text
         assert page.count('qf-tag--tier1">Tier 1</span>') == 7
         assert "Tier 2" in page and "Tier 3" in page

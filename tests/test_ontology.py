@@ -110,6 +110,22 @@ class TestRiskText:
         for part in ("poisoned", "provenance signing", "Egress allow-list"):
             assert part in text
 
+    def test_the_impact_line_is_dropped_when_it_only_repeats_the_risk(self, mcas):
+        """The AIRO builder names the Impact node after the risk it realises,
+        so printing both spends tokens saying the same thing twice."""
+        risk = mcas.by_id("risk2")
+        assert risk.impact == risk.text
+        assert risk.as_text().count(risk.text) == 1
+
+    def test_the_stakeholder_is_the_one_bearing_this_risk(self, mcas):
+        """The stakeholder node's fullLabel is the form's whole target-users
+        answer, shared by every risk, so it identifies nothing about this one
+        and is a span the mapper could wrongly quote."""
+        risk = mcas.by_id("risk2")
+        assert "Primary: bank customers aged 18+" not in risk.as_text()
+        assert risk.stakeholder
+        assert len(risk.stakeholder) < 90
+
     def test_an_absent_link_is_not_announced(self, mcas):
         bare = next(risk for risk in mcas.risks if not risk.vulnerability)
         assert "vulnerability" not in bare.as_text().lower()

@@ -98,7 +98,14 @@ def create_app(
             raise HTTPException(status_code=404, detail=f"Unknown card {record_id}")
         return record
 
-    # ── pages ──────────────────────────────────────────────────────────────
+    _register_pages(app, objectives, store, extractor, mapper, source_name, root_path, _record_or_404)
+    _register_objective_api(app, objectives, config)
+    _register_card_api(app, objectives, store, extractor, mapper, _record_or_404)
+    return app
+
+
+def _register_pages(app, objectives, store, extractor, mapper, source_name, root_path, _record_or_404):
+    """The two pages and the three forms that post to them."""
 
     @app.get("/", include_in_schema=False, response_class=HTMLResponse)
     def objectives_page() -> HTMLResponse:
@@ -181,7 +188,9 @@ def create_app(
             return PlainTextResponse(f"Invalid rating: {exc}", status_code=400)
         return RedirectResponse(url=f"{root_path}/cards/{record_id}", status_code=303)
 
-    # ── JSON API ───────────────────────────────────────────────────────────
+
+def _register_objective_api(app, objectives, config):
+    """The catalogue: what the objectives are, independent of any system."""
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -214,6 +223,10 @@ def create_app(
     def list_macro_requirements() -> list[MacroRequirement]:
         return objectives.macro_requirements()
 
+
+def _register_card_api(app, objectives, store, extractor, mapper, _record_or_404):
+    """One assessed system: its card, its graph, its ratings and its tiers."""
+
     @app.post("/api/cards", response_model=CardRecord, status_code=201)
     def upload_card(card: SystemCard = Body(...)) -> CardRecord:
         """Assess a system card: propose its profile, decide the objectives."""
@@ -241,10 +254,16 @@ def create_app(
 
     @app.post("/api/cards/{record_id}/severity", response_model=CardRecord)
     def rate(record_id: str, severity: Severity) -> CardRecord:
-        """How much each macro requirement matters for this system, 1-5. The
-        tiers follow; what applies does not change."""
+        """How severe each of this system's risks is, 1-5. The tiers follow;
+        what applies does not change."""
         record = _record_or_404(record_id)
-        updated = rate_severity(record, severity.ratings, objectives)
+        try:
+            updated = rate_severity(record, severity.ratings, objectives)
+        except ValueError as exc:
+            # A risk id this system's graph has no node for: the caller's
+            # mistake, and silently dropping it would leave their rating with
+            # no effect and no explanation.
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         store.save(updated)
         return updated
 
@@ -257,5 +276,3 @@ def create_app(
         )
         store.save(updated)
         return updated
-
-    return app

@@ -16,10 +16,13 @@ abstract view of which requirement family matters.
               |
               v
     tier 1 = the highest scoring, up to a budget an assessor can actually start
+             (and only work a risk actually drives: a short Tier 1 is an
+              honest answer, a padded one is not)
 
 An objective no identified risk maps to is still owed; it simply is not where
-this system's danger lies, so it sits at neutral. A voluntary objective never
-leaves the bottom tier: it binds nobody, so it cannot displace a legal duty.
+this system's danger lies, so it sorts below every objective that a risk does
+drive, and lands in the bottom tier. A voluntary objective sits lower still:
+it binds nobody, so it cannot displace a legal duty.
 """
 
 from __future__ import annotations
@@ -36,9 +39,15 @@ from wizard.models.control_objective import ControlObjective
 from wizard.models.ontology import OntologyRisk
 from wizard.risk_mapping import Mapping
 
-#: What an unrated risk is worth, and what an objective no risk maps to gets:
-#: neutral, so tiers exist before anybody has rated anything.
+#: What an unrated risk is worth: neutral, so tiers exist before anybody has
+#: rated anything.
 DEFAULT_SEVERITY = 3
+
+#: What an objective no risk maps to scores. Below the whole 1-5 scale, because
+#: "nothing the assessor identified points at this" is weaker than "a risk they
+#: rated 1 points at this". Sharing the neutral value put 33 of MCAS's 50 into
+#: Tier 2 and made "Next" mean almost nothing.
+UNDRIVEN_SCORE = 0.0
 
 #: How many objectives a Tier 1 may hold. Seven is what an assessor can open a
 #: workstream on; beyond that the tier stops meaning anything.
@@ -100,13 +109,59 @@ def _score(
             + (f" (and {len(driving) - 1} more)" if len(driving) > 1 else "")
         ]
     else:
-        score = float(DEFAULT_SEVERITY)
+        score = UNDRIVEN_SCORE
         reasons = ["no identified risk maps to it: owed, but not where this system's danger is"]
 
     if "Binding" in objective.grounding_tier_flag:
         score += BINDING_WEIGHT
         reasons.append("a directly binding duty, not only standards-grounded")
     return score, reasons
+
+
+def _driving_risks(
+    mappings: MappingABC[str, Mapping],
+    risks: Sequence[OntologyRisk],
+    severity: Severity,
+) -> dict[str, list[tuple[int, OntologyRisk]]]:
+    """objective id -> the risks that drive it, worst first.
+
+    A mapping naming a risk this graph does not have is ignored rather than
+    raising: it can only come from a stale run against an older graph, and one
+    stale row should not cost the assessor the whole tiering."""
+    risks_by_id = {risk.id: risk for risk in risks}
+    driving: dict[str, list[tuple[int, OntologyRisk]]] = {}
+    for risk_id, mapping in mappings.items():
+        risk = risks_by_id.get(risk_id)
+        if risk is None:
+            continue
+        for item in mapping.objectives:
+            driving.setdefault(item.objective_id, []).append((severity.of(risk_id), risk))
+    for entries in driving.values():
+        entries.sort(key=lambda entry: (-entry[0], entry[1].position))
+    return driving
+
+
+def _assign_tiers(scored: list[tuple[float, tuple[int, int], Priority]], budget: int) -> None:
+    """Tier 1 is the top of the driven work, and only that.
+
+    Driven-ness is a fact about the mapping, not a threshold on the score: a
+    binding objective nothing points at still scores above the undriven floor,
+    and "binding" is a tiebreak among work, not a reason to schedule work
+    nobody identified. An objective answering a risk the assessor called
+    marginal does not belong in "start here" either, however much room is left
+    in the budget: a short Tier 1 is an honest answer, a padded one is not.
+    """
+    scored.sort(key=lambda row: (-row[0], row[1]))
+    urgent = 0
+    for score, _, priority in scored:
+        if priority.non_binding or not priority.risk_ids:
+            priority.tier = 3
+        elif score >= DEFAULT_SEVERITY and urgent < budget:
+            priority.tier = 1
+            urgent += 1
+        else:
+            # Driven by a risk the assessor named: work, just not first.
+            priority.tier = 2
 
 
 def prioritise(
@@ -119,24 +174,11 @@ def prioritise(
 ) -> list[Priority]:
     """One Priority per objective, in catalogue order. Objectives that do not
     apply carry no tier: there is nothing to schedule."""
-    risks_by_id = {risk.id: risk for risk in risks}
-    unknown = sorted(set(severity.ratings) - set(risks_by_id))
+    unknown = sorted(set(severity.ratings) - {risk.id for risk in risks})
     if unknown:
-        raise ValueError(
-            f"rated risk(s) not in this qualification: {', '.join(unknown)}"
-        )
+        raise ValueError(f"rated risk(s) not in this system's graph: {', '.join(unknown)}")
 
-    # objective id -> the risks it mitigates, worst first
-    driving: dict[str, list[tuple[int, OntologyRisk]]] = {}
-    for risk_id, mapping in mappings.items():
-        risk = risks_by_id.get(risk_id)
-        if risk is None:
-            continue
-        for item in mapping.objectives:
-            driving.setdefault(item.objective_id, []).append((severity.of(risk_id), risk))
-    for entries in driving.values():
-        entries.sort(key=lambda entry: (-entry[0], entry[1].position))
-
+    driving = _driving_risks(mappings, risks, severity)
     by_id = {verdict.objective_id: verdict for verdict in verdicts}
     scored: list[tuple[float, tuple[int, int], Priority]] = []
     priorities: dict[str, Priority] = {}
@@ -149,21 +191,9 @@ def prioritise(
             continue
         entries = driving.get(objective.id, [])
         priority.risk_ids = [risk.id for _, risk in entries]
-        priority.score, priority.reasons = _score(
-            objective, severity, entries, verdict.non_binding
-        )
+        priority.score, priority.reasons = _score(objective, severity, entries, verdict.non_binding)
         # catalogue order breaks ties, so the same input always tiers the same
         scored.append((priority.score, objective.sort_key, priority))
 
-    scored.sort(key=lambda row: (-row[0], row[1]))
-    for position, (score, _, priority) in enumerate(scored):
-        if priority.non_binding:
-            priority.tier = 3
-        elif position < budget:
-            priority.tier = 1
-        elif score >= DEFAULT_SEVERITY:
-            priority.tier = 2
-        else:
-            priority.tier = 3
-
+    _assign_tiers(scored, budget)
     return [priorities[objective.id] for objective in catalogue]

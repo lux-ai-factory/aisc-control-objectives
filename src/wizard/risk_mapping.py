@@ -50,16 +50,24 @@ class MappedObjective(BaseModel):
     rationale: str = ""
 
 
+#: Worst last: a run's stop is the worst any of its risks reached.
+STOPS = ("clean", "fixpoint", "cap", "failed")
+Stop = Literal["clean", "fixpoint", "cap", "failed"]
+
+
 class Mapping(BaseModel):
     risk_id: str
     objectives: list[MappedObjective] = Field(default_factory=list)
+    #: How this risk's own rounds ended, so a reader can see which struggled.
+    stop: Stop = "clean"
 
 
 class MappingRun(BaseModel):
     mappings: dict[str, Mapping] = Field(default_factory=dict)
     findings: list[Finding] = Field(default_factory=list)
     attempts: int = 0
-    stop: Literal["clean", "fixpoint", "cap", "failed"] = "clean"
+    #: The worst stop any risk reached.
+    stop: Stop = "clean"
     error: str = ""
 
 
@@ -151,6 +159,52 @@ def _signature(findings: Sequence[Finding]) -> frozenset[tuple[str, str, str]]:
     return frozenset((f.risk_id, f.objective_id, f.flag) for f in findings)
 
 
+def _map_one(
+    risk: OntologyRisk,
+    mapper: Mapper,
+    catalogue: ControlObjectiveCatalogue,
+    max_attempts: int,
+) -> tuple[Mapping, list[Finding], Stop, str, int]:
+    """One risk's rounds: propose, check, re-propose what failed.
+
+    Returns what to publish whatever happened, which is the point: a mapping
+    that hit its cap is worth more to a reviewer, with its findings attached,
+    than nothing at all.
+    """
+    mapping = Mapping(risk_id=risk.id)
+    findings: list[Finding] = []
+    previous: frozenset[tuple[str, str, str]] | None = None
+    stop: Stop = "clean"
+    attempt = 0
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            proposed = mapper.propose(risk, findings)
+            if not isinstance(proposed, Mapping):
+                raise TypeError(f"mapper returned {type(proposed).__name__}, not a Mapping")
+        except Exception as exc:
+            return mapping, findings, "failed", str(exc), attempt
+        mapping = proposed
+
+        findings = run_controls(mapping, risk, catalogue)
+        if not findings:
+            break
+        signature = _signature(findings)
+        if signature == previous:
+            stop = "fixpoint"
+            break
+        previous = signature
+    else:
+        stop = "cap"
+
+    # Keep only what survived the controls: an objective that does not exist,
+    # or that nothing in the risk supports, is not a mapping.
+    rejected = {finding.objective_id for finding in findings if finding.objective_id}
+    mapping.objectives = [o for o in mapping.objectives if o.objective_id not in rejected]
+    mapping.stop = stop
+    return mapping, findings, stop, "", attempt
+
+
 def map_risks(
     risks: Sequence[OntologyRisk],
     mapper: Mapper,
@@ -160,38 +214,12 @@ def map_risks(
     """Map every risk, one at a time, bounded, always publishing."""
     run = MappingRun()
     for risk in risks:
-        mapping = Mapping(risk_id=risk.id)
-        findings: list[Finding] = []
-        previous: frozenset[tuple[str, str, str]] | None = None
-
-        for attempt in range(1, max_attempts + 1):
-            run.attempts = max(run.attempts, attempt)
-            try:
-                proposed = mapper.propose(risk, findings)
-                if not isinstance(proposed, Mapping):
-                    raise TypeError(f"mapper returned {type(proposed).__name__}, not a Mapping")
-            except Exception as exc:
-                run.mappings[risk.id] = mapping
-                run.stop, run.error = "failed", str(exc)
-                return run
-            mapping = proposed
-
-            findings = run_controls(mapping, risk, catalogue)
-            if not findings:
-                break
-            signature = _signature(findings)
-            if signature == previous:
-                run.stop = "fixpoint"
-                break
-            previous = signature
-        else:
-            run.stop = "cap"
-
-        # Keep only what survived the controls: an objective that does not
-        # exist, or that nothing in the risk supports, is not a mapping.
-        bad = {f.objective_id for f in findings if f.objective_id}
-        mapping.objectives = [o for o in mapping.objectives if o.objective_id not in bad]
+        mapping, findings, stop, error, attempts = _map_one(risk, mapper, catalogue, max_attempts)
         run.mappings[risk.id] = mapping
+        run.attempts = max(run.attempts, attempts)
+        run.stop = max(run.stop, stop, key=STOPS.index)
+        if stop == "failed":
+            run.error = error
+            return run
         run.findings.extend(findings)
-
     return run
