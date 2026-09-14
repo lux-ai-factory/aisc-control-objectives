@@ -80,7 +80,7 @@
     <div class="error">The mapping stopped on <code>{{ record.mapping_run.stop }}</code>{% if record.mapping_run.error %}: {{ record.mapping_run.error }}{% endif %}.
        What survived its checks is above; what did not is listed with each risk.</div>
     {%- endif %}
-    <p class="qf-help">Each risk is read against the 50 control objectives to find the ones
+    <p class="qf-help">Each risk is read against the catalogue to find the objectives
        that would mitigate it, each resting on a quote from that risk's own chain.
        {%- if view.mapped %} Re-running replaces the mapping; the ranking is kept.{% endif %}</p>
     <form method="post" action="{{ root_path }}/projects/{{ record.id }}/map">
@@ -92,8 +92,8 @@
   {%- endif %}
 
   {# ── 3. the objectives, in tiers ─────────────────────────────────────
-     Only once the mapping has run: before that nothing orders the 50, and an
-     unordered 50 is what /objectives already is. #}
+     Only once the mapping has run: before that nothing orders the catalogue,
+     and an unordered catalogue is what /objectives already is. #}
   {%- if view.mapped %}
   <div class="co-stats">
     <div class="co-stat co-stat--tier1"><div class="v">{{ counts.tier1 }}</div><div class="k">Tier 1 · start here</div></div>

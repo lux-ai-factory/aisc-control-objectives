@@ -3,7 +3,7 @@
 Two things to look at, and one project at a time:
 
     /                      the way in
-    /objectives            the 50 control objectives, as a reference
+    /objectives            the control objectives, as a reference
     /projects              the systems being assessed
     /projects/{id}         the AI Card · rank its risks · map · tiers
 

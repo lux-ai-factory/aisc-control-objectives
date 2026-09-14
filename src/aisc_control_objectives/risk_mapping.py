@@ -1,7 +1,7 @@
 """Which control objectives mitigate which of the system's own risks.
 
 The qualification carries the risks an assessor actually identified for this
-system, as AIRO chains. This is what connects them to the 50 objectives, so
+system, as AIRO chains. This is what connects them to the catalogue, so
 that ranking the risks ranks the work.
 
 Same shape as the qualification app's ontology filler:

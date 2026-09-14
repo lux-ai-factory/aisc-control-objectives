@@ -1,7 +1,7 @@
 [project]
 name = "aisc-control-objectives"
 version = "0.1.0"
-description = "The EU AI Act control objectives, and where a given system should start"
+description = "A catalogue of EU AI Act control objectives, and where a given system should start"
 requires-python = ">=3.12"
 dependencies = [
     "pydantic>=2.7",

@@ -3,12 +3,12 @@
 
   <h1>AISC Control Objectives</h1>
 
-  <p><b>The 50 EU AI Act control objectives, and where a given system should start.</b></p>
+  <p><b>A catalogue of 50 EU AI Act control objectives, and where a given system should start.</b></p>
 </div>
 
-This is the AI Safety and Compliance (AISC) module that turns an assessed system's **AI Card** into a place to begin: it takes the risks the card carries, lets the assessor rank them, asks a model which of the 50 control objectives mitigate each one, and orders the whole catalogue into three tiers.
+This is the AI Safety and Compliance (AISC) module that turns an assessed system's **AI Card** into a place to begin: it takes the risks the card carries, lets the assessor rank them, asks a model which control objectives mitigate each one, and orders the catalogue into three tiers.
 
-All 50 objectives are always owed. Nothing here rules anything out. What it produces is a **Tier 1 of no more than seven**, so an assessor has a week of work to open rather than another list of fifty.
+Every objective in the catalogue stays owed. Nothing here rules anything out. What it produces is a **Tier 1 of no more than seven**, so an assessor has a week of work to open rather than another list of fifty.
 
 ```mermaid
 flowchart LR
@@ -19,7 +19,7 @@ flowchart LR
 
 ## Features
 
-- **The catalogue, served.** 50 sub-requirements under 11 macro requirements (R1 Human Agency and Oversight through R11 Record-keeping and Documentation Retention), each with its legal basis, assessment mode, standards grounding and caveats.
+- **A catalogue, served.** 50 sub-requirements under 11 macro requirements (R1 Human Agency and Oversight through R11 Record-keeping and Documentation Retention), each with its legal basis, assessment mode, standards grounding and caveats.
 - **One agentic step, guarded.** The model's every claim rests on a literal span of the risk it read. Quotes are verified deterministically; failures go back to the model with the findings, and the rounds are bounded.
 - **Ranking is the person's job.** Which risk matters for this system is the one judgement no model makes here.
 - **Nothing derived is stored.** Tiers are recomputed from the card, the ranking and the mapping on every read, so a changed rating can never leave a stale tier behind.
@@ -73,7 +73,7 @@ Each AIRO chain on the card (the risk, its source, the vulnerability that source
 
 ### 2. Map the risks to objectives
 
-`risk_mapping.map_risks`, one model call per risk: which of the 50 would mitigate *this* risk, each claim resting on a verbatim span of that risk's own chain. The proposal then goes through deterministic controls, and only what survives them is published:
+`risk_mapping.map_risks`, one model call per risk: which objectives in the catalogue would mitigate *this* risk, each claim resting on a verbatim span of that risk's own chain. The proposal then goes through deterministic controls, and only what survives them is published:
 
 | Finding | What it caught |
 |---|---|
@@ -128,7 +128,7 @@ FastAPI, port `8090`, interactive docs at `/docs`. The pages are `/`, `/objectiv
 |---|---|
 | `GET /health` | liveness |
 | `GET /api/config` | the effective `RunConfig` (which model) |
-| `GET /api/control-objectives` | all 50, in requirement order (`R9.9` before `R10.1`) |
+| `GET /api/control-objectives` | every objective, in requirement order (`R9.9` before `R10.1`) |
 | `GET /api/control-objectives?mode=control\|test` | the control / test partition |
 | `GET /api/control-objectives/{id}` | one objective, 404 if unknown |
 | `GET /api/macro-requirements` | R1 through R11 with their objectives nested |
@@ -178,7 +178,7 @@ A `.env` next to the repo root is loaded at startup if present (plain `KEY=VALUE
 
 ```
 src/aisc_control_objectives/
-  data/ai_act_control_objectives.csv   the 50 objectives (domain data)
+  data/ai_act_control_objectives.csv   the objectives themselves (domain data)
   models/                              control_objective.py · ontology.py (the AI Card)
   control_objectives.py                loading and validating the catalogue
   risk_mapping.py                      the agentic step, and its controls

@@ -62,7 +62,7 @@ class TestStartingAProject:
         assert project["mapping_run"] is None      # nothing agentic has run yet
 
     def test_the_tiers_exist_before_anything_is_mapped(self, client, graph):
-        """All 50 are owed from the first page load; they are simply not
+        """Every objective is owed from the first page load; they are simply not
         ordered by anything yet."""
         project = _start(client, graph)
         assert len(project["priorities"]) == 50

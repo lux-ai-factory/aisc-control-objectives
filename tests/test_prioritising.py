@@ -1,4 +1,4 @@
-"""Tiering: all 50 objectives are owed, so which of them to do first.
+"""Tiering: every objective in the catalogue is owed, so which to do first.
 
 The register never changes; what orders it is the system's own risks. The
 assessor ranks each risk 1-5, the mapper says which objectives mitigate which
@@ -74,7 +74,8 @@ MAPPINGS = {
 
 class TestTiering:
     def test_every_objective_is_tiered(self, objectives):
-        """All 50 are the register: none is ruled out, they are only ordered."""
+        """The whole catalogue is the register: nothing is ruled out, it is
+        only ordered."""
         priorities = prioritise(objectives, Severity(), MAPPINGS, RISKS)
         assert len(priorities) == 50
         assert all(p.tier in (1, 2, 3) for p in priorities)

@@ -11,7 +11,7 @@
              ▼
     view()                                       tiers, computed, never stored
 
-All 50 objectives are the register; the risks decide the order. Everything
+The whole catalogue is the register; the risks decide the order. Everything
 derivable is computed in `view()` rather than written down, so a changed rating
 cannot leave a stale tier behind. What is written down is what cannot be
 recomputed: the uploaded bytes, the ratings, and what the mapping cost.

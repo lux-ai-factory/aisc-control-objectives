@@ -1,6 +1,6 @@
 """HTTP surface: the catalogue half.
 
-A read-only view over the 50 control objectives plus the effective config,
+A read-only view over the control objectives plus the effective config,
 independent of any system. The project flow is exercised in test_projects.py.
 """
 

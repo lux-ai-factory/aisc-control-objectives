@@ -1,6 +1,7 @@
 """Which control objectives to do first.
 
-All 50 are the register. What orders them is the system's **own risks**, the
+The whole catalogue is the register. What orders it is the system's **own
+risks**, the
 AIRO chains its AI Card carries, rated by the assessor:
 
     the assessor rates each risk 1-5
