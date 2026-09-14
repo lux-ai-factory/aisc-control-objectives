@@ -5,7 +5,8 @@
   <dd>{{ objective.legal_basis }}</dd>
   {%- if objective.standards_grounding %}
   <dt>Grounding</dt>
-  <dd>{{ objective.standards_grounding }} <code>{{ objective.grounding_tier_flag }}</code></dd>
+  <dd>{{ objective.standards_grounding }}
+      <code title="how solidly a standard backs this objective, not its priority">grounding {{ objective.grounding_tier_flag }}</code></dd>
   {%- endif %}
 </dl>
 {%- if objective.notes %}

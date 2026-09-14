@@ -30,6 +30,7 @@ from wizard.api.app import create_app
 from wizard.config import RunConfig
 from wizard.control_objectives import default_csv_path, load_control_objectives
 from wizard.profiling import ProfileExtractor
+from wizard.risk_mapping import RiskMapper
 
 
 def _repo_root() -> Path:
@@ -97,7 +98,9 @@ def build_app():
 
     cors_env = os.environ.get("WIZARD_CORS_ORIGINS", "").strip()
     cors_origins = [o.strip() for o in cors_env.split(",") if o.strip()] or None
-    extractor = ProfileExtractor(complete=_build_completer(config))
+    complete = _build_completer(config)
+    extractor = ProfileExtractor(complete=complete)
+    mapper = RiskMapper(complete=complete, catalogue=objectives)
     return create_app(
         objectives,
         base_config=config,
@@ -105,6 +108,7 @@ def build_app():
         cors_origins=cors_origins,
         source_name=source_name,
         extractor=extractor,
+        mapper=mapper,
     )
 
 

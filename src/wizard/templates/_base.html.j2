@@ -143,6 +143,32 @@
   .qf-tag--in { background: var(--info-soft); border-color: #99d6ff; color: #00337a; }
   .qf-tag--voluntary { background: var(--pink-soft); border-color: #f5b8cd; color: #8a1242; }
   .qf-tag--pending { background: #fff7d6; border-color: #f2df9a; color: #6b5300; }
+  .qf-tag--tier1 { background: var(--primary); border-color: var(--primary); color: #ffffff; }
+  .qf-tag--tier2 { background: var(--info-soft); border-color: #99d6ff; color: #00337a; }
+  .qf-tag--tier3 { background: var(--panel-2); border-color: var(--border); color: var(--muted); }
+  .co-stat--tier1 { background: var(--primary); border-color: var(--primary); }
+  .co-stat--tier1 .v, .co-stat--tier1 .k { color: #ffffff; }
+  .co-why { color: var(--text); font-weight: 500; }
+  .co-why b { font-weight: 800; }
+
+  /* One row per risk: the chain on the left, its severity on the right */
+  .co-risk { display: grid; grid-template-columns: minmax(0, 1fr) 120px; gap: 20px;
+             padding: 18px 0; border-top: 1px solid var(--border); }
+  .co-risk:first-of-type { border-top: 0; padding-top: 4px; }
+  .co-risk h3 { font-size: 16px; margin: 0 0 10px; }
+  .co-risk .qf-dl { grid-template-columns: 130px 1fr; }
+  .co-risk .field { margin-bottom: 0; }
+  .co-risk .qf-tag { margin: 0 4px 4px 0; text-transform: none; letter-spacing: 0; font-weight: 600; }
+  @media (max-width: 720px) { .co-risk { grid-template-columns: 1fr; } }
+
+  /* Severity ratings: one row per macro requirement */
+  .co-ratings { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 8px 24px; }
+  .co-rating { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+               padding: 7px 0; border-bottom: 1px solid var(--border); }
+  .co-rating label { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px;
+                     text-transform: none; letter-spacing: 0; color: var(--text); }
+  .co-rating select { padding: 5px 8px; font-family: inherit; font-size: 13px;
+                      border: 1px solid var(--border); background: #fff; color: var(--text); }
 
   .qf-dl {
     display: grid; grid-template-columns: 150px 1fr; gap: 6px 18px;

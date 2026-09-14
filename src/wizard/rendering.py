@@ -62,8 +62,37 @@ def render_objectives_page(
 class _MacroView:
     id: str
     title: str
-    objectives: list[tuple] = field(default_factory=list)  # (ControlObjective, Verdict)
+    objectives: list[tuple] = field(default_factory=list)  # (objective, verdict, priority)
     in_scope: int = 0
+
+
+@dataclass
+class _RiskView:
+    """One risk, its rating, and the objectives it drives."""
+
+    risk: object
+    rating: int
+    mapped: list = field(default_factory=list)   # (objective_id, rationale)
+    findings: list = field(default_factory=list)
+
+
+def _risk_views(record) -> list:
+    """The risks worst-first, so the page reads as the assessor's ranking."""
+    if record.qualification is None:
+        return []
+    run = record.mapping_run
+    views = []
+    for risk in record.qualification.risks:
+        mapping = run.mappings.get(risk.id) if run else None
+        views.append(
+            _RiskView(
+                risk=risk,
+                rating=record.severity.of(risk.id),
+                mapped=[(item.objective_id, item.rationale) for item in (mapping.objectives if mapping else [])],
+                findings=[f for f in (run.findings if run else []) if f.risk_id == risk.id],
+            )
+        )
+    return sorted(views, key=lambda view: (-view.rating, view.risk.position))
 
 
 @dataclass
@@ -72,6 +101,9 @@ class _Counts:
     non_binding: int = 0
     not_applicable: int = 0
     pending: int = 0
+    tier1: int = 0
+    tier2: int = 0
+    tier3: int = 0
 
 
 def render_card_page(
@@ -79,6 +111,7 @@ def render_card_page(
 ) -> str:
     """One assessed card: its profile to confirm, and the verdict per objective."""
     verdicts = {v.objective_id: v for v in record.verdicts}
+    priorities = {p.objective_id: p for p in record.priorities}
     counts = _Counts()
     macros: list[_MacroView] = []
     for macro in catalogue.macro_requirements():
@@ -86,7 +119,10 @@ def render_card_page(
         in_scope = 0
         for objective in macro.objectives:
             verdict = verdicts[objective.id]
-            rows.append((objective, verdict))
+            priority = priorities.get(objective.id)
+            rows.append((objective, verdict, priority))
+            if priority and priority.tier:
+                setattr(counts, f"tier{priority.tier}", getattr(counts, f"tier{priority.tier}") + 1)
             if verdict.non_binding:
                 counts.non_binding += 1
             elif verdict.applies == "yes":
@@ -105,5 +141,8 @@ def render_card_page(
         counts=counts,
         facts=FACT_QUESTIONS,
         flag_tags=FLAG_TAGS,
+        severity=record.severity,
+        risks=_risk_views(record),
+        objective_labels={o.id: o.sub_requirement_label for o in catalogue},
         root_path=root_path,
     )

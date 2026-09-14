@@ -15,6 +15,9 @@ from wizard.applicability import Verdict, decide
 from wizard.control_objectives import ControlObjectiveCatalogue
 from wizard.models.profile import Answer, Profile
 from wizard.models.system_card import SystemCard
+from wizard.models.qualification import Qualification
+from wizard.prioritising import Priority, Severity, prioritise
+from wizard.risk_mapping import Mapper, MappingRun, map_risks
 from wizard.profiling import Extractor, ProfileRun, extract_profile
 
 
@@ -36,6 +39,14 @@ class CardRecord(BaseModel):
     profile: Profile
     confirmed: bool = False
     verdicts: list[Verdict] = []
+    #: The assessor's view of what matters for THIS system, and the tiers that
+    #: follow from it. Neutral until somebody rates it.
+    severity: Severity = Severity()
+    priorities: list[Priority] = []
+    #: The qualification's own risks, once one is added, and what the mapper
+    #: made of them. Absent until somebody uploads it.
+    qualification: Qualification | None = None
+    mapping_run: MappingRun | None = None
 
 
 class CardStore:
@@ -52,13 +63,26 @@ class CardStore:
         return sorted(self._records.values(), key=lambda r: r.created_at, reverse=True)
 
 
+def _retiered(record: CardRecord, catalogue: ControlObjectiveCatalogue) -> list[Priority]:
+    """Tiers follow from the verdicts and the risks, so they are recomputed
+    whenever either changes: confirming the profile can take an objective out
+    of scope, and rating a risk changes where the work starts."""
+    return prioritise(
+        catalogue,
+        record.verdicts,
+        record.severity,
+        record.mapping_run.mappings if record.mapping_run else {},
+        record.qualification.risks if record.qualification else [],
+    )
+
+
 def assess_card(
     card: SystemCard, extractor: Extractor, catalogue: ControlObjectiveCatalogue
 ) -> CardRecord:
     """Propose the profile, then let the rules decide. Never raises on a dead
     model: the run records the failure and the verdicts come out undetermined."""
     run = extract_profile(card, extractor)
-    return CardRecord(
+    record = CardRecord(
         id=uuid.uuid4().hex[:12],
         created_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
         card=card,
@@ -68,6 +92,8 @@ def assess_card(
         confirmed=False,
         verdicts=decide(run.profile, catalogue, confirmed=False),
     )
+    record.priorities = _retiered(record, catalogue)
+    return record
 
 
 def confirm_profile(
@@ -79,10 +105,37 @@ def confirm_profile(
     for name, value in answers.items():
         if name in Profile.FACTS and value is not None:
             profile.fact(name).value = value
-    return record.model_copy(
+    updated = record.model_copy(
         update={
             "profile": profile,
             "confirmed": True,
             "verdicts": decide(profile, catalogue, confirmed=True),
         }
     )
+    updated.priorities = _retiered(updated, catalogue)
+    return updated
+
+
+def add_qualification(
+    record: CardRecord,
+    qualification: Qualification,
+    mapper: Mapper,
+    catalogue: ControlObjectiveCatalogue,
+) -> CardRecord:
+    """Attach the system's own risks and map them onto the objectives. The
+    tiers follow; what applies does not change."""
+    run = map_risks(qualification.risks, mapper, catalogue)
+    updated = record.model_copy(update={"qualification": qualification, "mapping_run": run})
+    updated.priorities = _retiered(updated, catalogue)
+    return updated
+
+
+def rate_severity(
+    record: CardRecord, ratings: dict[str, int], catalogue: ControlObjectiveCatalogue
+) -> CardRecord:
+    """The assessor says how severe each of this system's risks is; the tiers
+    follow. Applicability is untouched: rating changes the order of the work,
+    never what is owed."""
+    updated = record.model_copy(update={"severity": Severity(ratings=dict(ratings))})
+    updated.priorities = _retiered(updated, catalogue)
+    return updated

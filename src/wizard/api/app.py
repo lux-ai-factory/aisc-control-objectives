@@ -16,13 +16,23 @@ from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError, create_model
 
-from wizard.cards import CardRecord, CardStore, assess_card, confirm_profile
+from wizard.cards import (
+    CardRecord,
+    CardStore,
+    add_qualification,
+    assess_card,
+    confirm_profile,
+    rate_severity,
+)
 from wizard.config import RunConfig
 from wizard.control_objectives import ControlObjectiveCatalogue
 from wizard.models.control_objective import ControlObjective, MacroRequirement
 from wizard.models.profile import Answer, Profile
+from wizard.prioritising import Severity
+from wizard.models.qualification import Qualification
 from wizard.models.system_card import SystemCard
 from wizard.profiling import Extractor
+from wizard.risk_mapping import Mapper
 from wizard.rendering import STATIC, render_card_page, render_objectives_page
 
 #: Filter over the assessment mode. A paired ("Control + Test") objective
@@ -45,6 +55,16 @@ class NoModel:
         return Profile()
 
 
+class NoMapper:
+    """Stand-in when no mapper is wired: every risk maps to nothing, and the
+    page says so rather than pretending the risks were read."""
+
+    def propose(self, risk, findings=()):
+        from wizard.risk_mapping import Mapping
+
+        return Mapping(risk_id=risk.id)
+
+
 def create_app(
     objectives: ControlObjectiveCatalogue,
     *,
@@ -53,10 +73,12 @@ def create_app(
     cors_origins: list[str] | None = None,
     source_name: str = "ai_act_control_objectives.csv",
     extractor: Extractor | None = None,
+    mapper: Mapper | None = None,
     store: CardStore | None = None,
 ) -> FastAPI:
     config = base_config or RunConfig()
     extractor = extractor or NoModel()
+    mapper = mapper or NoMapper()
     store = store or CardStore()
     app = FastAPI(title="Wizard", root_path=root_path)
 
@@ -125,6 +147,39 @@ def create_app(
         store.save(confirm_profile(record, answers.model_dump(exclude_none=True), objectives))
         return RedirectResponse(url=f"{root_path}/cards/{record_id}", status_code=303)
 
+    @app.post("/cards/{record_id}/qualification", include_in_schema=False)
+    def add_qualification_form(record_id: str, qualification: UploadFile):
+        """Not async: mapping every risk blocks for as long as the model takes."""
+        record = _record_or_404(record_id)
+        try:
+            raw = json.loads(qualification.file.read())
+        except ValueError:
+            return PlainTextResponse("The uploaded file is not valid JSON.", status_code=400)
+        if not Qualification.looks_like_one(raw):
+            return PlainTextResponse(
+                "That JSON has no `risks`, so it is not a qualification export. "
+                "The system card goes in the box on the front page.",
+                status_code=400,
+            )
+        try:
+            parsed = Qualification.from_export(raw)
+        except ValidationError as exc:
+            return PlainTextResponse(f"Not a qualification export: {exc}", status_code=400)
+        store.save(add_qualification(record, parsed, mapper, objectives))
+        return RedirectResponse(url=f"{root_path}/cards/{record_id}", status_code=303)
+
+    @app.post("/cards/{record_id}/severity", include_in_schema=False)
+    async def rate_severity_form(record_id: str, request: Request):
+        record = _record_or_404(record_id)
+        form = await request.form()
+        risks = record.qualification.risks if record.qualification else []
+        ratings = {risk.id: int(form[risk.id]) for risk in risks if form.get(risk.id)}
+        try:
+            store.save(rate_severity(record, ratings, objectives))
+        except ValidationError as exc:
+            return PlainTextResponse(f"Invalid rating: {exc}", status_code=400)
+        return RedirectResponse(url=f"{root_path}/cards/{record_id}", status_code=303)
+
     # ── JSON API ───────────────────────────────────────────────────────────
 
     @app.get("/health")
@@ -172,6 +227,25 @@ def create_app(
     @app.get("/api/cards/{record_id}", response_model=CardRecord)
     def get_card(record_id: str) -> CardRecord:
         return _record_or_404(record_id)
+
+    @app.post("/api/cards/{record_id}/qualification", response_model=CardRecord)
+    def add_qualification_json(record_id: str, qualification: dict = Body(...)) -> CardRecord:
+        """Attach the qualification export whose risks drive the tiers."""
+        record = _record_or_404(record_id)
+        updated = add_qualification(
+            record, Qualification.from_export(qualification), mapper, objectives
+        )
+        store.save(updated)
+        return updated
+
+    @app.post("/api/cards/{record_id}/severity", response_model=CardRecord)
+    def rate(record_id: str, severity: Severity) -> CardRecord:
+        """How much each macro requirement matters for this system, 1-5. The
+        tiers follow; what applies does not change."""
+        record = _record_or_404(record_id)
+        updated = rate_severity(record, severity.ratings, objectives)
+        store.save(updated)
+        return updated
 
     @app.post("/api/cards/{record_id}/profile", response_model=CardRecord)
     def confirm(record_id: str, answers: ProfileAnswers) -> CardRecord:  # type: ignore[valid-type]

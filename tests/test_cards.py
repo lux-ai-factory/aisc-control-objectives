@@ -17,9 +17,35 @@ from wizard.models.system_card import SystemCard
 from helpers import CREDIT, FakeExtractor  # noqa: E402
 
 
+class FakeMapper:
+    """Maps the MCAS risks the way a competent reading would, so the wiring can
+    be tested without a model."""
+
+    BY_RISK = {
+        "risk0": [("R3.1", "bureau coverage is incomplete or stale")],
+        "risk1": [("R5.1", "act as proxies for ethnicity"), ("R5.2", "act as proxies for ethnicity")],
+        "risk2": [("R1.1", "rubber-stamp the recommendation"), ("R1.4", "rubber-stamp the recommendation")],
+        "risk3": [("R4.1", "cites the wrong policy clause")],
+        "risk4": [("R2.3", "Training data is poisoned")],
+    }
+
+    def propose(self, risk, findings=()):
+        from wizard.risk_mapping import MappedObjective, Mapping
+
+        text = risk.as_text()
+        items = [
+            MappedObjective(objective_id=oid, quote=quote, rationale="because")
+            for oid, quote in self.BY_RISK.get(risk.id, [])
+            if quote in text
+        ]
+        return Mapping(risk_id=risk.id, objectives=items)
+
+
 @pytest.fixture()
 def client(objectives):
-    return TestClient(create_app(objectives, base_config=RunConfig(), extractor=FakeExtractor()))
+    return TestClient(
+        create_app(objectives, base_config=RunConfig(), extractor=FakeExtractor(), mapper=FakeMapper())
+    )
 
 
 def _upload(client, raw) -> dict:
@@ -128,6 +154,90 @@ class TestConfirm:
         assert response.status_code == 422
 
 
+class TestRisksAndTiers:
+    """The system's own risks are what decide where the work starts."""
+
+    @staticmethod
+    def _qualification(fixtures_dir):
+        return json.loads((fixtures_dir / "mcas.qualification.json").read_text())
+
+    def test_a_card_alone_has_no_risks_and_still_tiers(self, client, mcas_raw):
+        record = _upload(client, mcas_raw)
+        assert record["qualification"] is None
+        assert record["mapping_run"] is None
+        assert sum(p["tier"] == 1 for p in record["priorities"]) == 7
+
+    def test_adding_the_qualification_maps_its_risks(self, client, mcas_raw, fixtures_dir):
+        record = _upload(client, mcas_raw)
+        response = client.post(
+            f"/api/cards/{record['id']}/qualification", json=self._qualification(fixtures_dir)
+        )
+        assert response.status_code == 200
+        record = response.json()
+        assert len(record["qualification"]["risks"]) == 5
+        assert set(record["mapping_run"]["mappings"]) == {f"risk{n}" for n in range(5)}
+
+    def test_the_objectives_a_risk_drives_are_named_on_it(self, client, mcas_raw, fixtures_dir, objectives):
+        """Driven by a fake mapper, so this is the wiring, not the model."""
+        record = _upload(client, mcas_raw)
+        record = client.post(
+            f"/api/cards/{record['id']}/qualification", json=self._qualification(fixtures_dir)
+        ).json()
+        by_id = {p["objective_id"]: p for p in record["priorities"]}
+        assert by_id["R1.1"]["risk_ids"] == ["risk2"]
+        assert any("rubber-stamp" in r for r in by_id["R1.1"]["reasons"])
+
+    def test_rating_a_risk_retiers_the_work(self, client, mcas_raw, fixtures_dir):
+        record = _upload(client, mcas_raw)
+        record = client.post(
+            f"/api/cards/{record['id']}/qualification", json=self._qualification(fixtures_dir)
+        ).json()
+        record = client.post(
+            f"/api/cards/{record['id']}/severity", json={"ratings": {"risk2": 5, "risk4": 1}}
+        ).json()
+        by_id = {p["objective_id"]: p for p in record["priorities"]}
+        assert by_id["R1.1"]["tier"] == 1
+        assert by_id["R2.3"]["tier"] != 1
+
+    def test_reordering_the_risks_reorders_the_tiers(self, client, mcas_raw, fixtures_dir):
+        record = _upload(client, mcas_raw)
+        cid = record["id"]
+        client.post(f"/api/cards/{cid}/qualification", json=self._qualification(fixtures_dir))
+        a = client.post(f"/api/cards/{cid}/severity", json={"ratings": {"risk2": 5, "risk4": 1}}).json()
+        b = client.post(f"/api/cards/{cid}/severity", json={"ratings": {"risk2": 1, "risk4": 5}}).json()
+        tier_a = {p["objective_id"] for p in a["priorities"] if p["tier"] == 1}
+        tier_b = {p["objective_id"] for p in b["priorities"] if p["tier"] == 1}
+        assert tier_a != tier_b
+        assert "R2.3" in tier_b
+
+    def test_a_rating_outside_the_scale_is_rejected(self, client, mcas_raw, fixtures_dir):
+        record = _upload(client, mcas_raw)
+        client.post(f"/api/cards/{record['id']}/qualification", json=self._qualification(fixtures_dir))
+        response = client.post(
+            f"/api/cards/{record['id']}/severity", json={"ratings": {"risk0": 9}}
+        )
+        assert response.status_code == 422
+
+    def test_a_system_card_is_not_accepted_as_a_qualification(self, client, mcas_raw):
+        record = _upload(client, mcas_raw)
+        response = client.post(
+            f"/cards/{record['id']}/qualification",
+            files={"qualification": ("card.json", json.dumps(mcas_raw), "application/json")},
+        )
+        assert response.status_code == 400
+        assert "risks" in response.text
+
+    def test_confirming_the_profile_keeps_the_risks(self, client, mcas_raw, fixtures_dir):
+        record = _upload(client, mcas_raw)
+        client.post(f"/api/cards/{record['id']}/qualification", json=self._qualification(fixtures_dir))
+        record = client.post(
+            f"/api/cards/{record['id']}/profile", json={"high_risk": "no"}
+        ).json()
+        assert len(record["qualification"]["risks"]) == 5
+        tiered = {p["objective_id"] for p in record["priorities"] if p["tier"] is not None}
+        assert tiered == {"R3.3", "R3.4", "R3.5", "R11.4", "R4.4", "R6.1", "R6.2"}
+
+
 class TestPages:
     def test_the_objectives_page_offers_the_upload(self, client):
         page = client.get("/").text
@@ -191,6 +301,55 @@ class TestPages:
         assert "Annex III point 5(b)" in client.get(f"/cards/{record['id']}").text
         source = (TEMPLATES / "card.html.j2").read_text()
         assert "high_risk" not in source
+
+    def test_a_card_without_a_qualification_asks_for_one(self, client, mcas_raw):
+        page = client.get(f"/cards/{_upload(client, mcas_raw)['id']}").text
+        assert "qualification" in page.lower()
+        assert 'type="file"' in page
+
+    def test_the_page_lists_the_risks_with_their_chain_and_a_rating(
+        self, client, mcas_raw, fixtures_dir
+    ):
+        record = _upload(client, mcas_raw)
+        client.post(
+            f"/api/cards/{record['id']}/qualification",
+            json=json.loads((fixtures_dir / "mcas.qualification.json").read_text()),
+        )
+        page = client.get(f"/cards/{record['id']}").text
+        assert "Loan officers rubber-stamp the recommendation" in page   # the risk
+        assert "Automation bias" in page                                  # its source
+        assert "override rates are tracked" in page                       # declared control
+        for risk_id in ("risk0", "risk2", "risk4"):
+            assert f'name="{risk_id}"' in page                            # a 1-5 select each
+
+    def test_the_page_shows_the_tier_of_each_objective(self, client, mcas_raw):
+        record = _upload(client, mcas_raw)
+        page = client.get(f"/cards/{record['id']}").text
+        assert page.count('qf-tag--tier1">Tier 1</span>') == 7
+        assert "Tier 2" in page and "Tier 3" in page
+        assert "Start here" in page
+
+    def test_the_page_distinguishes_priority_tier_from_grounding_tier(self, client, mcas_raw):
+        """The CSV's own Tier 3/Tier 5 means standards grounding, not urgency."""
+        record = _upload(client, mcas_raw)
+        page = client.get(f"/cards/{record['id']}").text
+        assert "grounding Tier 3" in page or "Grounding</dt>" in page
+        assert "grounded" in page.lower()
+
+    def test_rating_through_the_form_retiers(self, client, mcas_raw, fixtures_dir):
+        record = _upload(client, mcas_raw)
+        client.post(
+            f"/api/cards/{record['id']}/qualification",
+            json=json.loads((fixtures_dir / "mcas.qualification.json").read_text()),
+        )
+        response = client.post(
+            f"/cards/{record['id']}/severity",
+            data={"risk2": "5", "risk4": "1"},
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        page = client.get(f"/cards/{record['id']}").text
+        assert "rated 5/5" in page
 
     def test_the_card_page_never_shows_target_codes(self, client, mcas_raw):
         record = _upload(client, mcas_raw)

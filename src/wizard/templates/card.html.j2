@@ -57,7 +57,77 @@
     </form>
   </div>
 
+  {%- if not record.qualification %}
+  <div class="qf-section">
+    <h2>Add the system's risks</h2>
+    <p class="qf-help">Every objective above is owed, which is no help in deciding where to
+       start. Upload this system's <strong>qualification export</strong>: the risks the
+       assessor identified, each with its source, the weakness it exploits, what follows,
+       and the control the provider says is already in place. The wizard maps each risk
+       onto the objectives that mitigate it, you say how severe each risk is, and the
+       objectives answering the worst risks become Tier 1.</p>
+    <form method="post" action="{{ root_path }}/cards/{{ record.id }}/qualification"
+          enctype="multipart/form-data">
+      <div class="field">
+        <label for="qualification">Qualification export (JSON)</label>
+        <input id="qualification" name="qualification" type="file" accept="application/json,.json" required>
+      </div>
+      <div class="qf-actions"><button class="btn" type="submit">Map the risks</button></div>
+    </form>
+  </div>
+  {%- else %}
+  <div class="qf-section">
+    <h2>How severe is each risk for this system?</h2>
+    <p class="qf-help">The risks this system's qualification identified, worst first. Rate each
+       1 (marginal here) to 5 (decisive); the objectives that mitigate the worst ones become
+       Tier 1. What is owed does not change, only the order of the work.</p>
+    {%- if record.mapping_run and record.mapping_run.stop == "failed" %}
+    <div class="error">The risks could not be mapped ({{ record.mapping_run.error }}).
+       Rating them still re-tiers nothing until a mapping exists.</div>
+    {%- endif %}
+
+    <form method="post" action="{{ root_path }}/cards/{{ record.id }}/severity">
+      {%- for view in risks %}
+      <div class="co-risk">
+        <div class="co-risk-main">
+          <h3>{{ view.risk.risk }}</h3>
+          <dl class="qf-dl">
+            {%- if view.risk.source %}<dt>Source</dt><dd>{{ view.risk.source }}</dd>{% endif %}
+            {%- if view.risk.vulnerability %}<dt>Vulnerability</dt><dd>{{ view.risk.vulnerability }}</dd>{% endif %}
+            {%- if view.risk.consequence %}<dt>Consequence</dt><dd>{{ view.risk.consequence }}</dd>{% endif %}
+            {%- if view.risk.control %}<dt>Declared control</dt><dd>{{ view.risk.control }}</dd>{% endif %}
+            {%- if view.risk.impact_areas %}<dt>Impact</dt><dd>{{ view.risk.impact_areas | join(', ') }}{% if view.risk.affected %} · borne by the {{ view.risk.affected }}{% endif %}</dd>{% endif %}
+          </dl>
+          <p class="co-reason">
+            {%- if view.mapped %}Mitigated by
+            {%- for objective_id, rationale in view.mapped %}
+            <span class="qf-tag qf-tag--in" title="{{ rationale }}">{{ objective_id }} {{ objective_labels[objective_id] }}</span>
+            {%- endfor %}
+            {%- else %}<em>No objective was mapped to this risk.</em>{% endif %}
+          </p>
+          {%- for finding in view.findings %}
+          <p class="co-note co-note--flag"><b>{{ finding.flag }}:</b> {{ finding.detail }}</p>
+          {%- endfor %}
+        </div>
+        <div class="field">
+          <label for="{{ view.risk.id }}">Severity</label>
+          <select id="{{ view.risk.id }}" name="{{ view.risk.id }}">
+            {%- for n in [5, 4, 3, 2, 1] %}
+            <option value="{{ n }}" {% if view.rating == n %}selected{% endif %}>{{ n }}</option>
+            {%- endfor %}
+          </select>
+        </div>
+      </div>
+      {%- endfor %}
+      <div class="qf-actions"><button class="btn" type="submit">Re-tier</button></div>
+    </form>
+  </div>
+  {%- endif %}
+
   <div class="co-stats">
+    <div class="co-stat co-stat--tier1"><div class="v">{{ counts.tier1 }}</div><div class="k">Tier 1 · start here</div></div>
+    <div class="co-stat"><div class="v">{{ counts.tier2 }}</div><div class="k">Tier 2 · next</div></div>
+    <div class="co-stat"><div class="v">{{ counts.tier3 }}</div><div class="k">Tier 3 · later</div></div>
     <div class="co-stat"><div class="v">{{ counts.to_achieve }}</div><div class="k">To achieve</div></div>
     <div class="co-stat"><div class="v">{{ counts.non_binding }}</div><div class="k">Non-binding</div></div>
     <div class="co-stat"><div class="v">{{ counts.not_applicable }}</div><div class="k">Not applicable</div></div>
@@ -72,11 +142,14 @@
       <span class="n">{{ macro.in_scope }} of {{ macro.objectives | length }} to achieve</span>
     </div>
 
-    {%- for objective, verdict in macro.objectives %}
+    {%- for objective, verdict, priority in macro.objectives %}
     <article class="co-obj {{ 'co-obj--out' if verdict.applies == 'no' else '' }}">
       <div class="co-obj-head">
         <span class="co-obj-id">{{ objective.id }}</span>
         <h3>{{ objective.sub_requirement_label }}</h3>
+        {%- if priority and priority.tier %}
+        <span class="qf-tag qf-tag--tier{{ priority.tier }}">Tier {{ priority.tier }}</span>
+        {%- endif %}
         {%- if verdict.non_binding %}
         <span class="qf-tag qf-tag--voluntary">Non-binding</span>
         {%- elif verdict.applies == "yes" %}
@@ -88,6 +161,9 @@
         {%- endif %}
       </div>
       <p class="co-reason">{{ verdict.reason }}</p>
+      {%- if priority and priority.tier %}
+      <p class="co-reason co-why">{% if priority.tier == 1 %}<b>Start here.</b> {% endif %}{{ priority.reasons | join('; ') }}.</p>
+      {%- endif %}
       <p class="co-text">{{ objective.text }}</p>
       {% include "_objective_meta.html.j2" %}
     </article>
