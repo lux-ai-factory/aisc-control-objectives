@@ -18,6 +18,12 @@ RUN uv pip install --system --no-cache -e .
 # CSV and the page template ship inside the package (src/aisc_control_objectives/).
 COPY wizard.toml ./
 
+# The migrations, and the config that names them: a deployment runs
+# `alembic upgrade head` from /app before the service starts, so both have to
+# be in the image. Without them alembic fails with "No 'script_location' key".
+COPY alembic.ini ./
+COPY alembic ./alembic
+
 ENV PYTHONPATH=/app/src \
     WIZARD_PORT=8090
 
