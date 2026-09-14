@@ -10,6 +10,7 @@ at the first request.
 from __future__ import annotations
 
 import csv
+import hashlib
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -41,7 +42,10 @@ def default_csv_path() -> Path:
 class ControlObjectiveCatalogue:
     """The full set of objectives, in requirement order."""
 
-    def __init__(self, objectives: Iterable[ControlObjective]):
+    def __init__(self, objectives: Iterable[ControlObjective], digest: str = ""):
+        #: Identity of the catalogue this came from. A project records it, so a
+        #: re-exported CSV cannot change an old assessment's tiers unnoticed.
+        self.digest = digest
         self.objectives: list[ControlObjective] = sorted(
             objectives, key=lambda objective: objective.sort_key
         )
@@ -85,6 +89,7 @@ class ControlObjectiveCatalogue:
 def load_control_objectives(path: Path | str | None = None) -> ControlObjectiveCatalogue:
     """Read the objectives CSV (the bundled one unless `path` says otherwise)."""
     csv_path = Path(path) if path is not None else default_csv_path()
+    raw = csv_path.read_bytes()
     # utf-8-sig: the exported CSV carries a BOM on the first header cell.
     with csv_path.open(encoding="utf-8-sig", newline="") as handle:
         reader = csv.DictReader(handle)
@@ -102,4 +107,4 @@ def load_control_objectives(path: Path | str | None = None) -> ControlObjectiveC
                 objectives.append(ControlObjective(**fields))
             except ValidationError as exc:
                 raise ValueError(f"{csv_path}: row {number} (ID {fields['id']!r}): {exc}") from exc
-    return ControlObjectiveCatalogue(objectives)
+    return ControlObjectiveCatalogue(objectives, digest=hashlib.sha256(raw).hexdigest())

@@ -63,6 +63,8 @@ class MappingRun(BaseModel):
     #: The worst stop any risk reached.
     stop: Stop = "clean"
     error: str = ""
+    #: Which model bought this mapping, for the record.
+    model: str = ""
 
 
 def _normalise(text: str) -> str:
