@@ -26,14 +26,14 @@ def test_a_provider_missing_its_key_fails_at_startup_naming_the_variable(monkeyp
 
 
 def test_a_blank_objectives_file_variable_means_the_bundled_csv():
-    """Templated env files leave `WIZARD_OBJECTIVES_FILE=` empty; that is
+    """Templated env files leave `CONTROL_OBJECTIVES_FILE=` empty; that is
     'no override', not 'the current directory'."""
     from aisc_control_objectives.control_objectives import default_csv_path
 
-    path, name = server.objectives_source({"WIZARD_OBJECTIVES_FILE": ""})
+    path, name = server.objectives_source({"CONTROL_OBJECTIVES_FILE": ""})
     assert path is None
     assert name == default_csv_path().name
-    path, name = server.objectives_source({"WIZARD_OBJECTIVES_FILE": "/tmp/x/newer.csv"})
+    path, name = server.objectives_source({"CONTROL_OBJECTIVES_FILE": "/tmp/x/newer.csv"})
     assert str(path) == "/tmp/x/newer.csv"
     assert name == "newer.csv"
 

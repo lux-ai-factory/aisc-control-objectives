@@ -1,35 +1,35 @@
-# Wizard to Select Tests & Datasets — Specification
+# Control Objectives to Select Tests & Datasets — Specification
 
 Status: **draft for review** — see §12 Open questions before implementation starts.
 
 ## 0. Hard constraint: strictly additive (v1)
 
-The wizard must not modify any existing module — no code edits, no schema
+The service must not modify any existing module — no code edits, no schema
 migrations, no config changes in `aisc`, `catalogue2`, or the demo. Concretely:
 
-- **Own repo dir** (`~/wizard`), own compose file, own port (`:8090`). It joins
+- **Own repo dir** (`~/control-objectives`), own compose file, own port (`:8090`). It joins
   the existing docker network as an *external* network — the aisc compose files
   are not touched.
 - **No Caddy route.** Served directly on `http://localhost:8090` (same pattern
-  as catalogue `:3000` and dashboard `:3300`). Moving behind Caddy at `/wizard`
+  as catalogue `:3000` and dashboard `:3300`). Moving behind Caddy at `/control-objectives`
   is a refactor-later item.
 - **Read-only against existing data.** Qualification and catalogue are read via
   their existing HTTP APIs; controls via a read-only Postgres role. The only
   write into an existing system is the export step, which inserts *data rows*
   (controls `Submission` drafts — the exact pattern the demo seed already
   uses) and never alters schemas.
-- **Own database** (`wizard`) on the existing Postgres instance, created by the
-  wizard's own setup script.
+- **Own database** (`control objectives`) on the existing Postgres instance, created by the
+  control objectives's own setup script.
 - Homepage link-up is a one-line edit in the demo repo, done separately when
-  you choose (the wizard card currently has no link, so nothing breaks
+  you choose (the service card currently has no link, so nothing breaks
   meanwhile).
 
-Refactor-later list (explicitly out of scope now): Caddy `/wizard` route,
+Refactor-later list (explicitly out of scope now): Caddy `/control-objectives` route,
 read-only REST routes inside the controls app, shared tag-taxonomy package.
 
 ## 1. Purpose
 
-The Wizard takes a completed **qualification** of an AI system and produces a
+The service takes a completed **qualification** of an AI system and produces a
 reviewed, justified **assessment plan**: which catalogue tests/datasets to run
 in the Execution Engine and which control checklists to fill in the Controls
 Engine. It replaces the manual "browse the catalogue and guess" step.
@@ -43,7 +43,7 @@ Qualification (system card JSON)
         │
         ▼
    ┌─────────┐   MCP    ┌──────────────────┐
-   │ Wizard  │◄────────►│ catalogue2 :8000  │  tests + datasets
+   │ Control Objectives  │◄────────►│ catalogue2 :8000  │  tests + datasets
    │ (agents)│◄────────►│ controls DB (ro)  │  checklists
    └────┬────┘          └──────────────────┘
         │ plan
@@ -59,7 +59,7 @@ Qualification (system card JSON)
 (route: `aisc/apps/qualification/src/app/api/qualifications/[id]/system-card.json/route.ts`;
 404 if qualification unknown, 409 if card not generated yet).
 
-Fields the wizard consumes:
+Fields the service consumes:
 
 | Field | Type | Used for |
 |---|---|---|
@@ -72,7 +72,7 @@ Fields the wizard consumes:
 
 The DB rows also carry `targetSystemTags` (slugs like
 `tabular-structured-data:tabular-classification-regression`) and `sectorTags`
-(`finance-and-insurance`) — the slug forms of `classification`. The wizard uses
+(`finance-and-insurance`) — the slug forms of `classification`. The service uses
 the slug form for deterministic matching and the label form for prompts.
 
 ### 2.2 Catalogue (tests + datasets)
@@ -93,11 +93,11 @@ Matching-relevant tool fields: `tags[]` (sector + ai_type + dimension slugs),
 Matching-relevant fields: `controlTopic`, `description`, `regulationIds`,
 `countryIds`, `questions[].article`, `questions[].category`.
 
-**There is no REST API** — the wizard reads the controls Postgres
+**There is no REST API** — the service reads the controls Postgres
 **read-only** (same instance the demo seed writes to:
 `postgresql://...@postgres:5432/controls`), via its own SQLAlchemy models
 mirroring the three tables it needs. A dedicated read-only DB role is created
-by the wizard's setup script.
+by the service's setup script.
 
 ### 2.4 Tag vocabulary mapping
 
@@ -111,7 +111,7 @@ qual_tag.split(":")[0]  →  catalogue ai_type slug   (exceptions in a static ma
 qual sectorTags         →  catalogue sector slugs   (already identical)
 ```
 
-A static exception map (`wizard/matching/tag_map.py`) handles the cases where
+A static exception map (`control objectives/matching/tag_map.py`) handles the cases where
 the prefix doesn't equal the catalogue slug (e.g.
 `knowledge-retrieval:` → `knowledge-and-retrieval`). The map is **validated at
 startup** against `GET /tags/`: any unmapped qualification category logs a
@@ -122,15 +122,15 @@ warning and falls through to the LLM matcher rather than silently dropping.
 | Layer | Choice | Why |
 |---|---|---|
 | Service | **Python 3.12 + FastAPI + SQLAlchemy + pydantic** | Same stack as catalogue2; all business logic stays in Python (readable/debuggable by you) |
-| Agents | **Anthropic Python SDK** (`anthropic`), model `claude-opus-4-8` (env-configurable `WIZARD_MODEL`) | Tool runner + MCP helpers + structured outputs out of the box; adaptive thinking |
+| Agents | **Anthropic Python SDK** (`anthropic`), model `claude-opus-4-8` (env-configurable `CONTROL_OBJECTIVES_MODEL`) | Tool runner + MCP helpers + structured outputs out of the box; adaptive thinking |
 | Data access for agents | **MCP servers (Python `mcp` SDK / FastMCP)**, consumed via `anthropic.lib.tools.mcp.async_mcp_tool` + the SDK tool runner | The MCP boundary keeps agents on a read-only, typed surface; the same servers are reusable by other modules later |
-| Persistence | Postgres (existing instance), new database `wizard` | Same ops pattern as qualification/controls |
+| Persistence | Postgres (existing instance), new database `control_objectives` | Same ops pattern as qualification/controls |
 | Frontend | **FastAPI + Jinja2 + HTMX**, served directly on `:8090` | Thinnest possible UI; whole module debuggable in Python; no Caddy edit needed. (Alternative: thin Next.js for visual consistency — see Open questions) |
 | Packaging | `uv` + Dockerfile + compose service, joining the aisc compose network | Same pattern as catalogue2 backend |
 
 ## 4. MCP servers
 
-One MCP server process (`wizard/mcp_server.py`, stdio transport, spawned by the
+One MCP server process (`control objectives/mcp_server.py`, stdio transport, spawned by the
 orchestrator) exposing **read-only** tools. Tool results are compact JSON.
 
 | Tool | Args | Returns |
@@ -225,14 +225,14 @@ the plan is finalized with remaining issues flagged in the plan's `warnings`.
 
 ### 5.4 Cost/quality knobs
 
-- Proposers and reviewer all default to `WIZARD_MODEL` (`claude-opus-4-8`),
+- Proposers and reviewer all default to `CONTROL_OBJECTIVES_MODEL` (`claude-opus-4-8`),
   `thinking={"type": "adaptive"}`, `output_config={"effort": "high"}`.
 - Candidate sets and system card are placed before the cache breakpoint;
   per-round revision notes after it (prompt caching across review rounds).
 
 ## 6. Output: the Assessment Plan
 
-Persisted in the `wizard` DB; one row per run, immutable once finalized.
+Persisted in the `control_objectives` DB; one row per run, immutable once finalized.
 
 ```python
 class AssessmentPlan(BaseModel):
@@ -251,7 +251,7 @@ class AssessmentPlan(BaseModel):
     transcript_ref: str              # stored agent transcripts (auditability)
 ```
 
-Exports (the "wizard forks into both" arrows on the homepage):
+Exports (the "control objectives forks into both" arrows on the homepage):
 
 - **Execution Engine**: `POST` of the selected tests + datasets as an engine
   configuration draft (exact endpoint TBD against the webapp backend API —
@@ -259,16 +259,16 @@ Exports (the "wizard forks into both" arrows on the homepage):
 - **Controls Engine**: creates `Submission` drafts (status `Draft`) for the
   selected checklists, via the same direct-DB pattern the demo seed uses.
 
-## 7. Wizard service API
+## 7. Control Objectives service API
 
 | Method, path | Purpose |
 |---|---|
-| `GET /wizard/api/qualifications` | proxy-list qualifications (id, name, has card) |
-| `POST /wizard/api/plans` | `{qualification_id}` → start a run (async job), returns `plan_id` |
-| `GET /wizard/api/plans/{id}` | plan + status (poll target for the UI) |
-| `GET /wizard/api/plans/{id}/events` | SSE progress stream (prefilter done, proposer round n, review n, finalized) |
-| `POST /wizard/api/plans/{id}/finalize` | human accepts (after optional manual deselect) |
-| `POST /wizard/api/plans/{id}/export` | push to execution engine + controls |
+| `GET /control-objectives/api/qualifications` | proxy-list qualifications (id, name, has card) |
+| `POST /control-objectives/api/plans` | `{qualification_id}` → start a run (async job), returns `plan_id` |
+| `GET /control-objectives/api/plans/{id}` | plan + status (poll target for the UI) |
+| `GET /control-objectives/api/plans/{id}/events` | SSE progress stream (prefilter done, proposer round n, review n, finalized) |
+| `POST /control-objectives/api/plans/{id}/finalize` | human accepts (after optional manual deselect) |
+| `POST /control-objectives/api/plans/{id}/export` | push to execution engine + controls |
 
 Runs execute in a background task (FastAPI `BackgroundTasks` initially; move to
 the existing celery/rabbit infra only if runs exceed request-lifetime limits).
@@ -286,17 +286,17 @@ Three screens, HTMX over the API above:
 - **Matching prefilter**: pure-function unit tests; fixtures from the real MCAS seed (`demo/seed/qualification/microcredit.sql` system card) + a frozen snapshot of `tools_seed.json` and `controls_seed.json`. Golden expectations for the MCAS candidate set.
 - **Tag map**: test that every `category` prefix in the qualification taxonomy resolves to an existing catalogue tag slug (run against the seed vocabulary).
 - **MCP tools**: contract tests against a docker-compose test stack (catalogue2 + controls DB seeded); each tool's response validated against its pydantic schema.
-- **Agents**: schema-level tests with mocked Anthropic client (proposal/review parsing, revision-loop control flow, max-rounds cutoff, hallucinated-ID rejection path). One opt-in live test (`WIZARD_LIVE_TESTS=1`) running the full MCAS plan and asserting structural invariants (every open_issue covered or gapped; all IDs resolvable) — not exact item lists.
+- **Agents**: schema-level tests with mocked Anthropic client (proposal/review parsing, revision-loop control flow, max-rounds cutoff, hallucinated-ID rejection path). One opt-in live test (`CONTROL_OBJECTIVES_LIVE_TESTS=1`) running the full MCAS plan and asserting structural invariants (every open_issue covered or gapped; all IDs resolvable) — not exact item lists.
 - **API**: FastAPI TestClient tests per endpoint.
 
 ## 10. Repository layout
 
 ```
-wizard/
+control objectives/
   SPEC.md
   pyproject.toml            # uv
-  docker-compose.wizard.yml # joins aisc network; Caddy route /wizard
-  src/wizard/
+  docker-compose.control objectives.yml # joins aisc network; Caddy route /control-objectives
+  src/control-objectives/
     api/                    # FastAPI routes + SSE
     matching/               # prefilter, tag_map, article extraction
     mcp_server.py           # read-only MCP tools

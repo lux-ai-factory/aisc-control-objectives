@@ -90,7 +90,7 @@ def build_llm(provider: str, model: str, agent: Agent | None = None):
 
     # The agent is BAF's configuration scope: properties live on it, and the
     # LLM reads its credential from there rather than from us.
-    agent = agent or Agent("wizard_llm")
+    agent = agent or Agent("control objectives_llm")
     base_url = os.environ.get("BAF_LLM_BASE_URL")
     key = os.environ.get(env_var) if env_var else None
 

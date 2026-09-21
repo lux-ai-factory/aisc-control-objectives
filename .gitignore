@@ -5,13 +5,13 @@ __pycache__/
 .pytest_cache/
 uv.lock
 
-# local secrets (Anthropic API key for the wizard service)
+# local secrets (Anthropic API key for the Control Objectives service)
 .env
 
 # server-owned active-recommendation state (single-user demo persistence)
-.wizard_state.json
+.control objectives_state.json
 
-# standalone wizard frontend build artifacts
+# standalone control objectives frontend build artifacts
 frontend/node_modules/
 frontend/build/
 frontend/.env

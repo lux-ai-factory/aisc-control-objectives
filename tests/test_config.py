@@ -27,13 +27,13 @@ def test_a_missing_file_yields_defaults(tmp_path):
 
 
 def test_file_beats_defaults(tmp_path):
-    path = tmp_path / "wizard.toml"
+    path = tmp_path / "control-objectives.toml"
     path.write_text('model = "gpt-4o-mini"\n')
     assert RunConfig.load({}, path).model == "gpt-4o-mini"
 
 
 def test_env_beats_file(tmp_path):
-    path = tmp_path / "wizard.toml"
+    path = tmp_path / "control-objectives.toml"
     path.write_text('provider = "openai"\nmodel = "gpt-4o-mini"\n')
     config = RunConfig.load({"BAF_LLM_PROVIDER": "ollama", "BAF_LLM_MODEL": "mistral:latest"}, path)
     assert (config.provider, config.model) == ("ollama", "mistral:latest")
@@ -46,7 +46,7 @@ def test_a_blank_baf_variable_is_not_an_override(tmp_path):
 
 
 def test_unrelated_vars_are_ignored():
-    assert RunConfig.load({"WIZARD_NONSENSE": "x"}, None).model == DEFAULT_MODEL
+    assert RunConfig.load({"CONTROL_OBJECTIVES_NONSENSE": "x"}, None).model == DEFAULT_MODEL
 
 
 def test_a_non_string_model_is_rejected():

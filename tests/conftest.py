@@ -39,8 +39,8 @@ def database_url() -> str:
     import os
 
     return os.environ.get(
-        "WIZARD_TEST_DATABASE_URL",
-        "postgresql+psycopg://aisc-postgres-user:dev-password@localhost:5432/wizard_test",
+        "CONTROL_OBJECTIVES_TEST_DATABASE_URL",
+        "postgresql+psycopg://aisc-postgres-user:dev-password@localhost:5432/control_objectives_test",
     )
 
 

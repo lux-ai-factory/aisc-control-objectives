@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import os
 
-DEFAULT_URL = "postgresql+psycopg://aisc-postgres-user:dev-password@localhost:5432/wizard"
+DEFAULT_URL = "postgresql+psycopg://aisc-postgres-user:dev-password@localhost:5432/control_objectives"
 
 
 def database_url(env: dict | None = None) -> str:

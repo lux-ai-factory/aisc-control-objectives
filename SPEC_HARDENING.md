@@ -1,4 +1,4 @@
-# Wizard hardening — work-package specs
+# Control Objectives hardening — work-package specs
 
 Status: **draft for review**. Follows `SPEC.md`; same constraints apply
 (§0 strictly additive, demo-safe: everything in Phase A is offline-only,
@@ -20,7 +20,7 @@ All formerly "decision" knobs become a typed `RunConfig` the user controls.
 config is echoed verbatim on every `AssessmentPlan` (`run_config` field) so a
 plan is always interpretable: you can see exactly which policies produced it.
 
-`wizard/config.py`:
+`control objectives/config.py`:
 
 ```python
 class GuardsConfig(BaseModel):
@@ -41,14 +41,14 @@ class RunConfig(BaseModel):
 
 | Knob | Env var | Per-run JSON | Values |
 |---|---|---|---|
-| model | `WIZARD_MODEL` | `config.model` | any Claude model id |
-| max rounds | `WIZARD_MAX_ROUNDS` | `config.max_rounds` | 1–5 |
-| evidence policy | `WIZARD_EVIDENCE_POLICY` | `config.guards.evidence` | `drop` / `demote` (→ priority `optional`) / `off` |
-| coverage claims | `WIZARD_COVERAGE_CLAIMS` | `config.guards.coverage_claims` | `strip` / `off` |
-| dataset pairing | `WIZARD_DATASET_PAIRING` | `config.guards.dataset_pairing` | `enforce` / `off` |
-| review lenses | `WIZARD_REVIEW_LENSES` | `config.review.lenses` | comma list of `relevance,coverage,parsimony`; empty = single reviewer |
-| reviewer model | `WIZARD_REVIEWER_MODEL` | `config.review.reviewer_model` | model id; unset = same as `model` |
-| golden recall threshold | `WIZARD_GOLDEN_RECALL` | n/a (eval-only) | float, default 0.8 |
+| model | `CONTROL_OBJECTIVES_MODEL` | `config.model` | any Claude model id |
+| max rounds | `CONTROL_OBJECTIVES_MAX_ROUNDS` | `config.max_rounds` | 1–5 |
+| evidence policy | `CONTROL_OBJECTIVES_EVIDENCE_POLICY` | `config.guards.evidence` | `drop` / `demote` (→ priority `optional`) / `off` |
+| coverage claims | `CONTROL_OBJECTIVES_COVERAGE_CLAIMS` | `config.guards.coverage_claims` | `strip` / `off` |
+| dataset pairing | `CONTROL_OBJECTIVES_DATASET_PAIRING` | `config.guards.dataset_pairing` | `enforce` / `off` |
+| review lenses | `CONTROL_OBJECTIVES_REVIEW_LENSES` | `config.review.lenses` | comma list of `relevance,coverage,parsimony`; empty = single reviewer |
+| reviewer model | `CONTROL_OBJECTIVES_REVIEWER_MODEL` | `config.review.reviewer_model` | model id; unset = same as `model` |
+| golden recall threshold | `CONTROL_OBJECTIVES_GOLDEN_RECALL` | n/a (eval-only) | float, default 0.8 |
 
 API surface:
 - `POST /api/plans` body gains optional `config` (partial, deep-merged into
@@ -70,7 +70,7 @@ payload as `guard_report` so the reviewer sees what was already stripped.
 
 ### G1 — Evidence verification
 
-New module `wizard/matching/evidence.py`:
+New module `control objectives/matching/evidence.py`:
 
 ```python
 def find_quote(quote: str, corpus: str) -> bool
@@ -122,7 +122,7 @@ Tests: each rule, strip-vs-keep, gap recomputation after stripping, warnings.
 
 ### G3 — Dataset pairing
 
-Schema change in `wizard/models/plan.py`:
+Schema change in `control objectives/models/plan.py`:
 
 ```python
 class ProposedItem(BaseModel):
@@ -150,7 +150,7 @@ dataset whose pair was itself dropped (cascading case); happy path.
 The card knows the system is *RAG*; the catalogue has *RAGAS*. Add a fourth
 score component at **subcategory** granularity.
 
-`wizard/matching/prefilter.py`:
+`control objectives/matching/prefilter.py`:
 - For each target-system slug `category:subcategory`, tokenize the
   subcategory on `-`; keep tokens with `len >= 4` **or** present in an
   explicit allowlist of short domain tokens (`{"rag", "ner", "ocr", "asr"}`);
@@ -170,7 +170,7 @@ set is preserved modulo insertion).
 
 ### M2 — Topic scoring (checklists)
 
-Fixes "Risk Management scores 0". New module `wizard/matching/topics.py`:
+Fixes "Risk Management scores 0". New module `control objectives/matching/topics.py`:
 
 ```python
 TOPIC_MAP: dict[str, set[str]]  # question group / finding title slug -> control_topic slugs
@@ -179,7 +179,7 @@ def topic_overlap(card: SystemCard, checklist: ChecklistDoc) -> set[str]
 ```
 
 - Both sides slugified with the existing `_slugify` (promoted to a shared
-  `wizard/matching/slug.py`).
+  `control objectives/matching/slug.py`).
 - `card_topics` = topics mapped from (a) the 6 question groups that have at
   least one non-empty answer (needs M3) and (b) finding titles.
 - Initial `TOPIC_MAP` (validated in tests against the fixture topic
@@ -223,13 +223,13 @@ still ranks above it; unmapped/sector-foreign topics stay at 0.
 
 ### A1 — Reviewer model override
 
-`WIZARD_REVIEWER_MODEL` env var, default = `WIZARD_MODEL`. One-line change in
-`WizardPlanRunner` + test asserting the override reaches the reviewer call
+`CONTROL_OBJECTIVES_REVIEWER_MODEL` env var, default = `CONTROL_OBJECTIVES_MODEL`. One-line change in
+`PlanRunner` + test asserting the override reaches the reviewer call
 and not the proposers'.
 
 ### A2 — Perspective-diverse review (opt-in)
 
-New `MultiLensReviewer` in `wizard/agents/llm.py` implementing the `Reviewer`
+New `MultiLensReviewer` in `control objectives/agents/llm.py` implementing the `Reviewer`
 protocol:
 
 - Lenses, each an instruction appended to the *volatile tail* of the reviewer
@@ -244,8 +244,8 @@ protocol:
   lenses (`reject > revise > accept`; lenses that omit an item count as
   accept). `coverage_ok` = AND of all lenses. `notes_for_revision` =
   concatenation, each block prefixed `[lens]`.
-- Config: `WIZARD_REVIEW_LENSES` env — comma list; **default empty = current
-  single reviewer** (cost-neutral by default). `WizardPlanRunner` builds
+- Config: `CONTROL_OBJECTIVES_REVIEW_LENSES` env — comma list; **default empty = current
+  single reviewer** (cost-neutral by default). `PlanRunner` builds
   `MultiLensReviewer` only when the var is set.
 
 Tests (stubbed clients): merge worst-verdict; AND of coverage; note labeling;
@@ -267,7 +267,7 @@ checklist; non-proposed candidates are *not* expanded (token control).
 ### A4 — Failure policy
 
 - `AssessmentPlan.status` gains `"failed"`.
-- `WizardPlanRunner.run` wraps the loop: any exception from an agent call
+- `PlanRunner.run` wraps the loop: any exception from an agent call
   (after the SDK's own retries) → plan with `status="failed"`, empty item
   lists, `warnings=[f"run-failed: {type(e).__name__}: {e}"]`, and
   `review_rounds` = rounds completed. Never a half-plan that looks finished.
@@ -280,16 +280,16 @@ raising in round 2 → `review_rounds == 1` recorded.
 
 ### A5 — Transcripts
 
-- `wizard/agents/transcript.py`: `Transcript` accumulates per round
+- `control objectives/agents/transcript.py`: `Transcript` accumulates per round
   `{round, proposals, guard_report, review}` (model dumps).
-- Orchestrator fills it; `WizardPlanRunner` writes
-  `$WIZARD_DATA_DIR/transcripts/<plan_id>.json` (env, default `./data`;
+- Orchestrator fills it; `PlanRunner` writes
+  `$CONTROL_OBJECTIVES_DATA_DIR/transcripts/<plan_id>.json` (env, default `./data`;
   created on demand) and sets `plan.transcript_ref` to the absolute path.
 - The audit chain becomes: plan → transcript → exact agent inputs/outputs per
   round.
 
 Tests: file written, ref set, content round-trips, contains guard report;
-`WIZARD_DATA_DIR` honored (tmp_path in tests).
+`CONTROL_OBJECTIVES_DATA_DIR` honored (tmp_path in tests).
 
 ---
 
@@ -312,8 +312,8 @@ Tests: file written, ref set, content round-trips, contains guard report;
   reasoning, documented inline as `_comment` fields); **you review and amend
   it** — it encodes the domain expert's judgment, not mine. [DECISION D4]
 - New opt-in live test `tests/live/test_golden_mcas.py`
-  (`@pytest.mark.skipif(not os.environ.get("WIZARD_LIVE_TESTS"))`):
-  runs `WizardPlanRunner` with a real `anthropic.Anthropic()` client against
+  (`@pytest.mark.skipif(not os.environ.get("CONTROL_OBJECTIVES_LIVE_TESTS"))`):
+  runs `PlanRunner` with a real `anthropic.Anthropic()` client against
   the fixtures (still no local services needed — fixtures are local), asserts:
   - recall over `must_include` ≥ **0.8**
   - zero `must_exclude` present
@@ -345,7 +345,7 @@ In dependency order:
    but no list route was found. Options: read-only query on the
    `qualification` DB (mirrors the controls pattern) vs adding nothing and
    entering ids manually in the UI. Outcome updates SPEC §2.1.
-2. **Clients** (`wizard/clients/`): `CatalogueClient` (httpx,
+2. **Clients** (`control objectives/clients/`): `CatalogueClient` (httpx,
    `GET /tool/?detailed=true`, `GET /tags/`), `QualificationClient`
    (system-card.json + answers via 1.), `ControlsReadClient` (SQLAlchemy,
    read-only role created by `scripts/setup_db.sql`). Each normalizes into

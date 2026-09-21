@@ -1,4 +1,4 @@
-"""The AI Act control objectives are the wizard's domain data.
+"""The AI Act control objectives are this service's domain data.
 
 The CSV in `data/` is the source of truth (it is the artefact the requirements
 work produces); these tests pin the shape the rest of the service relies on, so

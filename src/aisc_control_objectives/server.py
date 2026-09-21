@@ -7,14 +7,14 @@ aisc_control_objectives.llm): BAF_LLM_PROVIDER and BAF_LLM_MODEL name it, and th
 variable carries the key.
 
 Env:
-  WIZARD_CONFIG_FILE       path to the TOML config (default <repo>/wizard.toml)
-  WIZARD_OBJECTIVES_FILE   override the bundled objectives CSV
+  CONTROL_OBJECTIVES_CONFIG_FILE       path to the TOML config (default <repo>/control-objectives.toml)
+  CONTROL_OBJECTIVES_FILE   override the bundled objectives CSV
   BAF_LLM_PROVIDER / BAF_LLM_MODEL        which model, BAF's names
   BAF_LLM_BASE_URL         endpoint for the ollama / compatible providers
   MISTRAL_API_KEY / OPENAI_API_KEY / …    the provider's own key
-  WIZARD_PORT              port to serve on (default 8090)
-  WIZARD_ROOT_PATH         sub-path when behind a reverse proxy
-  WIZARD_CORS_ORIGINS      comma-separated allowlist (default permissive)
+  CONTROL_OBJECTIVES_PORT              port to serve on (default 8090)
+  CONTROL_OBJECTIVES_ROOT_PATH         sub-path when behind a reverse proxy
+  CONTROL_OBJECTIVES_CORS_ORIGINS      comma-separated allowlist (default permissive)
 
 A `.env` file next to the repo root is loaded if present (simple KEY=VALUE
 lines), so API keys can live in a file instead of the shell environment.
@@ -41,8 +41,8 @@ def _repo_root() -> Path:
 
 def objectives_source(env: Mapping[str, str]) -> tuple[Path | None, str]:
     """(override path or None, the file name the page shows). A blank
-    WIZARD_OBJECTIVES_FILE, as templated env files leave it, means the bundled CSV."""
-    override = (env.get("WIZARD_OBJECTIVES_FILE") or "").strip()
+    CONTROL_OBJECTIVES_FILE, as templated env files leave it, means the bundled CSV."""
+    override = (env.get("CONTROL_OBJECTIVES_FILE") or "").strip()
     if not override:
         return None, default_csv_path().name
     return Path(override), Path(override).name
@@ -91,14 +91,14 @@ def build_app():
     _load_dotenv()
 
     config_file = os.environ.get(
-        "WIZARD_CONFIG_FILE", str(_repo_root() / "wizard.toml")
+        "CONTROL_OBJECTIVES_CONFIG_FILE", str(_repo_root() / "control-objectives.toml")
     )
     config = RunConfig.load(os.environ, config_file)
 
     objectives_file, source_name = objectives_source(os.environ)
     objectives = load_control_objectives(objectives_file)
 
-    cors_env = os.environ.get("WIZARD_CORS_ORIGINS", "").strip()
+    cors_env = os.environ.get("CONTROL_OBJECTIVES_CORS_ORIGINS", "").strip()
     cors_origins = [o.strip() for o in cors_env.split(",") if o.strip()] or None
     complete = _build_completer(config)
     repository = ProjectRepository(database_url(), objectives_digest=objectives.digest)
@@ -112,7 +112,7 @@ def build_app():
         objectives,
         projects,
         base_config=config,
-        root_path=os.environ.get("WIZARD_ROOT_PATH", ""),
+        root_path=os.environ.get("CONTROL_OBJECTIVES_ROOT_PATH", ""),
         cors_origins=cors_origins,
         source_name=source_name,
     )
@@ -122,7 +122,7 @@ def main() -> None:
     import uvicorn
 
     app = build_app()
-    port = int(os.environ.get("WIZARD_PORT", "8090"))
+    port = int(os.environ.get("CONTROL_OBJECTIVES_PORT", "8090"))
     uvicorn.run(app, host="0.0.0.0", port=port)
 
 

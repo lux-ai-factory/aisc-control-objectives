@@ -1,6 +1,6 @@
 import React from "react";
 
-// Self-contained header/page chrome for the standalone wizard app (mirrors the
+// Self-contained header/page chrome for the standalone control objectives app (mirrors the
 // catalogue's Layout so the two apps look like one product).
 
 const s = {
@@ -35,7 +35,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
           alt="Luxembourg AI Factory"
           style={s.logo}
         />
-        <span style={s.headerTitle}>AI Assessment Wizard</span>
+        <span style={s.headerTitle}>AI Assessment Control Objectives</span>
       </div>
     </header>
     {children}

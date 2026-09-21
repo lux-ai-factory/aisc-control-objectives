@@ -39,7 +39,7 @@ flowchart LR
 ```bash
 uv pip install -e '.[dev]'
 
-export DATABASE_URL=postgresql://user:password@localhost:5432/wizard
+export DATABASE_URL=postgresql://user:password@localhost:5432/control-objectives
 alembic upgrade head
 
 python -m aisc_control_objectives.server        # http://localhost:8090
@@ -61,7 +61,7 @@ OPENAI_API_KEY=sk-...
 Thirteen providers are wired (`src/aisc_control_objectives/llm.py`): anthropic, compatible, deepseek, google, groq, meta, mistral, ollama, openai, openrouter, qwen, together, xai. **Each reads its own variable**, never a shared one. `ollama` and `compatible` need no credential at all.
 
 > [!NOTE]
-> The committed `wizard.toml` asks for `openai` / `gpt-4o`. Environment variables override it, so a deployment never has to edit the file.
+> The committed `control-objectives.toml` asks for `openai` / `gpt-4o`. Environment variables override it, so a deployment never has to edit the file.
 
 ## Assessing a system
 
@@ -118,7 +118,7 @@ Two conventions the code relies on:
 - **A paired objective needs both.** `Control + Test` means an organisational control *and* a technical test, so the two partitions overlap: 41 objectives need a control, 14 need a test, 5 are in both.
 - **`VOLUNTARY:` is the author's own judgement**, not one made here, and it is what flags an objective non-binding.
 
-Swapping in a newer export is a file swap: replace the CSV, or point `WIZARD_OBJECTIVES_FILE` at another one. A renamed or missing column fails at load time rather than silently yielding empty objectives. Every project records the sha256 of the catalogue it was assessed against, so a re-export cannot quietly change an old assessment's tiers.
+Swapping in a newer export is a file swap: replace the CSV, or point `CONTROL_OBJECTIVES_FILE` at another one. A renamed or missing column fails at load time rather than silently yielding empty objectives. Every project records the sha256 of the catalogue it was assessed against, so a re-export cannot quietly change an old assessment's tiers.
 
 ## HTTP API
 
@@ -157,20 +157,20 @@ Verdicts, scores and tiers are deliberately **not** stored: they are a pure func
 
 ## Configuration
 
-Three layers, lowest to highest: **built-in defaults, then `wizard.toml`, then `WIZARD_*` / `BAF_*` environment variables**.
+Three layers, lowest to highest: **built-in defaults, then `control-objectives.toml`, then `CONTROL_OBJECTIVES_*` / `BAF_*` environment variables**.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `DATABASE_URL` | local `wizard` database | the same variable the qualification app reads |
-| `WIZARD_CONFIG_FILE` | `<repo>/wizard.toml` | config file path |
-| `WIZARD_OBJECTIVES_FILE` | bundled CSV | serve a different objectives export |
+| `DATABASE_URL` | local `control_objectives` database | the same variable the qualification app reads |
+| `CONTROL_OBJECTIVES_CONFIG_FILE` | `<repo>/control-objectives.toml` | config file path |
+| `CONTROL_OBJECTIVES_FILE` | bundled CSV | serve a different objectives export |
 | `BAF_LLM_PROVIDER` | `mistral` | which provider, BAF's name for it |
 | `BAF_LLM_MODEL` | `mistral-large-latest` | which model |
 | `BAF_LLM_BASE_URL` | *(unset)* | endpoint for `ollama` / `compatible` |
 | `<PROVIDER>_API_KEY` | *(unset)* | the key, under the provider's own name |
-| `WIZARD_PORT` | `8090` | port |
-| `WIZARD_ROOT_PATH` | *(empty)* | sub-path when behind a reverse proxy |
-| `WIZARD_CORS_ORIGINS` | *(permissive)* | comma-separated allowlist |
+| `CONTROL_OBJECTIVES_PORT` | `8090` | port |
+| `CONTROL_OBJECTIVES_ROOT_PATH` | *(empty)* | sub-path when behind a reverse proxy |
+| `CONTROL_OBJECTIVES_CORS_ORIGINS` | *(permissive)* | comma-separated allowlist |
 
 A `.env` next to the repo root is loaded at startup if present (plain `KEY=VALUE` lines, an `export ` prefix and quotes are fine). Existing environment variables always win.
 
@@ -202,7 +202,7 @@ The skill the model runs under is `src/aisc_control_objectives/skills/mapping-a-
 pytest
 ```
 
-192 tests. They run against a **real Postgres**, not SQLite, because testing on a different engine from production is how you find out `text[]` does not exist on the day you deploy. Each run creates and drops its own database; point `WIZARD_TEST_DATABASE_URL` somewhere else if the default (`.../wizard_test`) is not right for your machine.
+192 tests. They run against a **real Postgres**, not SQLite, because testing on a different engine from production is how you find out `text[]` does not exist on the day you deploy. Each run creates and drops its own database; point `CONTROL_OBJECTIVES_TEST_DATABASE_URL` somewhere else if the default (`.../control_objectives_test`) is not right for your machine.
 
 ## Deployment
 
@@ -213,14 +213,7 @@ docker build -t aisc-control-objectives .
 docker run -p 8090:8090 --env-file .env -e DATABASE_URL=... aisc-control-objectives
 ```
 
-`env.development` holds the settings for running inside the platform compose (served behind Caddy under `/wizard`, which is what `WIZARD_ROOT_PATH` is for).
-
-> [!NOTE]
-> The service was called the Wizard until this repository was renamed. The
-> deployment contract kept its old names on purpose: `wizard.toml`, the
-> `WIZARD_*` variables, the `/wizard` route and the `wizard` database are what
-> the platform already injects, and renaming them is a compose change, not a
-> code change.
+`env.development` holds the settings for running inside the platform compose (served behind Caddy under `/control-objectives`, which is what `CONTROL_OBJECTIVES_ROOT_PATH` is for).
 
 > [!WARNING]
 > Run `alembic upgrade head` against the target database before starting the service. The container does not migrate on boot.

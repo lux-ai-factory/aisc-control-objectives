@@ -1,11 +1,11 @@
-# Wizard configuration — which model, and where the objectives come from.
+# Control Objectives configuration — which model, and where the objectives come from.
 # API keys live in .env, under the provider's own variable name.
 #
-# Loaded at startup (override the path with WIZARD_CONFIG_FILE). Environment
+# Loaded at startup (override the path with CONTROL_OBJECTIVES_CONFIG_FILE). Environment
 # variables override anything set here: BAF_LLM_PROVIDER and BAF_LLM_MODEL.
 
 # The model, named BAF's way, exactly as the qualification filler names it.
-# One mechanism for the platform: see src/wizard/llm.py for the providers.
+# One mechanism for the platform: see src/control-objectives/llm.py for the providers.
 #   provider = "mistral"    model = "mistral-large-latest"   (MISTRAL_API_KEY)
 #   provider = "anthropic"  model = "claude-opus-4-8"        (ANTHROPIC_API_KEY)
 #   provider = "openai"     model = "gpt-4o-mini"            (OPENAI_API_KEY)
@@ -19,5 +19,5 @@ provider = "openai"
 model = "gpt-4o"
 
 # The control objectives are bundled with the package
-# (src/wizard/data/ai_act_control_objectives.csv); point WIZARD_OBJECTIVES_FILE
+# (src/control-objectives/data/ai_act_control_objectives.csv); point CONTROL_OBJECTIVES_FILE
 # at another CSV to serve a newer export without rebuilding.

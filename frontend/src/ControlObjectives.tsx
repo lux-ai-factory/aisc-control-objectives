@@ -6,7 +6,7 @@ import type {
   DimensionStatus,
   HistoryEntry,
   ProposedItem,
-} from "./wizardPlans";
+} from "./plans";
 import {
   clearActiveRecommendation,
   clearHistory as clearHistoryStore,
@@ -18,11 +18,11 @@ import {
   setArchived as setArchivedStore,
   setCurrentCard as setCurrentCardStore,
   setCurrentPlan,
-} from "./wizardPlans";
+} from "./plans";
 
-// Wizard service base URL — its own process/port (SPEC §0), overridable per env.
-const WIZARD_URL =
-  (import.meta as any).env?.VITE_WIZARD_URL || "http://localhost:8090";
+// Control Objectives service base URL — its own process/port (SPEC §0), overridable per env.
+const CONTROL_OBJECTIVES_URL =
+  (import.meta as any).env?.VITE_CONTROL_OBJECTIVES_URL || "http://localhost:8090";
 
 // The catalogue is a separate app/origin; back-links point there by URL.
 const CATALOGUE_URL =
@@ -30,7 +30,7 @@ const CATALOGUE_URL =
   "http://localhost:3000/catalogue";
 
 // Types (AssessmentPlan, ProposedItem, DimensionAssessment, HistoryEntry) and
-// the persistence/recommendation helpers live in services/wizardPlans.ts, shared
+// the persistence/recommendation helpers live in services/plans.ts, shared
 // with the catalogue's "Recommended" filter.
 
 // ─── Styles ──────────────────────────────────────────────────────────────────
@@ -532,7 +532,7 @@ const STEPS = [
     text: "Upload the system card describing your AI solution — what it does, the sector it serves, and the people it affects.",
   },
   {
-    title: "The Wizard reads it",
+    title: "The service reads it",
     text: "It understands your solution and matches it against everything in the catalogue.",
   },
   {
@@ -661,7 +661,7 @@ const DimensionSection: React.FC<{
   );
 };
 
-const WizardInfo: React.FC = () => {
+const ControlObjectives: React.FC = () => {
   const fileRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -679,7 +679,7 @@ const WizardInfo: React.FC = () => {
 
   // Select a run as the active plan: shown here AND used by the catalogue's
   // "Recommended" filter. Persisted locally (survives refresh) AND pushed to the
-  // Wizard API, which is the source of truth the catalogue reads (cross-origin).
+  // Control Objectives API, which is the source of truth the catalogue reads (cross-origin).
   const selectPlan = (p: AssessmentPlan | null) => {
     setPlan(p);
     setCurrentPlan(p);
@@ -716,7 +716,7 @@ const WizardInfo: React.FC = () => {
     setHistory(setArchivedStore(planId, false));
   };
 
-  // Render the PDF from the plan we hold locally: the wizard keeps plans only in
+  // Render the PDF from the plan we hold locally: the service keeps plans only in
   // memory, so the GET-by-id route 404s after a restart. POST the full plan to
   // the stateless render endpoint and trigger a blob download — works for any
   // run, including old ones restored from localStorage.
@@ -725,12 +725,12 @@ const WizardInfo: React.FC = () => {
     setPdfBusy(true);
     setError(null);
     try {
-      const res = await fetch(`${WIZARD_URL}/api/plans/render-pdf`, {
+      const res = await fetch(`${CONTROL_OBJECTIVES_URL}/api/plans/render-pdf`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(plan),
       });
-      if (!res.ok) throw new Error(`Wizard returned ${res.status}`);
+      if (!res.ok) throw new Error(`Control Objectives returned ${res.status}`);
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -743,7 +743,7 @@ const WizardInfo: React.FC = () => {
     } catch (e: any) {
       setError(
         e?.message?.includes("Failed to fetch")
-          ? `Could not reach the Wizard service at ${WIZARD_URL}. Is it running?`
+          ? `Could not reach the Control Objectives service at ${CONTROL_OBJECTIVES_URL}. Is it running?`
           : `Couldn't generate the PDF (${e?.message || "unknown error"}).`
       );
     } finally {
@@ -751,7 +751,7 @@ const WizardInfo: React.FC = () => {
     }
   };
 
-  const runWizard = async (card: unknown) => {
+  const runAssessment = async (card: unknown) => {
     setLoading(true);
     setError(null);
     // show the uploaded card immediately — during analysis and even if the run
@@ -760,7 +760,7 @@ const WizardInfo: React.FC = () => {
     setCurrentCardStore(card);
     // keep the previous result visible while the new run is in flight
     try {
-      const res = await fetch(`${WIZARD_URL}/api/plans/from-card`, {
+      const res = await fetch(`${CONTROL_OBJECTIVES_URL}/api/plans/from-card`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ card }),
@@ -771,7 +771,7 @@ const WizardInfo: React.FC = () => {
         const why =
           data?.warnings?.join("; ") ||
           data?.detail ||
-          `Wizard returned ${res.status}`;
+          `Control Objectives returned ${res.status}`;
         throw new Error(why);
       }
       const newPlan = data as AssessmentPlan;
@@ -781,7 +781,7 @@ const WizardInfo: React.FC = () => {
     } catch (e: any) {
       setError(
         e?.message?.includes("Failed to fetch")
-          ? `Could not reach the Wizard service at ${WIZARD_URL}. Is it running?`
+          ? `Could not reach the Control Objectives service at ${CONTROL_OBJECTIVES_URL}. Is it running?`
           : e?.message || "Something went wrong."
       );
     } finally {
@@ -794,7 +794,7 @@ const WizardInfo: React.FC = () => {
     if (!file) return;
     try {
       const card = JSON.parse(await file.text());
-      await runWizard(card);
+      await runAssessment(card);
     } catch {
       setError("That file isn't valid JSON. Please upload a system card JSON file.");
     } finally {
@@ -811,10 +811,10 @@ const WizardInfo: React.FC = () => {
           </a>
 
           <span style={s.badge}>RECOMMENDED FOR YOU</span>
-          <h1 style={s.title}>Let the Wizard pick the right tests &amp; controls</h1>
+          <h1 style={s.title}>Let the service pick the right tests &amp; controls</h1>
           <p style={s.lead}>
             The catalogue holds many tests and control checklists — but not all
-            of them apply to your solution. The Wizard does the matching for
+            of them apply to your solution. The service does the matching for
             you: tell it about your AI system and it recommends exactly the
             tests and controls you should run.
           </p>
@@ -856,7 +856,7 @@ const WizardInfo: React.FC = () => {
               </button>
             </div>
             <span style={s.note}>
-              Your system card stays between your browser and the Wizard service.
+              Your system card stays between your browser and the Control Objectives service.
             </span>
             {error && <div style={s.error}>{error}</div>}
           </div>
@@ -866,7 +866,7 @@ const WizardInfo: React.FC = () => {
               <Spinner size={34} color="#000FDF" />
               <div style={s.loadingTitle}>Analysing your system card…</div>
               <div style={s.loadingText}>
-                The Wizard is reading the card and consulting the catalogue — this
+                The service is reading the card and consulting the catalogue — this
                 usually takes up to a minute or two.
               </div>
             </div>
@@ -1064,4 +1064,4 @@ const WizardInfo: React.FC = () => {
   );
 };
 
-export default WizardInfo;
+export default ControlObjectives;

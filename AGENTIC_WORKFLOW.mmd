@@ -1,4 +1,4 @@
-%% Wizard — dimension-first agentic workflow
+%% Control Objectives — dimension-first agentic workflow
 %% Companion to DIMENSION_PLAN.md. Legend: blue = LLM agent, grey = deterministic,
 %% light-blue = data/store, yellow = output. Render at mermaid.live or any Mermaid viewer.
 flowchart TD
@@ -6,7 +6,7 @@ flowchart TD
     subgraph IN["Inputs"]
         SC["System Card JSON<br/>(upload or qualification)"]
         CAT["Catalogue<br/>tools + control checklists<br/>(via catalogue_http)"]
-        SK["Skills files<br/>wizard/skills/*.md"]
+        SK["Skills files<br/>control objectives/skills/*.md"]
     end
 
     subgraph PREP["Deterministic prep"]
@@ -36,7 +36,7 @@ flowchart TD
         A2["AssessmentPlan (+ dimensions[])<br/>derive legacy tests / datasets / checklists / coverage / gaps"]
         ST[("Plan store<br/>by plan_id")]
         PDF["GET /api/plans/{id}/pdf<br/>Jinja2 plan.html.j2 -> WeasyPrint"]
-        UI["Catalogue WizardInfo.tsx<br/>on-screen report + Download PDF"]
+        UI["Catalogue ControlObjectives.tsx<br/>on-screen report + Download PDF"]
     end
 
     SC --> N1

@@ -2,7 +2,7 @@
 
 Status: **proposed, for review** · Owner: Alessio · Drafted 2026-06-13
 
-This plan makes **trustworthiness dimensions** the organising axis of the Wizard's
+This plan makes **trustworthiness dimensions** the organising axis of the service's
 recommendations and adds a downloadable PDF report. Today the pipeline reasons over a
 flat list of items keyed by EU AI Act articles; the goal is to reason **per dimension**,
 conditioned on the system's **technology and context**, recommend only what is needed to
@@ -10,7 +10,7 @@ close each dimension's residual gap, and explain it — on screen and in a PDF.
 
 > Sister change in the catalogue repo (`/home/listuser/catalogue`): on-screen rendering of
 > the dimension report + a "Download PDF" button. The catalogue stays a thin client; all
-> recommendation logic and PDF rendering live here in the Wizard service.
+> recommendation logic and PDF rendering live here in the Control Objectives service.
 
 ---
 
@@ -43,15 +43,15 @@ Gaps vs. the goal:
 
 | # | Question | Decision | Rationale |
 |---|----------|----------|-----------|
-| D1 | Source of truth for the dimension taxonomy | **Derive from the catalogue tags** (`section:"dimension"`, already arriving via `catalogue_http`), backed by a small `wizard/dimensions.py` registry for labels + sub-area grouping. | Keeps Wizard and catalogue aligned automatically; the registry only adds labels/ordering, not a second taxonomy to drift. |
+| D1 | Source of truth for the dimension taxonomy | **Derive from the catalogue tags** (`section:"dimension"`, already arriving via `catalogue_http`), backed by a small `control objectives/dimensions.py` registry for labels + sub-area grouping. | Keeps Control Objectives and catalogue aligned automatically; the registry only adds labels/ordering, not a second taxonomy to drift. |
 | D2 | Who decides a dimension is "already adequately tackled"? | **Hybrid.** The LLM judges `already_addressed` from card evidence, but a **deterministic floor** can veto a "covered" verdict: for high-risk sectors and for dimensions flagged `requires_control`, a dimension cannot be auto-marked `covered` without at least one accepted control checklist. | Pure-LLM sufficiency is too easy to talk itself out of a control on a high-risk system; the floor is a safety backstop, configurable per deploy. |
 | D3 | Does this replace the propose→review loop? | **No — it wraps it.** Add a framing/assessment stage in front and a dimension-grouped output model after; the candidate→propose→guard→review loop stays. | Preserves the tested guards, multi-lens review, and prompt-cache design; lowest-risk path. |
-| D4 | Skills file format | **Markdown + YAML frontmatter** (`dimension`, `ai_types`, `sectors?`, `applies_when?`), loaded from `wizard/skills/`, routed by `(dimension, ai_type, sector)` into the **stable cached** prompt block. | Human-authorable, routable, cache-friendly. **Locked against your real files before Phase 2 ships.** |
+| D4 | Skills file format | **Markdown + YAML frontmatter** (`dimension`, `ai_types`, `sectors?`, `applies_when?`), loaded from `control objectives/skills/`, routed by `(dimension, ai_type, sector)` into the **stable cached** prompt block. | Human-authorable, routable, cache-friendly. **Locked against your real files before Phase 2 ships.** |
 | D5 | Build order | **0 → 1 first** (model + mechanism), **stub skills**, then **3 → 4** (PDF + frontend), then **2** (skills) once files exist, then **5** (tests alongside each phase). | The new output model is the dependency for PDF and frontend; skills can land last without reshaping anything. |
 | D6 | Backward compatibility of `AssessmentPlan` | **Additive.** Keep `tests/datasets/checklists/coverage/gaps`; add `dimensions: list[DimensionAssessment]` and derive the legacy fields from it. | Existing API consumers, `finalize`, and tests keep working. |
 
 The catalogue's dimension taxonomy is **not uniform across tests and controls** — the registry
-seed for `wizard/dimensions.py` is the **union of 11**:
+seed for `control objectives/dimensions.py` is the **union of 11**:
 
 - **Shared 6 (tests + controls):** Human Agency and Oversight · Technical Robustness and Safety ·
   Privacy and Data Governance · Transparency · Diversity, Non-discrimination and Fairness ·
@@ -71,7 +71,7 @@ Implications for the registry/report:
 ## 3. Phases
 
 ### Phase 0 — Dimension as a first-class concept
-- **`wizard/dimensions.py`** (new): registry `slug → {label, order, sub_areas[], requires_control: bool}`,
+- **`control objectives/dimensions.py`** (new): registry `slug → {label, order, sub_areas[], requires_control: bool}`,
   seeded from the catalogue's dimension list. Helper to map a tool's `tag_slugs` → dimension slug(s).
 - **`models/catalogue.py`**: add `CatalogueTool.dimension_slugs` (derive from `tag_slugs` via registry);
   `ChecklistDoc.dimension_slug` already exists.
@@ -100,7 +100,7 @@ Implications for the registry/report:
 - Tests: in-scope selection, sufficiency → minimal recommendation, floor veto, output model shape.
 
 ### Phase 2 — Skills ingestion *(needs your files; stubbed until then)*
-- **`wizard/skills/`** + **`SkillsLoader`**: parse frontmatter, index by `(dimension, ai_type, sector)`,
+- **`control objectives/skills/`** + **`SkillsLoader`**: parse frontmatter, index by `(dimension, ai_type, sector)`,
   inject matching skill bodies into the framer/proposer **stable cached block** keyed by
   dimension+technology (preserves the SPEC §5.4 cache design).
 - Frontmatter contract (D4):
@@ -126,8 +126,8 @@ Implications for the registry/report:
 - Tests: template renders for a sample plan; WeasyPrint smoke test produces non-empty PDF bytes.
 
 ### Phase 4 — Catalogue frontend (`/home/listuser/catalogue`)
-- Expand `WizardInfo.tsx` results into the dimension → items layout (mirror of the PDF).
-- Add **"Download PDF"** button → `{WIZARD_URL}/api/plans/{plan_id}/pdf`.
+- Expand `ControlObjectives.tsx` results into the dimension → items layout (mirror of the PDF).
+- Add **"Download PDF"** button → `{CONTROL_OBJECTIVES_URL}/api/plans/{plan_id}/pdf`.
 - Optional: enable the currently-disabled "Recommended" sidebar toggle once this lands.
 
 ### Phase 5 — Tests & docs
@@ -139,15 +139,15 @@ Implications for the registry/report:
 
 ## 4. Touchpoints summary
 
-**Wizard repo**
-- New: `wizard/dimensions.py`, `wizard/skills/` + loader, `plan.html.j2` + `styles.css`, PDF renderer module.
+**Control Objectives repo**
+- New: `control objectives/dimensions.py`, `control objectives/skills/` + loader, `plan.html.j2` + `styles.css`, PDF renderer module.
 - Changed: `models/plan.py` (ProposedItem.dimension, DimensionAssessment, AssessmentPlan.dimensions),
   `models/catalogue.py` (tool dimension extraction), `agents/orchestrator.py` + `agents/llm.py`
   (framer stage, per-dimension prompts, floor), `api/app.py` (PDF route), `config.py` (skills dir,
   high-risk-sector floor toggle), deps (`weasyprint`, `jinja2`).
 
 **Catalogue repo**
-- Changed: `frontend/src/pages/WizardInfo.tsx` (dimension rendering + Download PDF). Already in place:
+- Changed: `frontend/src/pages/ControlObjectives.tsx` (dimension rendering + Download PDF). Already in place:
   route + sidebar entry.
 
 ---

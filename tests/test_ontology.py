@@ -2,7 +2,7 @@
 
 `ontology.jsonld` is expanded JSON-LD: a flat list of nodes whose predicates
 are full URIs. It is the system's card, in the sense the qualification app
-means it, and it carries the risks the wizard ranks.
+means it, and it carries the risks the service ranks.
 
 Tested against the real export, not a fixture I invented.
 """
@@ -25,7 +25,7 @@ class TestTheAiCard:
     """What an assessor uploads is the system's AI Card. The qualification app
     exports it two ways, and both are the same card: `ai-card.json`, which
     wraps the graph with the form's facts, and `ontology.jsonld`, the graph on
-    its own. The wizard takes either."""
+    its own. The service takes either."""
 
     def test_the_graph_on_its_own_is_a_card(self, fixtures_dir):
         raw = json.loads((fixtures_dir / "mcas.ontology.jsonld").read_text())
@@ -46,7 +46,7 @@ class TestTheAiCard:
 
     def test_an_ai_card_with_no_graph_in_it_is_not_enough(self, fixtures_dir):
         """The PDF's payload without its graph: a card a reader can read and
-        the wizard cannot work from."""
+        the service cannot work from."""
         assert not Ontology.looks_like_one(
             {"system_name": "X", "ontology": {"chains": []}, "ontology_graph": None}
         )

@@ -1,15 +1,15 @@
-// Shared store for Wizard assessment plans.
+// Shared store for Control Objectives assessment plans.
 //
-// Plans live only in the Wizard service's in-memory store (lost on its restart)
+// Plans live only in the Control Objectives service's in-memory store (lost on its restart)
 // and in React state (lost on refresh). We persist them in the browser so:
 //   • the current result survives a refresh,
 //   • every run is kept in a history the user can revisit, and
 //   • the *currently selected* run drives the catalogue's "Recommended" filter.
 //
-// Both the Wizard page (writer) and the Catalogue page (reader of the active
+// Both the service page (writer) and the Catalogue page (reader of the active
 // selection) import from here, so the contract lives in one place.
 
-// ─── Types (mirror wizard.models.plan) ───────────────────────────────────────
+// ─── Types (mirror control objectives.models.plan) ───────────────────────────────────────
 
 export interface ProposedItem {
   item_id: string;
@@ -69,14 +69,14 @@ export interface HistoryEntry {
 // LS_CURRENT holds the *selected* plan — the one whose recommendations the
 // catalogue's "Recommended" filter uses. Selecting a different run (or running a
 // new card) changes it.
-const LS_CURRENT = "wizard.currentPlan";
-const LS_CURRENT_CARD = "wizard.currentCard";
-const LS_HISTORY = "wizard.history";
+const LS_CURRENT = "control objectives.currentPlan";
+const LS_CURRENT_CARD = "control objectives.currentCard";
+const LS_HISTORY = "control objectives.history";
 const HISTORY_LIMIT = 25;
 
 // Fired on same-tab updates so the catalogue (if mounted) can react without a
 // reload. (The native `storage` event only fires across tabs.)
-export const WIZARD_PLANS_EVENT = "wizard-plans-changed";
+export const CONTROL_OBJECTIVES_PLANS_EVENT = "control objectives-plans-changed";
 
 function loadJSON<T>(key: string, fallback: T): T {
   try {
@@ -89,7 +89,7 @@ function loadJSON<T>(key: string, fallback: T): T {
 
 function announce(): void {
   try {
-    window.dispatchEvent(new Event(WIZARD_PLANS_EVENT));
+    window.dispatchEvent(new Event(CONTROL_OBJECTIVES_PLANS_EVENT));
   } catch {
     /* SSR / no window — ignore */
   }
@@ -157,7 +157,7 @@ export function setArchived(planId: string, archived: boolean): HistoryEntry[] {
 // ─── Recommendations ──────────────────────────────────────────────────────────
 
 // slug → recommendation score (1–5). Plan item_ids ARE catalogue slugs (the
-// Wizard prefilter keys candidates by slug), so the catalogue matches these
+// Control Objectives prefilter keys candidates by slug), so the catalogue matches these
 // directly against `tool.slug`. Highest score wins if a slug appears twice.
 export function recommendedScores(plan: AssessmentPlan): Record<string, number> {
   const scores: Record<string, number> = {};
@@ -189,20 +189,20 @@ export function getActiveRecommendation(): ActiveRecommendation | null {
   };
 }
 
-// ─── Active recommendation via the Wizard API (cross-origin source of truth) ──
+// ─── Active recommendation via the service API (cross-origin source of truth) ──
 //
-// The Wizard service owns "which run drives Recommended" so the catalogue and a
-// (possibly separate-origin) Wizard UI agree without sharing browser storage.
-// The Wizard page pushes/clears the selection; the catalogue reads it.
+// The Control Objectives service owns "which run drives Recommended" so the catalogue and a
+// (possibly separate-origin) Control Objectives UI agree without sharing browser storage.
+// The service page pushes/clears the selection; the catalogue reads it.
 
-const WIZARD_URL =
-  (import.meta as any).env?.VITE_WIZARD_URL || "http://localhost:8090";
+const CONTROL_OBJECTIVES_URL =
+  (import.meta as any).env?.VITE_CONTROL_OBJECTIVES_URL || "http://localhost:8090";
 
 // Make a run the active recommendation server-side. Fire-and-forget from the UI.
 export async function pushActiveRecommendation(
   plan: AssessmentPlan
 ): Promise<void> {
-  await fetch(`${WIZARD_URL}/api/recommendation/active`, {
+  await fetch(`${CONTROL_OBJECTIVES_URL}/api/recommendation/active`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(plan),
@@ -210,14 +210,14 @@ export async function pushActiveRecommendation(
 }
 
 export async function clearActiveRecommendation(): Promise<void> {
-  await fetch(`${WIZARD_URL}/api/recommendation/active`, { method: "DELETE" });
+  await fetch(`${CONTROL_OBJECTIVES_URL}/api/recommendation/active`, { method: "DELETE" });
 }
 
 // Read the server-owned active recommendation. null when none is set or the
 // service is unreachable (the catalogue then simply shows no recommendation).
 export async function fetchActiveRecommendation(): Promise<ActiveRecommendation | null> {
   try {
-    const res = await fetch(`${WIZARD_URL}/api/recommendation/active`);
+    const res = await fetch(`${CONTROL_OBJECTIVES_URL}/api/recommendation/active`);
     if (!res.ok) return null;
     const data = await res.json();
     if (!data) return null;
