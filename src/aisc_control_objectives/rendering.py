@@ -16,6 +16,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
+
 from aisc_control_objectives.control_objectives import ControlObjectiveCatalogue
 
 TEMPLATES = Path(__file__).resolve().parent / "templates"

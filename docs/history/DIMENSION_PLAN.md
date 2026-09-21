@@ -1,5 +1,10 @@
 # Dimension-First Recommendations + PDF Export — Development Plan
 
+> [!WARNING]
+> **Historical.** A superseded design note, kept as a record of how the service got
+> here. It is not guidance and it is not maintained: names, counts and pipeline
+> stages in it may no longer match the code. The current contract is the README.
+
 Status: **proposed, for review** · Owner: Alessio · Drafted 2026-06-13
 
 This plan makes **trustworthiness dimensions** the organising axis of the service's

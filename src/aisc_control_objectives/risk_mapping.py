@@ -19,7 +19,8 @@ the judgement is a reading, not an inference about the law.
 from __future__ import annotations
 
 import re
-from typing import Literal, Protocol, Sequence
+from collections.abc import Sequence
+from typing import Literal, Protocol
 
 from pydantic import BaseModel, Field
 

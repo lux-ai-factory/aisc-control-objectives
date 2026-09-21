@@ -3,16 +3,23 @@
 # apps/qualification): a self-contained container joined to the platform networks.
 FROM python:3.12-slim
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+# Pinned: with :latest the build toolchain floats between builds.
+COPY --from=ghcr.io/astral-sh/uv:0.9.9 /uv /uvx /bin/
 
 WORKDIR /app
 
 # Install the package editable so it imports from /app/src — this keeps
 # aisc_control_objectives.server's repo-root resolution (control-objectives.toml, .env) pointing at /app
 # rather than site-packages.
-COPY pyproject.toml ./
+COPY pyproject.toml uv.lock ./
 COPY src ./src
-RUN uv pip install --system --no-cache -e .
+# Dependencies come from uv.lock, so two builds a month apart install the same
+# versions. The project itself is installed without deps, editable, so its
+# repo-root resolution keeps pointing at /app.
+RUN uv export --frozen --no-dev --no-emit-project --no-hashes -o /tmp/requirements.txt \
+ && uv pip install --system --no-cache -r /tmp/requirements.txt \
+ && uv pip install --system --no-cache --no-deps -e . \
+ && rm /tmp/requirements.txt
 
 # Runtime config resolved relative to the repo root (= /app). The objectives
 # CSV and the page template ship inside the package (src/aisc_control_objectives/).

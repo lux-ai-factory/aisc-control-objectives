@@ -10,12 +10,11 @@ from __future__ import annotations
 
 import json
 
-
 from aisc_control_objectives.models.ontology import OntologyRisk
 from aisc_control_objectives.risk_mapping import (
     MAX_ATTEMPTS,
-    Mapping,
     MappedObjective,
+    Mapping,
     RiskMapper,
     map_risks,
     run_controls,

@@ -1,5 +1,10 @@
 # Handoff — Control Objectives (dimension-first + multi-provider + catalogue integration)
 
+> [!WARNING]
+> **Historical.** A superseded design note, kept as a record of how the service got
+> here. It is not guidance and it is not maintained: names, counts and pipeline
+> stages in it may no longer match the code. The current contract is the README.
+
 Last updated: 2026-06-14 · Backend suite: **247 passed**, ruff clean.
 
 This is the running session dump. Older design notes are in `DIMENSION_PLAN.md`

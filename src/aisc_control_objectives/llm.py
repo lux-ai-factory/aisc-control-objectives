@@ -24,7 +24,8 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any, Callable, TypeVar
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 from baf import nlp
 from baf.core.agent import Agent

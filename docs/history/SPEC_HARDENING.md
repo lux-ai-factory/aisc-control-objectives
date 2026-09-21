@@ -1,5 +1,10 @@
 # Control Objectives hardening — work-package specs
 
+> [!WARNING]
+> **Historical.** A superseded design note, kept as a record of how the service got
+> here. It is not guidance and it is not maintained: names, counts and pipeline
+> stages in it may no longer match the code. The current contract is the README.
+
 Status: **draft for review**. Follows `SPEC.md`; same constraints apply
 (§0 strictly additive, demo-safe: everything in Phase A is offline-only,
 TDD throughout). Each work package lists exact behavior, interface changes,

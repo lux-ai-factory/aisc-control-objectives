@@ -27,9 +27,9 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from aisc_control_objectives.api.app import create_app
-from aisc_control_objectives.db.repository import ProjectRepository
 from aisc_control_objectives.config import RunConfig
 from aisc_control_objectives.control_objectives import default_csv_path, load_control_objectives
+from aisc_control_objectives.db.repository import ProjectRepository
 from aisc_control_objectives.projects import Projects
 from aisc_control_objectives.risk_mapping import RiskMapper
 from aisc_control_objectives.settings import database_url

@@ -20,6 +20,7 @@ from pydantic import BaseModel
 
 from aisc_control_objectives.llm import DEFAULT_MODEL, DEFAULT_PROVIDER
 
+
 # The model is named BAF's way: a provider and a model name, the same two
 # variables the qualification filler reads, so a deployment configures both
 # services alike. aisc_control_objectives.llm.PROVIDERS is the list of providers.

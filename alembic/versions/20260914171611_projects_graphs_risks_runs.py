@@ -1,10 +1,10 @@
 """projects, graphs, risks, runs
 
 Revision ID: 711cc0e45c33
-Revises: 
+Revises:
 """
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = '711cc0e45c33'

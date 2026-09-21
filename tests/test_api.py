@@ -11,8 +11,8 @@ from fastapi.testclient import TestClient
 
 from aisc_control_objectives.api.app import create_app
 from aisc_control_objectives.config import RunConfig
-from aisc_control_objectives.models.control_objective import ControlObjective
 from aisc_control_objectives.control_objectives import ControlObjectiveCatalogue
+from aisc_control_objectives.models.control_objective import ControlObjective
 
 
 @pytest.fixture()

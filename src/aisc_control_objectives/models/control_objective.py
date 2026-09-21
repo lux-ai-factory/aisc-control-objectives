@@ -55,7 +55,7 @@ class ControlObjective(BaseModel):
     def _derivations_hold(self) -> ControlObjective:
         if self.id.split(".", 1)[0] != self.macro_id:
             raise ValueError(f"id {self.id!r} is not under macro requirement {self.macro_id!r}")
-        self.regimes  # raises on a basis or a condition it cannot place
+        _ = self.regimes  # evaluated for its side effect: raises on a basis it cannot place
         return self
 
     @computed_field
@@ -114,7 +114,7 @@ class ControlObjective(BaseModel):
         if self.note_tag == "VOLUNTARY":
             return ["voluntary" for _ in self.legal_bases]
         if self.note_tag == "CONDITIONAL":
-            self.condition
+            _ = self.condition  # evaluated for its side effect: raises if the condition is unplaceable
             return ["conditional" for _ in self.legal_bases]
         regimes: list[Regime] = []
         for basis in self.legal_bases:

@@ -223,4 +223,13 @@ docker run -p 8090:8090 --env-file .env -e DATABASE_URL=... aisc-control-objecti
 **What the card says about each objective** (claims, admissions, silence) is a separate, model-backed layer that is not built.
 
 > [!NOTE]
-> `frontend/` still speaks to a retired plan API, and the design documents at the repo root (`SPEC.md`, `SPEC_HARDENING.md`, `DIMENSION_PLAN.md`, `AGENTIC_WORKFLOW.mmd`, `NEXT_STEPS.md`, `HANDOFF.md`) describe a pipeline that no longer exists. They are kept only as a record.
+> `frontend/` still speaks to a retired plan API.
+
+## Documentation
+
+| Where | What it is |
+|---|---|
+| this README | how to run and configure the service; the current contract |
+| `docs/SPEC.md` | what the service is specified to do |
+| `docs/INTEGRATION_AISC.md` | how it is wired into the AISC platform compose |
+| `docs/history/` | session notes and superseded design documents, kept as a record. They describe a pipeline that no longer exists; do not read them as guidance. |
