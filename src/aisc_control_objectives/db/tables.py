@@ -22,15 +22,24 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from sqlalchemy import (
+    Column,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Integer,
+    MetaData,
     String,
+    Table,
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+#: There is one database. This service owns a schema in it, named after
+#: itself, and reads nothing outside that schema except `core`, where the
+#: platform keeps what every module shares.
+SCHEMA = "control_objectives"
 
 
 def _now() -> datetime:
@@ -38,19 +47,66 @@ def _now() -> datetime:
 
 
 class Base(DeclarativeBase):
-    pass
+    metadata = MetaData(schema=SCHEMA)
+
+
+def _core_table(name: str, *columns: Column) -> Table:
+    """A platform table in `core`, as this service needs to see it: its
+    identity, and nothing else. Declared so a foreign key can point at it,
+    marked external so migrations never create or drop it. The platform owns
+    it; this service may read it and point at it, and that is all it is granted.
+    """
+    return Table(
+        name,
+        Base.metadata,
+        Column("pid", UUID(as_uuid=False), primary_key=True),
+        *columns,
+        schema="core",
+        info={"external": True},
+    )
+
+
+#: A platform project.
+core_project = _core_table("project")
+
+#: One saved AI card version of a project's one AI system (the platform
+#: numbers them). An assessment is of exactly one.
+core_system = _core_table("system", Column("project_id", UUID(as_uuid=False)))
 
 
 class Project(Base):
     """One system being assessed. The aggregate everything else hangs off."""
 
     __tablename__ = "project"
+    #: The version belongs to this assessment's project: the pair is a key into
+    #: core.system (pid, project_id), which the platform makes unique. Alembic
+    #: revision 7c3e5a9b1d24 adds it on a database.
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["system_id", "project_id"], ["core.system.pid", "core.system.project_id"],
+            name="fk_project_system_id_project_id_core_system", ondelete="CASCADE",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    #: The platform project this assessment belongs to. Required: an
+    #: assessment of no project is an assessment of nothing, and deleting the
+    #: project takes it with it.
+    project_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("core.project.pid", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    #: The AI card version this assessment is of. One assessment per version;
+    #: deleting the version takes its assessment with it.
+    system_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("core.system.pid", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
     name: Mapped[str] = mapped_column(Text, nullable=False)
-    system_name: Mapped[str] = mapped_column(Text, default="")
-    #: From the graph, so a corrected re-export finds its project.
-    qualification_id: Mapped[str] = mapped_column(Text, default="", index=True)
     #: Which control-objectives catalogue this was assessed against.
     objectives_digest: Mapped[str] = mapped_column(String(64), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

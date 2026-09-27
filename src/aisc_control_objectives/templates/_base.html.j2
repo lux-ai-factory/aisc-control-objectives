@@ -238,14 +238,19 @@
 
 <header class="site-header">
   <div class="inner">
-    <a class="brand" href="{{ root_path }}/">
+    {# Like the qualification app's: the mark goes back to the launcher,
+       to this project's page when there is one. #}
+    <a class="brand" href="{{ project_page or launcher_url() }}">
       <img src="{{ root_path }}/static/laif-logo.svg" alt="Luxembourg AI Factory">
       <span class="divider"></span>
       <span>AI Act Control Objectives</span>
     </a>
     <nav class="site-nav">
-      <a href="{{ root_path }}/objectives" {% if here == "objectives" %}class="nav-here"{% endif %}>Control objectives</a>
-      <a href="{{ root_path }}/projects" {% if here == "projects" %}class="nav-here"{% endif %}>Projects</a>
+      {# Back to this project's page on the launcher, where the other five
+         steps are. The project is chosen there, once. #}
+      {% if project_page %}<a href="{{ project_page }}" aria-label="Back to the project">&larr; Back</a>{% endif %}
+      <a href="{{ project_base or root_path }}/objectives" {% if here == "objectives" %}class="nav-here"{% endif %}>Control objectives</a>
+      {% if project_base %}<a href="{{ project_base }}/projects" {% if here == "projects" %}class="nav-here"{% endif %}>Projects</a>{% endif %}
     </nav>
   </div>
 </header>

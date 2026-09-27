@@ -10,7 +10,12 @@ from __future__ import annotations
 
 import os
 
-DEFAULT_URL = "postgresql+psycopg://aisc-postgres-user:dev-password@localhost:5432/control_objectives"
+#: One database for the whole platform; this service connects as its own role,
+#: whose search path is its schema and `core`.
+DEFAULT_URL = (
+    "postgresql+psycopg://control_objectives_rw:control_objectives_rw"
+    "@localhost:5432/platform"
+)
 
 
 def database_url(env: dict | None = None) -> str:

@@ -135,6 +135,31 @@ class TestObjectivesPage:
         assert response.status_code == 200
         assert "svg" in response.headers["content-type"]
 
+    def test_the_logo_is_served_behind_the_proxy(self, objectives, repository):
+        """Caddy strips /control-objectives before the request arrives, so the
+        logo is asked for at /static/... while the app runs with a root_path.
+        A 404 here shows the image's alt text in place of the mark."""
+        from aisc_control_objectives.api.app import NoMapper
+        from aisc_control_objectives.projects import Projects
+
+        app = create_app(
+            objectives,
+            Projects(repository, objectives, NoMapper()),
+            base_config=RunConfig(),
+            root_path="/control-objectives",
+        )
+        client = TestClient(app, root_path="/control-objectives")
+        page = client.get("/objectives").text
+        assert 'src="/control-objectives/static/laif-logo.svg"' in page
+        response = client.get("/static/laif-logo.svg")
+        assert response.status_code == 200
+        assert "svg" in response.headers["content-type"]
+
+    def test_the_logo_links_to_the_launcher(self, page):
+        """Like the qualification app's: outside a project the mark goes back
+        to the launcher, where projects are chosen."""
+        assert '<a class="brand" href="http://localhost:8100/">' in page
+
     def test_the_counts_are_stated(self, page):
         assert ">50<" in page  # objectives
         assert ">11<" in page  # macro requirements

@@ -11,7 +11,7 @@
   </div>
 
   <div class="co-doors">
-    <a class="co-door" href="{{ root_path }}/objectives">
+    <a class="co-door" href="{{ project_base or root_path }}/objectives">
       <span class="co-door-count">{{ objectives_count }}</span>
       <h2>Control objectives</h2>
       <p>The catalogue: {{ objectives_count }} objectives under {{ macros_count }} macro
@@ -20,7 +20,8 @@
       <span class="co-door-go">Explore the catalogue →</span>
     </a>
 
-    <a class="co-door co-door--primary" href="{{ root_path }}/projects">
+    {% if project_base %}
+    <a class="co-door co-door--primary" href="{{ project_base }}/projects">
       <span class="co-door-count">{{ projects_count }}</span>
       <h2>Projects</h2>
       <p>{% if projects_count %}{{ projects_count }} system{{ 's' if projects_count != 1 }} under assessment.{% else %}No systems under assessment yet.{% endif %}
@@ -30,6 +31,7 @@
         {%- if projects_count %}Open the projects →{% else %}Assess a system →{% endif %}
       </span>
     </a>
+    {% endif %}
   </div>
 
   <div class="qf-section">

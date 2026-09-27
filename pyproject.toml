@@ -15,18 +15,22 @@ dependencies = [
     "sqlalchemy>=2.0",
     "alembic>=1.13",
     "psycopg[binary]>=3.1",
+    # aisc_identity verifies Keycloak tokens; the package itself is mounted
+    # from shared/, its one dependency is installed here.
+    "pyjwt[crypto]>=2.8",
     # The platform's one way to a model: the same framework, version and
     # provider SDKs the qualification filler uses.
     "besser-agentic-framework==4.5.1",
     "openai>=1.55",      # the ten OpenAI-compatible wrappers, Mistral included
     "anthropic>=0.40",   # LLMAnthropic, which uses the native SDK
     "ollama>=0.3",       # LLMOllama, for a model you host yourself
+    # The platform and qualification, asked for the latest card version and its card.
+    "httpx>=0.27",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
-    "httpx>=0.27",
     "ruff>=0.16",
 ]
 
@@ -56,4 +60,9 @@ ignore = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+# aisc_identity is shared by every Python service: mounted into the container
+# from shared/, three levels up in the repo.
+pythonpath = ["src", "../../shared/identity"]
+markers = [
+    "chain: a step of scripts/test-pipeline-chain.sh, skipped without CHAIN_JSON",
+]

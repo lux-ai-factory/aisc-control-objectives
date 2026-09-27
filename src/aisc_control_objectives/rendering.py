@@ -11,6 +11,7 @@ read as one platform.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
@@ -26,19 +27,54 @@ STATIC = Path(__file__).resolve().parent / "static"
 #: "Paired" only explains a Control + Test row and stays neutral.
 FLAG_TAGS = ("GAP", "CONDITIONAL", "VOLUNTARY")
 
+#: The launcher on a developer's machine, when LAUNCHER_URL is not set.
+DEFAULT_LAUNCHER_URL = "http://localhost:8100/"
+
 
 @lru_cache(maxsize=1)
 def _environment() -> Environment:
-    return Environment(
+    environment = Environment(
         loader=FileSystemLoader(TEMPLATES),
         autoescape=select_autoescape(["html", "html.j2"]),
         trim_blocks=True,
         lstrip_blocks=True,
     )
+    environment.globals["launcher_url"] = launcher_url
+    return environment
+
+
+def launcher_url() -> str:
+    """Where projects are chosen. Read from the environment, because it is
+    outside this service."""
+    return os.environ.get("LAUNCHER_URL", DEFAULT_LAUNCHER_URL).rstrip("/") + "/"
+
+
+def project_base(root_path: str, project: str) -> str:
+    """Everything about one project hangs off this prefix. Pages build their
+    links from it, so navigating never drops the project the way a query
+    string can."""
+    return f"{root_path}/p/{project}" if project else ""
+
+
+def project_page(project: str) -> str:
+    """Where the launcher shows this project and the other five steps."""
+    return f"{launcher_url()}p/{project}" if project else ""
+
+
+def _navigation(root_path: str, project: str) -> dict[str, str]:
+    """What every page's header and links are built from."""
+    return {
+        "root_path": root_path,
+        "project_base": project_base(root_path, project),
+        "project_page": project_page(project),
+    }
 
 
 def render_home_page(
-    catalogue: ControlObjectiveCatalogue, projects_count: int, root_path: str = ""
+    catalogue: ControlObjectiveCatalogue,
+    projects_count: int | None,
+    root_path: str = "",
+    project: str = "",
 ) -> str:
     """The way in: what the two halves are, and how an assessment runs."""
     return _environment().get_template("home.html.j2").render(
@@ -46,12 +82,15 @@ def render_home_page(
         macros_count=len(catalogue.macro_requirements()),
         projects_count=projects_count,
         here="home",
-        root_path=root_path,
+        **_navigation(root_path, project),
     )
 
 
 def render_objectives_page(
-    catalogue: ControlObjectiveCatalogue, source_name: str = "", root_path: str = ""
+    catalogue: ControlObjectiveCatalogue,
+    source_name: str = "",
+    root_path: str = "",
+    project: str = "",
 ) -> str:
     """The full objectives page as HTML."""
     template = _environment().get_template("objectives.html.j2")
@@ -61,7 +100,7 @@ def render_objectives_page(
         source_name=source_name,
         flag_tags=FLAG_TAGS,
         here="objectives",
-        root_path=root_path,
+        **_navigation(root_path, project),
     )
 
 
@@ -117,15 +156,19 @@ class _Counts:
     tier3: int = 0
 
 
-def render_projects_page(views: list, root_path: str = "") -> str:
-    """The systems under assessment."""
+def render_projects_page(views: list, root_path: str = "", project: str = "") -> str:
+    """The systems under assessment, in one project."""
     return _environment().get_template("projects.html.j2").render(
-        projects=views, here="projects", root_path=root_path
+        projects=views, here="projects", **_navigation(root_path, project)
     )
 
 
-def render_project_page(view, catalogue: ControlObjectiveCatalogue, root_path: str = "") -> str:
-    """One project: its risks, and the tiers they produce."""
+def render_project_page(
+    view, catalogue: ControlObjectiveCatalogue, root_path: str = "", project: str = "",
+    read_only: str | None = None,
+) -> str:
+    """One project: its risks, and the tiers they produce. `read_only` says why
+    an older version's assessment can no longer be ranked or mapped."""
     record = view.record
     priorities = {p.objective_id: p for p in view.priorities}
     counts = _Counts()
@@ -154,5 +197,6 @@ def render_project_page(view, catalogue: ControlObjectiveCatalogue, root_path: s
         here="projects",
         risks=_risk_views(record),
         objective_labels={o.id: o.sub_requirement_label for o in catalogue},
-        root_path=root_path,
+        read_only=read_only,
+        **_navigation(root_path, project),
     )

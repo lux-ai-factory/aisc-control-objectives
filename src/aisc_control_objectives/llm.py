@@ -18,127 +18,38 @@ BAF's LLMs are text in, text out, so the JSON this service asks for is extracted
 and validated here rather than requested as a provider-side schema. That is the
 same bargain the filler takes, and it works on providers that have no
 structured-output mode at all.
+
+The provider table and the building itself live in `baf_llm.py`, a byte-for-byte
+copy of the card agent's module; this one keeps the environment-only API and the
+JSON helpers. A project's own model and key (the platform's "Models and API keys"
+page) reach the risk mapper through `baf_llm.config_for`, wired in `server.py`.
 """
 
 from __future__ import annotations
 
 import json
 import os
-from collections.abc import Callable
 from typing import Any, TypeVar
 
-from baf import nlp
-from baf.core.agent import Agent
-from baf.nlp.llm.llm_anthropic import LLMAnthropic
-from baf.nlp.llm.llm_deepseek import LLMDeepSeek
-from baf.nlp.llm.llm_google import LLMGoogle
-from baf.nlp.llm.llm_groq import LLMGroq
-from baf.nlp.llm.llm_meta import LLMMeta
-from baf.nlp.llm.llm_mistral import LLMMistral
-from baf.nlp.llm.llm_ollama import LLMOllama
-from baf.nlp.llm.llm_openai_api import LLMOpenAI
-from baf.nlp.llm.llm_openai_compatible import LLMOpenAICompatible
-from baf.nlp.llm.llm_openrouter import LLMOpenRouter
-from baf.nlp.llm.llm_qwen import LLMQwen
-from baf.nlp.llm.llm_together import LLMTogether
-from baf.nlp.llm.llm_xai import LLMxAI
 from pydantic import BaseModel, ValidationError
 
-#: provider name -> (BAF wrapper, the property holding its key, the env var it
-#: comes from). No two providers read the same variable, and a provider that
-#: needs no credential says None twice. The table mirrors the qualification
-#: filler's, so a deployment configures both services the same way.
-PROVIDERS: dict[str, tuple[type, object | None, str | None]] = {
-    "anthropic": (LLMAnthropic, nlp.ANTHROPIC_API_KEY, "ANTHROPIC_API_KEY"),
-    # Its own neutral variable, not OpenAI's: this provider is for a vLLM, an
-    # LM Studio or a gateway, whose token is not an OpenAI key.
-    "compatible": (LLMOpenAICompatible, nlp.OPENAI_API_KEY, "BAF_LLM_API_KEY"),
-    "deepseek": (LLMDeepSeek, nlp.DEEPSEEK_API_KEY, "DEEPSEEK_API_KEY"),
-    "google": (LLMGoogle, nlp.GOOGLE_API_KEY, "GOOGLE_API_KEY"),
-    "groq": (LLMGroq, nlp.GROQ_API_KEY, "GROQ_API_KEY"),
-    "meta": (LLMMeta, nlp.META_API_KEY, "META_API_KEY"),
-    "mistral": (LLMMistral, nlp.MISTRAL_API_KEY, "MISTRAL_API_KEY"),
-    "ollama": (LLMOllama, None, None),
-    "openai": (LLMOpenAI, nlp.OPENAI_API_KEY, "OPENAI_API_KEY"),
-    "openrouter": (LLMOpenRouter, nlp.OPENROUTER_API_KEY, "OPENROUTER_API_KEY"),
-    "qwen": (LLMQwen, nlp.QWEN_API_KEY, "QWEN_API_KEY"),
-    "together": (LLMTogether, nlp.TOGETHER_API_KEY, "TOGETHER_API_KEY"),
-    "xai": (LLMxAI, nlp.XAI_API_KEY, "XAI_API_KEY"),
-}
-
-#: Providers that work without a credential: a model on this machine, and an
-#: endpoint you host, which may or may not ask for a token.
-OPTIONAL_KEY = frozenset({"ollama", "compatible"})
-
-DEFAULT_PROVIDER = "mistral"
-DEFAULT_MODEL = "mistral-large-latest"
-
-#: What the loop calls: (system, user) -> the model's answer as text.
-Completer = Callable[..., str]
+from aisc_control_objectives import baf_llm
+from aisc_control_objectives.baf_llm import (  # noqa: F401  re-exported: today's names keep working
+    DEFAULT_MODEL,
+    DEFAULT_PROVIDER,
+    OPTIONAL_KEY,
+    PROVIDERS,
+    Completer,
+    completer,
+)
 
 T = TypeVar("T", bound=BaseModel)
 
 
-def build_llm(provider: str, model: str, agent: Agent | None = None):
+def build_llm(provider: str, model: str, agent=None):
     """A BAF LLM, configured from the environment through BAF's property store."""
-    provider = (provider or DEFAULT_PROVIDER).lower()
-    if provider not in PROVIDERS:
-        raise ValueError(
-            f"{provider!r} is not a provider this service configures; "
-            f"expected one of {', '.join(sorted(PROVIDERS))}"
-        )
-    wrapper, key_property, env_var = PROVIDERS[provider]
-
-    # The agent is BAF's configuration scope: properties live on it, and the
-    # LLM reads its credential from there rather than from us.
-    agent = agent or Agent("control objectives_llm")
-    base_url = os.environ.get("BAF_LLM_BASE_URL")
-    key = os.environ.get(env_var) if env_var else None
-
-    if key:
-        agent.set_property(key_property, key)
-    elif provider not in OPTIONAL_KEY:
-        raise ValueError(
-            f"{provider} needs {env_var} in the environment; set it, or use "
-            "BAF_LLM_PROVIDER=ollama for a model on this machine"
-        )
-
-    parameters: dict[str, Any] = {}
-    if provider == "ollama" and base_url:
-        # Ollama's endpoint is a BAF property of its own.
-        agent.set_property(nlp.OLLAMA_BASE_URL, base_url)
-    elif provider == "compatible":
-        if not base_url:
-            raise ValueError(
-                "compatible needs BAF_LLM_BASE_URL: it is the provider for an "
-                "endpoint you host, so there is no default to fall back on"
-            )
-        parameters["base_url"] = base_url
-        # The OpenAI SDK refuses to construct without a key even when the
-        # endpoint is local and wants none; vLLM and LM Studio ignore it.
-        parameters["api_key"] = key or "not-needed"
-
-    llm = wrapper(agent=agent, name=model, parameters=parameters)
-    # BAF initialises its LLMs when the agent runs, and this service drives the
-    # flow itself, so nobody else will: without this the first predict fails on
-    # a client that was never built.
-    llm.initialize()
-    return llm
-
-
-def completer(llm) -> Completer:
-    """Adapt a BAF LLM to the two-prompt call this service makes.
-
-    The caller asks for (system, user); BAF's predict takes the user message
-    and the system message separately, which is the same thing said its way.
-    """
-
-    def complete(system: str, user: str, temperature: float = 0) -> str:
-        return llm.predict(
-            user, parameters={"temperature": temperature}, system_message=system
-        )
-
-    return complete
+    config = baf_llm.config_from_env(os.environ, provider, model)
+    return baf_llm.build_llm(config, agent=agent, agent_name="control_objectives_llm")
 
 
 def json_object(text: str) -> dict:

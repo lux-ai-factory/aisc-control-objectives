@@ -1,6 +1,6 @@
 """A project: one system, from its AI Card to its tiers.
 
-    upload the AI Card ──────► create()          stored as the bytes uploaded
+    start the assessment ────► create()          the latest version's card, stored as served
              │                                   its risks become rows
              ▼
     the assessor rates ─────► rate()             1-5 per risk
@@ -19,13 +19,22 @@ recomputed: the uploaded bytes, the ratings, and what the mapping cost.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
+from aisc_control_objectives.baf_llm import ResolveError
 from aisc_control_objectives.control_objectives import ControlObjectiveCatalogue
 from aisc_control_objectives.db.repository import ProjectRecord, ProjectRepository
 from aisc_control_objectives.models.ontology import Ontology
 from aisc_control_objectives.prioritising import Priority, prioritise
 from aisc_control_objectives.risk_mapping import Mapper, map_risks
+
+#: platform project pid -> (the mapper to use for it, "<provider>/<model>" of its model)
+MapperFor = Callable[[str], tuple[Mapper, str]]
+
+
+class ModelUnavailable(RuntimeError):
+    """The project's model could not be had; nothing was saved."""
 
 
 @dataclass
@@ -54,28 +63,40 @@ class Projects:
         catalogue: ControlObjectiveCatalogue,
         mapper: Mapper,
         model: str = "",
+        mapper_for: MapperFor | None = None,
     ):
+        """`mapper` and `model` are the service's own (its environment). With
+        `mapper_for`, each map asks it for the mapper of the assessment's project
+        instead, so a project that chose its own model on the platform gets it."""
         self._repository = repository
         self._catalogue = catalogue
         self._mapper = mapper
         self._model = model
+        self._mapper_for = mapper_for
 
     # ── the flow ──────────────────────────────────────────────────────────
 
-    def create(self, name: str, jsonld: str, raw: object) -> ProjectView:
-        """Take the AI Card. Its risks are what the assessor rates next."""
+    def create(
+        self, project: str, name: str, jsonld: str, raw: object, system_id: str
+    ) -> ProjectView:
+        """Take the AI card of one version. Its risks are what the assessor rates next.
+
+        `project` is the platform project being assessed and `system_id` the
+        card version (core.system) the assessment is of: one per version.
+        """
         ontology = Ontology.from_jsonld(raw)
         record = self._repository.create(
-            name=name or ontology.system_name, ontology=ontology, jsonld=jsonld
+            project=project, name=name or ontology.system_name,
+            ontology=ontology, jsonld=jsonld, system_id=system_id,
         )
         return self.view(record.id)
 
-    def replace_card(self, project_id: str, jsonld: str, raw: object) -> ProjectView:
-        """A corrected card. Ratings for risks it still has are kept; the
-        mapping goes, because it was bought against the card being replaced."""
-        ontology = Ontology.from_jsonld(raw)
-        self._repository.replace_ontology(project_id, ontology=ontology, jsonld=jsonld)
-        return self.view(project_id)
+    def find_by_system(self, system_id: str) -> ProjectView | None:
+        record = self._repository.find_by_system(system_id)
+        return self._derive(record) if record else None
+
+    def is_latest(self, view: ProjectView) -> bool:
+        return self._repository.is_latest(view.record)
 
     def rate(self, project_id: str, ratings: dict[str, int]) -> ProjectView:
         known = {risk.id for risk in self._repository.get(project_id).ontology.risks}
@@ -88,8 +109,14 @@ class Projects:
     def map_risks_of(self, project_id: str) -> ProjectView:
         """The one agentic step: which objectives mitigate each risk."""
         record = self._repository.get(project_id)
-        run = map_risks(record.ontology.risks, self._mapper, self._catalogue)
-        self._repository.save_mapping_run(project_id, run, model=self._model)
+        mapper, model = self._mapper, self._model
+        if self._mapper_for is not None:
+            try:
+                mapper, model = self._mapper_for(record.project)
+            except (ResolveError, ValueError) as exc:
+                raise ModelUnavailable(str(exc)) from exc
+        run = map_risks(record.ontology.risks, mapper, self._catalogue)
+        self._repository.save_mapping_run(project_id, run, model=model)
         return self.view(project_id)
 
     def delete(self, project_id: str) -> None:
@@ -101,8 +128,9 @@ class Projects:
         record = self._repository.get(project_id)
         return self._derive(record) if record else None
 
-    def list(self) -> list[ProjectView]:
-        return [self._derive(record) for record in self._repository.list()]
+    def list(self, project: str) -> list[ProjectView]:
+        """The assessments of one platform project, and no other's."""
+        return [self._derive(record) for record in self._repository.list(project)]
 
     def _derive(self, record: ProjectRecord) -> ProjectView:
         """Tiers, computed from what is stored. Never written back: a changed

@@ -9,11 +9,13 @@ domain keeps validating its own shape on the way back out.
 from __future__ import annotations
 
 import hashlib
+import json
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from sqlalchemy import create_engine, delete, func, select
+from sqlalchemy import create_engine, func, select, text
+from sqlalchemy.schema import CreateSchema
 from sqlalchemy.orm import Session, sessionmaker
 
 from aisc_control_objectives.db import tables
@@ -33,17 +35,33 @@ class ProjectRecord:
     """One project, as the rest of the service wants it."""
 
     id: str
+    #: The platform project this assessment belongs to.
+    project: str
     name: str
+    #: Both read from the stored card, which is the authority on them.
     system_name: str
     qualification_id: str
     objectives_digest: str
     created_at: datetime
     updated_at: datetime
+    #: The AI card version (core.system pid) this assessment is of, its number,
+    #: and the project's latest number: only the latest version's assessment changes.
+    system_id: str = ""
+    version_number: int | None = None
+    latest_number: int | None = None
     jsonld: str = ""
     digest: str = ""
     ontology: Ontology = field(default_factory=Ontology)
     severity: Severity = field(default_factory=Severity)
     mapping_run: MappingRun | None = None
+
+
+#: A card version's number and the highest number in its project, read from
+#: the platform's `core.system`.
+_VERSION_NUMBERS = text(
+    "SELECT s.number, (SELECT max(o.number) FROM core.system o"
+    " WHERE o.project_id = s.project_id) FROM core.system s WHERE s.pid = :sid"
+)
 
 
 class ProjectRepository:
@@ -53,63 +71,57 @@ class ProjectRepository:
         self._url = url
         self._objectives_digest = objectives_digest
 
+    @property
+    def engine(self):
+        """The connection this repository holds.
+
+        Exposed for the one thing outside this module that needs it: the door
+        reads `core.project_member` through the same database, rather than
+        opening a second one or asking the platform over HTTP.
+        """
+        return self._engine
+
     def reopened(self) -> ProjectRepository:
         """A second repository on the same database: what a restart would give."""
         return ProjectRepository(self._url, self._objectives_digest)
 
     def create_all(self) -> None:
         """Tests and first run. Deployments use `alembic upgrade head`."""
-        tables.Base.metadata.create_all(self._engine)
+        with self._engine.begin() as connection:
+            # On the platform the schema is already there and this role may not
+            # make one; in a scratch database it is the first thing needed.
+            # `core` belongs to the platform and is never created here.
+            missing = connection.execute(
+                text("SELECT to_regnamespace(:s) IS NULL"), {"s": tables.SCHEMA}
+            ).scalar()
+            if missing:
+                connection.execute(CreateSchema(tables.SCHEMA))
+        tables.Base.metadata.create_all(
+            self._engine,
+            tables=[t for t in tables.Base.metadata.sorted_tables
+                    if not t.info.get("external")],
+        )
 
     # ── writing ───────────────────────────────────────────────────────────
 
-    def create(self, name: str, ontology: Ontology, jsonld: str) -> ProjectRecord:
+    def create(
+        self, project: str, name: str, ontology: Ontology, jsonld: str, *, system_id: str
+    ) -> ProjectRecord:
+        """`project` is the platform project this assessment is part of, and
+        `system_id` the AI card version (core.system) it is of: one assessment
+        per version, which the database holds (UNIQUE system_id)."""
         with self._sessions.begin() as session:
-            project = tables.Project(
+            row = tables.Project(
                 id=uuid.uuid4().hex[:12],
+                project_id=project,
+                system_id=system_id,
                 name=name,
-                system_name=ontology.system_name,
-                qualification_id=ontology.qualification_id,
                 objectives_digest=self._objectives_digest,
             )
-            session.add(project)
-            self._attach_card(session, project, ontology, jsonld)
+            session.add(row)
+            self._attach_card(session, row, ontology, jsonld)
             session.flush()
-            return self._to_record(project)
-
-    def replace_ontology(
-        self, project_id: str, ontology: Ontology, jsonld: str
-    ) -> ProjectRecord:
-        """A corrected card replaces the graph and keeps the project.
-
-        Ratings name risks, so a rating whose risk the new card does not have
-        goes with it; the card is the authority on what risks exist. The
-        mapping goes too: it was bought against the card being replaced.
-        """
-        with self._sessions.begin() as session:
-            project = session.get(tables.Project, project_id)
-            kept = {
-                row.risk_id: row.severity
-                for row in project.risks
-                if row.severity is not None
-            }
-            session.execute(delete(tables.Risk).where(tables.Risk.project_id == project_id))
-            session.execute(
-                delete(tables.MappingRunRow).where(
-                    tables.MappingRunRow.project_id == project_id
-                )
-            )
-            if project.graph is not None:
-                session.delete(project.graph)
-            session.flush()
-            # Severities are set as the rows are created: reading them back off
-            # `project.risks` straight after a delete-and-re-add reads a stale
-            # collection, and silently loses the assessor's ratings.
-            self._attach_card(session, project, ontology, jsonld, severities=kept)
-            project.system_name = ontology.system_name
-            project.qualification_id = ontology.qualification_id
-            session.flush()
-            return self._to_record(project)
+            return self._to_record(session, row)
 
     def rate(self, project_id: str, ratings: dict[str, int]) -> None:
         with self._sessions.begin() as session:
@@ -164,14 +176,32 @@ class ProjectRepository:
     def get(self, project_id: str) -> ProjectRecord | None:
         with self._sessions() as session:
             project = session.get(tables.Project, project_id)
-            return self._to_record(project) if project else None
+            return self._to_record(session, project) if project else None
 
-    def list(self) -> list[ProjectRecord]:
+    def find_by_system(self, system_id: str) -> ProjectRecord | None:
+        """The assessment of one AI card version, if it has one."""
+        with self._sessions() as session:
+            project = session.scalar(
+                select(tables.Project).where(tables.Project.system_id == system_id)
+            )
+            return self._to_record(session, project) if project else None
+
+    @staticmethod
+    def is_latest(record: ProjectRecord) -> bool:
+        """Whether the assessment is of the project's latest card version: only
+        that one may still be mapped and rated."""
+        return record.version_number is not None and record.version_number == record.latest_number
+
+    def list(self, project: str) -> list[ProjectRecord]:
+        """The assessments of one platform project. A module reads what it
+        needs and no more, so there is no way to list every project's."""
         with self._sessions() as session:
             rows = session.scalars(
-                select(tables.Project).order_by(tables.Project.updated_at.desc())
+                select(tables.Project)
+                .where(tables.Project.project_id == project)
+                .order_by(tables.Project.updated_at.desc())
             ).all()
-            return [self._to_record(row) for row in rows]
+            return [self._to_record(session, row) for row in rows]
 
     def orphan_rows(self) -> int:
         """Rows whose project is gone: should always be zero, and a test says so."""
@@ -190,7 +220,6 @@ class ProjectRepository:
         project: tables.Project,
         ontology: Ontology,
         jsonld: str,
-        severities: dict[str, int] | None = None,
     ) -> None:
         session.add(
             tables.Graph(
@@ -218,12 +247,31 @@ class ProjectRepository:
                     areas=list(risk.areas),
                     vair_terms=list(risk.vair_terms),
                     provenance=risk.provenance,
-                    severity=(severities or {}).get(risk.id),
                 )
             )
 
     @staticmethod
-    def _to_record(project: tables.Project) -> ProjectRecord:
+    def _version_numbers(session: Session, system_id: str) -> tuple[int | None, int | None]:
+        """The number of this card version, and the project's latest number."""
+        numbers = session.execute(_VERSION_NUMBERS, {"sid": system_id}).first()
+        return (numbers[0], numbers[1]) if numbers else (None, None)
+
+    @staticmethod
+    def _stored_card(graph: tables.Graph | None) -> Ontology:
+        """The stored card, parsed; empty when there is none or it no longer parses."""
+        if graph is None or not graph.jsonld:
+            return Ontology()
+        try:
+            return Ontology.from_jsonld(json.loads(graph.jsonld))
+        except Exception:  # a stored card that no longer parses still lists
+            return Ontology()
+
+    @staticmethod
+    def _to_record(session: Session, project: tables.Project) -> ProjectRecord:
+        version_number, latest_number = ProjectRepository._version_numbers(
+            session, project.system_id
+        )
+        card = ProjectRepository._stored_card(project.graph)
         risks = [
             OntologyRisk(
                 id=row.risk_id,
@@ -245,17 +293,21 @@ class ProjectRepository:
 
         record = ProjectRecord(
             id=project.id,
+            project=project.project_id,
             name=project.name,
-            system_name=project.system_name,
-            qualification_id=project.qualification_id,
+            system_name=card.system_name,
+            qualification_id=card.qualification_id,
             objectives_digest=project.objectives_digest,
             created_at=project.created_at,
             updated_at=project.updated_at,
+            system_id=project.system_id,
+            version_number=version_number,
+            latest_number=latest_number,
             jsonld=project.graph.jsonld if project.graph else "",
             digest=project.graph.digest if project.graph else "",
             ontology=Ontology(
-                qualification_id=project.qualification_id,
-                system_name=project.system_name,
+                qualification_id=card.qualification_id,
+                system_name=card.system_name,
                 risks=risks,
             ),
             severity=Severity(

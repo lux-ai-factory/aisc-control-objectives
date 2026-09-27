@@ -12,6 +12,10 @@ Env:
   BAF_LLM_PROVIDER / BAF_LLM_MODEL        which model, BAF's names
   BAF_LLM_BASE_URL         endpoint for the ollama / compatible providers
   MISTRAL_API_KEY / OPENAI_API_KEY / …    the provider's own key
+  PLATFORM_URL / PLATFORM_INTERNAL_TOKEN  where to ask for a project's own model choice
+                                          (both set: each map uses the model its project
+                                          chose; no choice: the model above)
+  LLM_RESOLVE_TIMEOUT      seconds the platform may take to answer (default 5)
   CONTROL_OBJECTIVES_PORT              port to serve on (default 8090)
   CONTROL_OBJECTIVES_ROOT_PATH         sub-path when behind a reverse proxy
   CONTROL_OBJECTIVES_CORS_ORIGINS      comma-separated allowlist (default permissive)
@@ -26,6 +30,7 @@ import os
 from collections.abc import Mapping
 from pathlib import Path
 
+from aisc_control_objectives import baf_llm
 from aisc_control_objectives.api.app import create_app
 from aisc_control_objectives.config import RunConfig
 from aisc_control_objectives.control_objectives import default_csv_path, load_control_objectives
@@ -101,12 +106,23 @@ def build_app():
     cors_env = os.environ.get("CONTROL_OBJECTIVES_CORS_ORIGINS", "").strip()
     cors_origins = [o.strip() for o in cors_env.split(",") if o.strip()] or None
     complete = _build_completer(config)
+    startup = baf_llm.config_from_env(os.environ, config.provider, config.model)
+
+    def mapper_for(pid: str):
+        """The mapper for one project: the model it chose on the platform, else the
+        startup one. Asked at every map, so a changed choice applies to the next."""
+        chosen = baf_llm.config_for(pid, "risk_mapper", fallback=startup)
+        llm = baf_llm.build_llm(chosen, agent_name="control_objectives_llm")
+        return (RiskMapper(complete=baf_llm.completer(llm), catalogue=objectives),
+                f"{chosen.provider}/{chosen.model}")
+
     repository = ProjectRepository(database_url(), objectives_digest=objectives.digest)
     projects = Projects(
         repository=repository,
         catalogue=objectives,
         mapper=RiskMapper(complete=complete, catalogue=objectives),
         model=f"{config.provider}/{config.model}",
+        mapper_for=mapper_for,
     )
     return create_app(
         objectives,
@@ -115,6 +131,9 @@ def build_app():
         root_path=os.environ.get("CONTROL_OBJECTIVES_ROOT_PATH", ""),
         cors_origins=cors_origins,
         source_name=source_name,
+        # Who is in a project. Read from the shared table through the
+        # connection this service already has.
+        engine=repository.engine,
     )
 
 

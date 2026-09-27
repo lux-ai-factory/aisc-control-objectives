@@ -6,6 +6,10 @@ derivable left out so it cannot go stale.
 
 The tests run in a transaction that is rolled back, so they are isolated
 without truncating anything.
+
+(Rewritten for WP7, pipeline 2026-09-23: every assessment is of one saved card
+version, `system_id`, one version per assessment. The replaced-card case was
+about the removed upload route.)
 """
 
 from __future__ import annotations
@@ -29,30 +33,30 @@ def ontology(graph_json):
 
 
 class TestCreatingAProject:
-    def test_a_project_starts_from_an_uploaded_graph(self, repository, ontology, graph_json):
-        project = repository.create(name="MCAS", ontology=ontology, jsonld=graph_json)
+    def test_a_project_starts_from_an_uploaded_graph(self, system_version, repository, platform_project, ontology, graph_json):
+        project = repository.create(project=platform_project, name="MCAS", ontology=ontology, jsonld=graph_json, system_id=system_version(platform_project, 1))
         assert project.id
         assert project.name == "MCAS"
         assert project.system_name.startswith("MicroCredit")
         assert project.qualification_id == ontology.qualification_id
 
     def test_the_graph_is_kept_as_the_bytes_that_were_uploaded(
-        self, repository, ontology, graph_json
+        self, system_version, repository, platform_project, ontology, graph_json
     ):
         """Their KnowledgeGraph rule: exports serve these bytes, so the file
         someone was given and the row are the same document."""
-        project = repository.create(name="MCAS", ontology=ontology, jsonld=graph_json)
+        project = repository.create(project=platform_project, name="MCAS", ontology=ontology, jsonld=graph_json, system_id=system_version(platform_project, 1))
         stored = repository.get(project.id)
         assert stored.jsonld == graph_json
 
-    def test_the_graph_has_an_identity(self, repository, ontology, graph_json):
-        first = repository.create(name="one", ontology=ontology, jsonld=graph_json)
-        second = repository.create(name="two", ontology=ontology, jsonld=graph_json)
+    def test_the_graph_has_an_identity(self, system_version, repository, platform_project, ontology, graph_json):
+        first = repository.create(project=platform_project, name="one", ontology=ontology, jsonld=graph_json, system_id=system_version(platform_project, 1))
+        second = repository.create(project=platform_project, name="two", ontology=ontology, jsonld=graph_json, system_id=system_version(platform_project, 2))
         assert first.digest == second.digest
         assert len(first.digest) == 64
 
-    def test_the_risks_become_rows(self, repository, ontology, graph_json):
-        project = repository.create(name="MCAS", ontology=ontology, jsonld=graph_json)
+    def test_the_risks_become_rows(self, system_version, repository, platform_project, ontology, graph_json):
+        project = repository.create(project=platform_project, name="MCAS", ontology=ontology, jsonld=graph_json, system_id=system_version(platform_project, 1))
         stored = repository.get(project.id)
         assert len(stored.ontology.risks) == 5
         risk = stored.ontology.by_id("risk2")
@@ -62,11 +66,11 @@ class TestCreatingAProject:
 
 
 class TestSurvivingARestart:
-    def test_everything_worth_money_comes_back(self, repository, ontology, graph_json):
+    def test_everything_worth_money_comes_back(self, system_version, repository, platform_project, ontology, graph_json):
         """The mapping cost five model calls; losing it to a restart means
         paying again for a slightly different answer. The ranking is worth
         more still: a person made it."""
-        project = repository.create(name="MCAS", ontology=ontology, jsonld=graph_json)
+        project = repository.create(project=platform_project, name="MCAS", ontology=ontology, jsonld=graph_json, system_id=system_version(platform_project, 1))
         repository.save_mapping_run(
             project.id,
             MappingRun(
@@ -89,8 +93,8 @@ class TestSurvivingARestart:
         assert stored.mapping_run.model == "openai/gpt-4o"
         assert stored.severity.ratings == {"risk2": 5, "risk4": 1}
 
-    def test_a_run_that_struggled_keeps_its_findings(self, repository, ontology, graph_json):
-        project = repository.create(name="MCAS", ontology=ontology, jsonld=graph_json)
+    def test_a_run_that_struggled_keeps_its_findings(self, system_version, repository, platform_project, ontology, graph_json):
+        project = repository.create(project=platform_project, name="MCAS", ontology=ontology, jsonld=graph_json, system_id=system_version(platform_project, 1))
         repository.save_mapping_run(
             project.id,
             MappingRun(
@@ -104,10 +108,10 @@ class TestSurvivingARestart:
         assert stored.mapping_run.stop == "cap"
         assert [f.flag for f in stored.mapping_run.findings] == ["quote-not-in-risk"]
 
-    def test_a_second_run_replaces_the_first(self, repository, ontology, graph_json):
+    def test_a_second_run_replaces_the_first(self, system_version, repository, platform_project, ontology, graph_json):
         """Re-mapping buys a new answer; keeping both would leave the page
         showing objectives the latest run did not claim."""
-        project = repository.create(name="MCAS", ontology=ontology, jsonld=graph_json)
+        project = repository.create(project=platform_project, name="MCAS", ontology=ontology, jsonld=graph_json, system_id=system_version(platform_project, 1))
         for objective_id in ("R1.1", "R2.3"):
             repository.save_mapping_run(
                 project.id,
@@ -122,44 +126,88 @@ class TestSurvivingARestart:
 
 
 class TestListingAndReplacing:
-    def test_projects_list_newest_first(self, repository, ontology, graph_json):
-        first = repository.create(name="one", ontology=ontology, jsonld=graph_json)
-        second = repository.create(name="two", ontology=ontology, jsonld=graph_json)
-        listed = [p.id for p in repository.list()]
+    def test_projects_list_newest_first(self, system_version, repository, platform_project, ontology, graph_json):
+        first = repository.create(project=platform_project, name="one", ontology=ontology, jsonld=graph_json, system_id=system_version(platform_project, 1))
+        second = repository.create(project=platform_project, name="two", ontology=ontology, jsonld=graph_json, system_id=system_version(platform_project, 2))
+        listed = [p.id for p in repository.list(platform_project)]
         assert listed.index(second.id) < listed.index(first.id)
 
-    def test_a_re_upload_replaces_the_graph_and_keeps_the_project(
-        self, repository, ontology, graph_json
-    ):
-        project = repository.create(name="MCAS", ontology=ontology, jsonld=graph_json)
-        repository.rate(project.id, {"risk2": 5, "risk4": 4})
-        smaller_raw = [n for n in json.loads(graph_json) if not str(n.get("@id", "")).endswith("risk4")]
-        smaller = Ontology.from_jsonld(smaller_raw)
-        repository.replace_ontology(project.id, ontology=smaller, jsonld=json.dumps(smaller_raw))
-
-        stored = repository.reopened().get(project.id)
-        assert stored.id == project.id
-        assert len(stored.ontology.risks) == 4
-        # the rating for a risk the new graph does not have goes with it
-        assert stored.severity.ratings == {"risk2": 5}
-
-    def test_deleting_a_project_takes_its_rows_with_it(self, repository, ontology, graph_json):
-        project = repository.create(name="MCAS", ontology=ontology, jsonld=graph_json)
+    def test_deleting_a_project_takes_its_rows_with_it(self, system_version, repository, platform_project, ontology, graph_json):
+        project = repository.create(project=platform_project, name="MCAS", ontology=ontology, jsonld=graph_json, system_id=system_version(platform_project, 1))
         repository.rate(project.id, {"risk2": 5})
         repository.delete(project.id)
         assert repository.get(project.id) is None
         assert repository.orphan_rows() == 0      # the cascade actually cascades
 
-    def test_an_unknown_project_is_none_rather_than_an_error(self, repository):
+    def test_an_unknown_project_is_none_rather_than_an_error(self, repository, platform_project):
         assert repository.get("nope") is None
 
 
 class TestTheCatalogueStamp:
     def test_a_project_records_which_catalogue_it_was_assessed_against(
-        self, repository, ontology, graph_json, objectives
+        self, system_version, repository, platform_project, ontology, graph_json, objectives
     ):
         """If the CSV is re-exported, an old project's tiers would silently
         change. The stamp is what lets the page say so."""
-        project = repository.create(name="MCAS", ontology=ontology, jsonld=graph_json)
+        project = repository.create(project=platform_project, name="MCAS", ontology=ontology, jsonld=graph_json, system_id=system_version(platform_project, 1))
         assert project.objectives_digest == objectives.digest
         assert len(objectives.digest) == 64
+
+
+class TestOneDatabase:
+    """This service owns a schema, not a database, and its rows know whose."""
+
+    def test_its_tables_are_in_its_own_schema(self, repository, platform_project):
+        from sqlalchemy import inspect
+
+        inspector = inspect(repository._engine)
+        assert set(inspector.get_table_names(schema="control_objectives")) >= {
+            "project", "graph", "risk", "mapped_objective", "mapping_run",
+        }
+        # and nothing of this service's is left in the database's front room
+        assert not set(inspector.get_table_names(schema="public")) & {"project", "risk"}
+
+    def test_an_assessment_belongs_to_a_project_on_the_platform(
+        self, system_version, repository, platform_project, ontology, graph_json
+    ):
+        created = repository.create(
+            project=platform_project, name="MCAS", ontology=ontology, jsonld=graph_json, system_id=system_version(platform_project, 1))
+        assert created.project == platform_project
+        assert repository.get(created.id).project == platform_project
+
+    def test_the_database_refuses_an_assessment_of_a_project_that_does_not_exist(
+        self, system_version, repository, platform_project, ontology, graph_json
+    ):
+        import uuid
+
+        from sqlalchemy.exc import IntegrityError
+
+        with pytest.raises(IntegrityError):
+            repository.create(
+                project=str(uuid.uuid4()), name="nobody's", ontology=ontology, jsonld=graph_json,
+                system_id=system_version(platform_project, 1),
+            )
+
+    def test_listing_shows_one_project_and_not_another(
+        self, system_version, repository, platform_project, ontology, graph_json
+    ):
+        """A module reads only what it needs: the assessments of the project
+        being looked at, never another project's."""
+        import uuid
+
+        from sqlalchemy import text
+
+        other = str(uuid.uuid4())
+        with repository._engine.begin() as connection:
+            connection.execute(
+                text("INSERT INTO core.project (pid, name, slug) VALUES (:p, 'Other', :s)"),
+                {"p": other, "s": f"other-{other[:8]}"},
+            )
+        mine = repository.create(
+            project=platform_project, name="mine", ontology=ontology, jsonld=graph_json, system_id=system_version(platform_project, 1))
+        theirs = repository.create(
+            project=other, name="theirs", ontology=ontology, jsonld=graph_json, system_id=system_version(other, 2))
+
+        listed = [record.id for record in repository.list(platform_project)]
+        assert listed == [mine.id]
+        assert theirs.id not in listed

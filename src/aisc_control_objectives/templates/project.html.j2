@@ -4,12 +4,15 @@
 
 {% block content %}
   {%- set record = view.record %}
-  <a class="co-back" href="{{ root_path }}/projects">← Projects</a>
+  <a class="co-back" href="{{ project_base }}/projects">← Projects</a>
 
   <div class="co-header">
     <h1>{{ record.name }}</h1>
-    <p>{{ record.system_name }}{% if record.qualification_id %} · qualification {{ record.qualification_id }}{% endif %}</p>
+    <p>{% if record.version_number %}Assessment of v{{ record.version_number }} · {% endif %}{{ record.system_name }}{% if record.qualification_id %} · qualification {{ record.qualification_id }}{% endif %}</p>
   </div>
+  {%- if read_only %}
+  <div class="error">{{ read_only }}. This assessment is kept as it was: open the latest version's assessment from the projects page to rank and map.</div>
+  {%- endif %}
 
   {# ── 1. rank the risks ──────────────────────────────────────────────── #}
   <div class="qf-section">
@@ -21,11 +24,15 @@
 
     {%- if not record.ontology.risks %}
     <div class="error">This AI Card carries no risks, so there is nothing to rank and
-       nothing to order the objectives by. Upload a card whose AIRO graph has them.</div>
+       nothing to order the objectives by. Save a card version whose AIRO graph has them, then start its assessment.</div>
     {%- else %}
     <p class="qf-help">Rate each risk 1 (marginal for this system) to 5 (decisive).
        The objectives answering the worst risks become Tier 1. Unrated risks count as 3.</p>
-    <form method="post" action="{{ root_path }}/projects/{{ record.id }}/severity">
+    {%- if not read_only %}
+    <form method="post" action="{{ project_base }}/projects/{{ record.id }}/severity">
+    {%- else %}
+    <div>
+    {%- endif %}
       {%- for risk in risks %}
       <div class="co-risk">
         <div class="co-risk-main">
@@ -54,16 +61,24 @@
         </div>
         <div class="field">
           <label for="{{ risk.risk.id }}">Severity</label>
+          {%- if read_only %}
+          <span id="{{ risk.risk.id }}">{{ risk.rating or "unrated" }}</span>
+          {%- else %}
           <select id="{{ risk.risk.id }}" name="{{ risk.risk.id }}">
             {%- for n in [5, 4, 3, 2, 1] %}
             <option value="{{ n }}" {% if risk.rating == n %}selected{% endif %}>{{ n }}</option>
             {%- endfor %}
           </select>
+          {%- endif %}
         </div>
       </div>
       {%- endfor %}
+      {%- if not read_only %}
       <div class="qf-actions"><button class="btn" type="submit">Save the ranking</button></div>
     </form>
+      {%- else %}
+    </div>
+      {%- endif %}
     {%- endif %}
   </div>
 
@@ -83,11 +98,13 @@
     <p class="qf-help">Each risk is read against the catalogue to find the objectives
        that would mitigate it, each resting on a quote from that risk's own chain.
        {%- if view.mapped %} Re-running replaces the mapping; the ranking is kept.{% endif %}</p>
-    <form method="post" action="{{ root_path }}/projects/{{ record.id }}/map">
+    {%- if not read_only %}
+    <form method="post" action="{{ project_base }}/projects/{{ record.id }}/map">
       <div class="qf-actions">
         <button class="btn" type="submit">{% if view.mapped %}Map again{% else %}Map the risks to objectives{% endif %}</button>
       </div>
     </form>
+    {%- endif %}
   </div>
   {%- endif %}
 
