@@ -3,8 +3,10 @@
 Signing in happens at the gateway and has already happened by the time a
 request arrives. This answers the other question. A project belongs to the
 people in it, the platform writes that down in `core.project_member`, and this
-service reads it: the same database, so there is no second copy to disagree and
-no HTTP call to fail.
+service reads it straight from the `platform` database (the one shared read it
+keeps, I1.4), so there is no second copy to disagree and no HTTP call to fail.
+Each project's assessments are in that project's own database, which is opened
+only after this has said yes (projectdb.ProjectDatabases.open).
 
 What is decided here is only the mapping from an answer to a status. The answer
 itself comes from the row.
@@ -17,13 +19,13 @@ import re
 from dataclasses import dataclass
 from typing import Literal
 
+from aisc_identity.service import Misconfigured, NotAuthenticated, caller_from_headers
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from starlette._utils import get_route_path
+from starlette.concurrency import run_in_threadpool
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import PlainTextResponse
-
-from aisc_identity.service import Misconfigured, NotAuthenticated, caller_from_headers
+from starlette.responses import JSONResponse, PlainTextResponse
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +52,9 @@ _PUBLIC_PATH = re.compile(
     r"|/api/control-objectives(?:/[^/]+)?"
     r"|/static/[^/]+)$"
 )
+
+#: The JSON API of a project: its refusals are JSON, as its answers are.
+_API_PATH = re.compile(r"^/p/[^/]+/api(?:/|$)")
 
 #: least to most, as in the platform
 _RANK = {"viewer": 0, "editor": 1, "owner": 2}
@@ -169,13 +174,25 @@ class ProjectAccess(BaseHTTPMiddleware):
     path that is not public needs a verified caller whatever it looks like,
     so a spelling the gate does not recognise is refused rather than let by.
 
-    The caller is left on `request.state.caller` for the handlers that decide
-    on an assessment's own project (the JSON API addresses it by id only).
+    The caller is left on `request.state.caller`. With `databases` (the
+    service as deployed) the gate is also the only way into a project's
+    database: `databases.open` decides membership before it connects, and what
+    it opened is left on `request.state.opened` for the handlers, so an
+    assessment is looked for only in the database of the project in the path.
+    Without it (the single-database domain tests) the gate decides membership
+    only, as before.
     """
 
-    def __init__(self, app, engine):
+    def __init__(self, app, engine, databases=None):
         super().__init__(app)
         self._engine = engine
+        self._databases = databases
+
+    @staticmethod
+    def _refuse(path: str, message: str, status: int):
+        if _API_PATH.match(path):
+            return JSONResponse({"detail": message}, status_code=status)
+        return PlainTextResponse(message, status_code=status)
 
     async def dispatch(self, request, call_next):
         path = get_route_path(request.scope)
@@ -193,9 +210,21 @@ class ProjectAccess(BaseHTTPMiddleware):
             project = project_from_path(path)
             if project is None:
                 # Under /p/ but no project the router could read: nothing to serve.
-                return PlainTextResponse(REFUSALS["not-found"][0], status_code=404)
-            verdict = decide(request.method, access_for(self._engine, project, caller))
-            if verdict != "allow":
-                message, status = REFUSALS[verdict]
-                return PlainTextResponse(message, status_code=status)
+                return self._refuse(path, *REFUSALS["not-found"])
+            if self._databases is not None:
+                from aisc_control_objectives.projectdb import ProjectDatabaseGone, Refused
+
+                write = request.method.upper() not in SAFE_METHODS
+                try:
+                    opened = await run_in_threadpool(self._databases.open, project, caller, write)
+                except Refused as refused:
+                    return self._refuse(path, *REFUSALS[refused.verdict])
+                except ProjectDatabaseGone:
+                    return self._refuse(path, *REFUSALS["not-found"])
+                request.state.opened = opened
+            else:
+                access = await run_in_threadpool(access_for, self._engine, project, caller)
+                verdict = decide(request.method, access)
+                if verdict != "allow":
+                    return self._refuse(path, *REFUSALS[verdict])
         return await call_next(request)

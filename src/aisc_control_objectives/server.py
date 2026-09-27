@@ -7,6 +7,9 @@ aisc_control_objectives.llm): BAF_LLM_PROVIDER and BAF_LLM_MODEL name it, and th
 variable carries the key.
 
 Env:
+  DATABASE_URL             the platform database: who is in which project, nothing else
+  PROJECT_DATABASE_URL     a project's own database, `{database}` where project_<hex> goes
+                           (unset: DATABASE_URL with its database replaced by {database})
   CONTROL_OBJECTIVES_CONFIG_FILE       path to the TOML config (default <repo>/control-objectives.toml)
   CONTROL_OBJECTIVES_FILE   override the bundled objectives CSV
   BAF_LLM_PROVIDER / BAF_LLM_MODEL        which model, BAF's names
@@ -34,10 +37,10 @@ from aisc_control_objectives import baf_llm
 from aisc_control_objectives.api.app import create_app
 from aisc_control_objectives.config import RunConfig
 from aisc_control_objectives.control_objectives import default_csv_path, load_control_objectives
-from aisc_control_objectives.db.repository import ProjectRepository
+from aisc_control_objectives.projectdb import ProjectDatabases
 from aisc_control_objectives.projects import Projects
 from aisc_control_objectives.risk_mapping import RiskMapper
-from aisc_control_objectives.settings import database_url
+from aisc_control_objectives.settings import database_url, project_database_url
 
 
 def _repo_root() -> Path:
@@ -116,9 +119,11 @@ def build_app():
         return (RiskMapper(complete=baf_llm.completer(llm), catalogue=objectives),
                 f"{chosen.provider}/{chosen.model}")
 
-    repository = ProjectRepository(database_url(), objectives_digest=objectives.digest)
+    # Each project's assessments are in its own database, opened per request
+    # by the gate after membership is decided; nothing connects here.
+    databases = ProjectDatabases(database_url(), project_database_url())
     projects = Projects(
-        repository=repository,
+        repository=None,
         catalogue=objectives,
         mapper=RiskMapper(complete=complete, catalogue=objectives),
         model=f"{config.provider}/{config.model}",
@@ -131,9 +136,10 @@ def build_app():
         root_path=os.environ.get("CONTROL_OBJECTIVES_ROOT_PATH", ""),
         cors_origins=cors_origins,
         source_name=source_name,
-        # Who is in a project. Read from the shared table through the
-        # connection this service already has.
-        engine=repository.engine,
+        # Who is in a project, read from the platform database, and the door
+        # to each project's own database.
+        engine=databases.platform,
+        databases=databases,
     )
 
 

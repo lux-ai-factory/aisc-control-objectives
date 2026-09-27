@@ -25,7 +25,6 @@ from sqlalchemy import (
     Column,
     DateTime,
     ForeignKey,
-    ForeignKeyConstraint,
     Integer,
     MetaData,
     String,
@@ -36,9 +35,10 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-#: There is one database. This service owns a schema in it, named after
-#: itself, and reads nothing outside that schema except `core`, where the
-#: platform keeps what every module shares.
+#: Each project has a database of its own (isolation 2026-09-25). This service
+#: owns a schema in it, named after itself, and reads nothing outside that
+#: schema except `project.system`, the project's saved card versions, which the
+#: platform writes.
 SCHEMA = "control_objectives"
 
 
@@ -50,68 +50,47 @@ class Base(DeclarativeBase):
     metadata = MetaData(schema=SCHEMA)
 
 
-def _core_table(name: str, *columns: Column) -> Table:
-    """A platform table in `core`, as this service needs to see it: its
-    identity, and nothing else. Declared so a foreign key can point at it,
-    marked external so migrations never create or drop it. The platform owns
-    it; this service may read it and point at it, and that is all it is granted.
-    """
-    return Table(
-        name,
-        Base.metadata,
-        Column("pid", UUID(as_uuid=False), primary_key=True),
-        *columns,
-        schema="core",
-        info={"external": True},
-    )
-
-
-#: A platform project.
-core_project = _core_table("project")
-
-#: One saved AI card version of a project's one AI system (the platform
-#: numbers them). An assessment is of exactly one.
-core_system = _core_table("system", Column("project_id", UUID(as_uuid=False)))
+#: One saved AI card version of the project's one AI system (the platform
+#: numbers them). An assessment is of exactly one. Declared so a foreign key
+#: can point at it and the numbers can be read, marked external so migrations
+#: never create or drop it: the platform's template 0006 makes it, and this
+#: service may read it and point at it, and that is all it is granted.
+project_system = Table(
+    "system",
+    Base.metadata,
+    Column("pid", UUID(as_uuid=False), primary_key=True),
+    Column("number", Integer),
+    schema="project",
+    info={"external": True},
+)
 
 
 class Project(Base):
-    """One system being assessed. The aggregate everything else hangs off."""
+    """One system being assessed. The aggregate everything else hangs off.
+
+    It has no column naming its platform project: the database it is in is the
+    project (I1.7). The table keeps its name (D6).
+    """
 
     __tablename__ = "project"
-    #: The version belongs to this assessment's project: the pair is a key into
-    #: core.system (pid, project_id), which the platform makes unique. Alembic
-    #: revision 7c3e5a9b1d24 adds it on a database.
-    __table_args__ = (
-        ForeignKeyConstraint(
-            ["system_id", "project_id"], ["core.system.pid", "core.system.project_id"],
-            name="fk_project_system_id_project_id_core_system", ondelete="CASCADE",
-        ),
-    )
+    __table_args__ = (UniqueConstraint("system_id", name="uq_project_system_id"),)
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
-    #: The platform project this assessment belongs to. Required: an
-    #: assessment of no project is an assessment of nothing, and deleting the
-    #: project takes it with it.
-    project_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False),
-        ForeignKey("core.project.pid", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    #: The AI card version this assessment is of. One assessment per version;
-    #: deleting the version takes its assessment with it.
-    system_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False),
-        ForeignKey("core.system.pid", ondelete="CASCADE"),
-        nullable=False,
-        unique=True,
-    )
     name: Mapped[str] = mapped_column(Text, nullable=False)
     #: Which control-objectives catalogue this was assessed against.
     objectives_digest: Mapped[str] = mapped_column(String(64), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, onupdate=_now
+    )
+    #: The AI card version this assessment is of, a row of this database's
+    #: project.system. One assessment per version; deleting the version takes
+    #: its assessment with it.
+    system_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("project.system.pid", ondelete="CASCADE",
+                   name="fk_project_system_id_project_system"),
+        nullable=False,
     )
 
     graph: Mapped[Graph | None] = relationship(

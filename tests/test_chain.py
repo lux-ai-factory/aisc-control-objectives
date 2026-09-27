@@ -4,12 +4,14 @@ Skipped unless CHAIN_JSON names the chain's shared state. Step 3: an assessment 
 card version 1, started the way the page starts one (no file), with the platform
 and qualification stubbed by a local HTTP server. The card served is the MCAS
 fixture plus one node per card_component row of the chain's card, read from the
-chain's database, so the step consumes two links: the card's component rows, and
-the assessment's key into core.system.
+chain project's own database, so the step consumes two links: the card's component
+rows, and the assessment's key into project.system of that database.
 
-The repository is built directly on the chain's database: the `repository`
-fixture drops and re-creates the database it is given, which here is `platform`
-(F14b).
+Since the isolation (I19.2, S-D6) the service is built as deployed,
+`server.build_app()` (isolation_support.deployed_app), with DATABASE_URL on the
+chain's `platform` (membership) and PROJECT_DATABASE_URL the template of a project
+database, both set by the driver; the caller is the chain project's owner, with a
+token signed by a stand-in for Keycloak's key.
 """
 from __future__ import annotations
 
@@ -24,6 +26,8 @@ import psycopg
 import pytest
 from fastapi.testclient import TestClient
 
+from isolation_support import Cluster, deployed_app, signer
+
 CHAIN_JSON = os.environ.get("CHAIN_JSON")
 pytestmark = [
     pytest.mark.chain,
@@ -31,7 +35,8 @@ pytestmark = [
 ]
 
 FIXTURES = Path(__file__).parent / "fixtures"
-AUTH = "Bearer chain-caller"
+#: the chain project's owner (platform/tests/test_chain.py, step 1)
+ALICE = "00000000-0000-0000-0000-00000000a11c"
 
 
 def _serve(latest: dict, card: str):
@@ -64,25 +69,21 @@ def _serve(latest: dict, card: str):
 
 
 def test_chain_step3_assessment_on_v1(monkeypatch):
-    from aisc_control_objectives.api.app import create_app
-    from aisc_control_objectives.control_objectives import load_control_objectives
-    from aisc_control_objectives.db.repository import ProjectRepository
-    from aisc_control_objectives.projects import Projects
-    from aisc_control_objectives.risk_mapping import Mapping
-
     state = json.loads(Path(CHAIN_JSON).read_text())
-    with psycopg.connect(os.environ["CHAIN_SU_DSN"]) as conn:
+    project_db = state["project_db"]
+    with psycopg.connect(os.environ["CHAIN_SU_DSN"].rsplit("/", 1)[0] + "/" + project_db) as conn:
         components = conn.execute(
             "SELECT component_pid::text, airo_property, name, object_name"
             "  FROM qualification.card_component WHERE qualification_id = %s ORDER BY name",
             (state["card_v1_id"],),
         ).fetchall()
         co_fk = conn.execute(
-            "SELECT 1 FROM pg_constraint WHERE conname = 'fk_project_system_id_core_system'"
+            "SELECT 1 FROM pg_constraint WHERE contype = 'f'"
             " AND conrelid = 'control_objectives.project'::regclass"
+            " AND confrelid = 'project.system'::regclass"
         ).fetchone()
     assert len(components) == 2, "the card of v1 links two engine components"
-    assert co_fk is not None, "an assessment's key into core.system"
+    assert co_fk is not None, "an assessment's key into project.system"
 
     graph = json.loads((FIXTURES / "mcas.ontology.jsonld").read_text())
     for pid, prop, name, object_name in components:
@@ -97,24 +98,19 @@ def test_chain_step3_assessment_on_v1(monkeypatch):
     monkeypatch.setenv("PLATFORM_URL", url)
     monkeypatch.setenv("QUALIFICATION_URL", url + "/qualification")
     try:
-        objectives = load_control_objectives()
-        repository = ProjectRepository(os.environ["CONTROL_OBJECTIVES_TEST_DATABASE_URL"],
-                                       objectives_digest=objectives.digest)
-
-        class NoMapper:
-            def propose(self, risk, findings=()):
-                return Mapping(risk_id=risk.id)
-
-        client = TestClient(create_app(objectives, Projects(repository, objectives, NoMapper())),
-                            follow_redirects=False, raise_server_exceptions=False)
+        token = signer(monkeypatch)
+        app = deployed_app(monkeypatch, Cluster(os.environ["DATABASE_URL"]))
+        client = TestClient(app, follow_redirects=False, raise_server_exceptions=False)
         started = client.post(f"/p/{state['project_pid']}/projects", data={"name": "MCAS"},
-                              headers={"Authorization": AUTH})
+                              headers=token(ALICE))
         assert started.status_code == 303, (started.status_code, started.text[:300])
-        assessment = started.headers["location"].rsplit("/", 1)[-1]
-        record = repository.get(assessment)
-        assert record.system_id == state["v1_pid"]
+        assessment = started.headers["location"].rstrip("/").rsplit("/", 1)[-1]
     finally:
         server.shutdown()
+    with psycopg.connect(os.environ["CHAIN_SU_DSN"].rsplit("/", 1)[0] + "/" + project_db) as conn:
+        system_id = conn.execute("SELECT system_id::text FROM control_objectives.project WHERE id = %s",
+                                 (assessment,)).fetchone()
+    assert system_id == (state["v1_pid"],), system_id
 
     state = json.loads(Path(CHAIN_JSON).read_text())
     state["assessment_v1_id"] = assessment

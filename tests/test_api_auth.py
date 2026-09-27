@@ -121,8 +121,10 @@ def _bearer(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-def _risk_id(client, headers, assessment_id) -> str:
-    return client.get(f"/api/projects/{assessment_id}", headers=headers).json()["risks"][0]["id"]
+def _risk_id(client, headers, pid, assessment_id) -> str:
+    return client.get(
+        f"/p/{pid}/api/projects/{assessment_id}", headers=headers
+    ).json()["risks"][0]["id"]
 
 
 # ── 1. no token, no entry ───────────────────────────────────────────────────
@@ -133,11 +135,11 @@ def _gated_routes(pid: str, aid: str) -> list[tuple[str, str]]:
         ("GET", "/"),
         ("GET", "/docs"),
         ("GET", "/openapi.json"),
-        ("GET", f"/api/projects?project={pid}"),
-        ("GET", f"/api/projects/{aid}"),
-        ("POST", f"/api/projects/{aid}/map"),
-        ("POST", f"/api/projects/{aid}/severity"),
-        ("DELETE", f"/api/projects/{aid}"),
+        ("GET", f"/p/{pid}/api/projects"),
+        ("GET", f"/p/{pid}/api/projects/{aid}"),
+        ("POST", f"/p/{pid}/api/projects/{aid}/map"),
+        ("POST", f"/p/{pid}/api/projects/{aid}/severity"),
+        ("DELETE", f"/p/{pid}/api/projects/{aid}"),
         ("GET", f"/p/{pid}"),
         ("GET", f"/p/{pid}/objectives"),
         ("GET", f"/p/{pid}/projects"),
@@ -220,11 +222,11 @@ def _bypass_variants(pid: str, aid: str) -> list[str]:
         f"/p/{pid}%2Fprojects/{aid}",
         f"//p/{pid}/projects/{aid}",
         f"{ROOT}//p/{pid}/projects/{aid}",
-        f"/api/projects/{aid}/",
-        f"{ROOT}/api/projects/{aid}",
-        f"{ROOT}{ROOT}/api/projects/{aid}",
-        f"/api/projects%2F{aid}",
-        f"/api//projects/{aid}",
+        f"/p/{pid}/api/projects/{aid}/",
+        f"{ROOT}/p/{pid}/api/projects/{aid}",
+        f"{ROOT}{ROOT}/p/{pid}/api/projects/{aid}",
+        f"/p/{pid}/api/projects%2F{aid}",
+        f"/p/{pid}/api//projects/{aid}",
     ]
 
 
@@ -302,17 +304,17 @@ def test_a_viewer_reads_through_the_api(client, signing, project_member, assessm
     pid, _, subject = project_member("viewer")
     aid = assessment(pid)
     headers = _bearer(signing(subject))
-    listed = client.get(f"/api/projects?project={pid}", headers=headers)
+    listed = client.get(f"/p/{pid}/api/projects", headers=headers)
     assert listed.status_code == 200
     assert [item["id"] for item in listed.json()] == [aid]
-    assert client.get(f"/api/projects/{aid}", headers=headers).status_code == 200
+    assert client.get(f"/p/{pid}/api/projects/{aid}", headers=headers).status_code == 200
 
 
 def test_the_gateway_header_is_a_token_too(client, signing, project_member, assessment):
     pid, _, subject = project_member("viewer")
     aid = assessment(pid)
     headers = {"X-Auth-Request-Access-Token": signing(subject)}
-    assert client.get(f"/api/projects/{aid}", headers=headers).status_code == 200
+    assert client.get(f"/p/{pid}/api/projects/{aid}", headers=headers).status_code == 200
 
 
 def test_a_viewer_cannot_change_anything_through_the_api(
@@ -321,14 +323,14 @@ def test_a_viewer_cannot_change_anything_through_the_api(
     pid, _, subject = project_member("viewer")
     aid = assessment(pid)
     headers = _bearer(signing(subject))
-    risk = _risk_id(client, headers, aid)
-    assert client.post(f"/api/projects/{aid}/map", headers=headers).status_code == 403
+    risk = _risk_id(client, headers, pid, aid)
+    assert client.post(f"/p/{pid}/api/projects/{aid}/map", headers=headers).status_code == 403
     assert client.post(
-        f"/api/projects/{aid}/severity", headers=headers, json={risk: 3}
+        f"/p/{pid}/api/projects/{aid}/severity", headers=headers, json={risk: 3}
     ).status_code == 403
-    assert client.delete(f"/api/projects/{aid}", headers=headers).status_code == 403
+    assert client.delete(f"/p/{pid}/api/projects/{aid}", headers=headers).status_code == 403
     assert _exists(repository, aid)
-    after = client.get(f"/api/projects/{aid}", headers=headers).json()
+    after = client.get(f"/p/{pid}/api/projects/{aid}", headers=headers).json()
     assert after["mapping_run"] is None
 
 
@@ -336,11 +338,11 @@ def test_an_editor_may(client, signing, repository, project_member, assessment):
     pid, _, subject = project_member("editor")
     aid = assessment(pid)
     headers = _bearer(signing(subject))
-    risk = _risk_id(client, headers, aid)
-    assert client.post(f"/api/projects/{aid}/map", headers=headers).status_code == 200
-    rated = client.post(f"/api/projects/{aid}/severity", headers=headers, json={risk: 3})
+    risk = _risk_id(client, headers, pid, aid)
+    assert client.post(f"/p/{pid}/api/projects/{aid}/map", headers=headers).status_code == 200
+    rated = client.post(f"/p/{pid}/api/projects/{aid}/severity", headers=headers, json={risk: 3})
     assert rated.status_code == 200
-    assert client.delete(f"/api/projects/{aid}", headers=headers).status_code == 204
+    assert client.delete(f"/p/{pid}/api/projects/{aid}", headers=headers).status_code == 204
     assert not _exists(repository, aid)
 
 
@@ -348,28 +350,28 @@ def test_an_admin_may_without_being_a_member(client, signing, project_member, as
     pid, _, _ = project_member("owner")
     aid = assessment(pid)
     headers = _bearer(signing("someone", ("admin",)))
-    assert client.get(f"/api/projects?project={pid}", headers=headers).status_code == 200
-    assert client.get(f"/api/projects/{aid}", headers=headers).status_code == 200
-    assert client.post(f"/api/projects/{aid}/map", headers=headers).status_code == 200
+    assert client.get(f"/p/{pid}/api/projects", headers=headers).status_code == 200
+    assert client.get(f"/p/{pid}/api/projects/{aid}", headers=headers).status_code == 200
+    assert client.post(f"/p/{pid}/api/projects/{aid}/map", headers=headers).status_code == 200
 
 
 def test_a_stranger_is_told_nothing_exists(client, signing, repository, project_member, assessment):
     pid, _, _ = project_member("owner")
     aid = assessment(pid)
     headers = _bearer(signing("stranger"))
-    unknown = client.get("/api/projects/000000000000", headers=headers)
+    unknown = client.get(f"/p/{pid}/api/projects/000000000000", headers=headers)
     assert unknown.status_code == 404
     for method, path in (
-        ("GET", f"/api/projects?project={pid}"),
-        ("GET", f"/api/projects/{aid}"),
-        ("POST", f"/api/projects/{aid}/map"),
-        ("POST", f"/api/projects/{aid}/severity"),
-        ("DELETE", f"/api/projects/{aid}"),
+        ("GET", f"/p/{pid}/api/projects"),
+        ("GET", f"/p/{pid}/api/projects/{aid}"),
+        ("POST", f"/p/{pid}/api/projects/{aid}/map"),
+        ("POST", f"/p/{pid}/api/projects/{aid}/severity"),
+        ("DELETE", f"/p/{pid}/api/projects/{aid}"),
     ):
         kwargs = {"json": {"risk0": 3}} if path.endswith("/severity") else {}
         response = client.request(method, path, headers=headers, **kwargs)
         assert response.status_code == 404, (method, path, response.status_code)
-        if path.startswith("/api/projects/"):
+        if path.startswith(f"/p/{pid}/api/projects/"):
             # the same answer as an id that does not exist: no oracle
             assert response.json()["detail"].replace(aid, "X") == unknown.json()[
                 "detail"
@@ -379,7 +381,7 @@ def test_a_stranger_is_told_nothing_exists(client, signing, repository, project_
 
 def test_an_unknown_project_is_404(client, signing):
     headers = _bearer(signing("someone"))
-    response = client.get(f"/api/projects?project={uuid.uuid4()}", headers=headers)
+    response = client.get(f"/p/{uuid.uuid4()}/api/projects", headers=headers)
     assert response.status_code == 404
 
 
@@ -390,37 +392,59 @@ def test_a_member_of_one_project_cannot_reach_anothers_assessment_by_id(
     theirs, _, _ = project_member("owner")
     aid = assessment(theirs)
     headers = _bearer(signing(subject))
-    assert client.get(f"/api/projects/{aid}", headers=headers).status_code == 404
-    assert client.post(f"/api/projects/{aid}/map", headers=headers).status_code == 404
-    assert client.delete(f"/api/projects/{aid}", headers=headers).status_code == 404
+    assert client.get(f"/p/{theirs}/api/projects/{aid}", headers=headers).status_code == 404
+    assert client.post(f"/p/{theirs}/api/projects/{aid}/map", headers=headers).status_code == 404
+    assert client.delete(f"/p/{theirs}/api/projects/{aid}", headers=headers).status_code == 404
     assert _exists(repository, aid)
     # and listing their project by pid is the same stranger's 404
-    assert client.get(f"/api/projects?project={theirs}", headers=headers).status_code == 404
+    assert client.get(f"/p/{theirs}/api/projects", headers=headers).status_code == 404
 
 
 # ── 3. the pages: an assessment is only under its own project ───────────────
 
 
-def test_a_page_refuses_an_assessment_of_another_project(
-    client, signing, repository, project_member, assessment
-):
-    mine, my_slug, subject = project_member("editor")
-    theirs, _, _ = project_member("owner")
-    aid = assessment(theirs)
-    headers = _bearer(signing(subject))
-    for ref in (mine, my_slug):
-        assert client.get(f"/p/{ref}/projects/{aid}", headers=headers).status_code == 404
-        assert client.post(f"/p/{ref}/projects/{aid}/map", headers=headers).status_code == 404
-        assert client.post(
-            f"/p/{ref}/projects/{aid}/severity", headers=headers, data={"risk0": "3"}
-        ).status_code == 404
-    with repository.engine.connect() as connection:
-        rated = connection.execute(
-            text("SELECT count(*) FROM control_objectives.risk WHERE project_id = :id"
-                 " AND severity IS NOT NULL"),
-            {"id": aid},
-        ).scalar()
-    assert rated == 0
+def test_a_page_refuses_an_assessment_of_another_project(monkeypatch, fixtures_dir):
+    """(Isolation, W-6 / O1.8 exception 1: rewritten in place on two real project
+    databases, same assertions. With project_id gone, two projects can no
+    longer share the one test database, so "another project's assessment" is
+    one in another database, and the service is built as deployed.)"""
+    from isolation_support import Projects as PlatformProjects
+    from isolation_support import (
+        cluster_or_skip,
+        deployed_app,
+        fake_upstream,
+        signer,
+        start_assessment,
+    )
+
+    cluster = cluster_or_skip()
+    made = PlatformProjects(cluster)
+    try:
+        token = signer(monkeypatch)
+        subject, owner = f"s-{uuid.uuid4().hex[:8]}", f"o-{uuid.uuid4().hex[:8]}"
+        mine = made.make(members={subject: "editor"})
+        theirs = made.make(members={owner: "owner"})
+        latest = fake_upstream(monkeypatch, made, fixtures_dir)
+        latest[theirs] = made.add_version(theirs, 1)
+        client = TestClient(deployed_app(monkeypatch, cluster),
+                            raise_server_exceptions=False, follow_redirects=False)
+        aid = start_assessment(client, theirs, token(owner))
+        headers = token(subject)
+        for ref in (mine, made.slug(mine)):
+            assert client.get(f"/p/{ref}/projects/{aid}", headers=headers).status_code == 404
+            assert client.post(f"/p/{ref}/projects/{aid}/map", headers=headers).status_code == 404
+            assert client.post(
+                f"/p/{ref}/projects/{aid}/severity", headers=headers, data={"risk0": "3"}
+            ).status_code == 404
+        with cluster.connect(made.database(theirs)) as connection:
+            rated = connection.execute(
+                "SELECT count(*) FROM control_objectives.risk WHERE project_id = %s"
+                " AND severity IS NOT NULL",
+                (aid,),
+            ).fetchone()[0]
+        assert rated == 0
+    finally:
+        made.cleanup()
 
 
 def test_a_page_opens_its_own_projects_assessment_by_pid_or_slug(
@@ -496,12 +520,14 @@ def test_build_app_fits_the_gate(monkeypatch):
         seen.update(kwargs)
         return object()
 
-    class FakeRepository:
+    class FakeDatabases:
+        # (Isolation, O1.8 exception 2: the gate's engine is the platform
+        # engine of ProjectDatabases now, not a repository's.)
         def __init__(self, *a, **k):
-            self.engine = "the-engine"
+            self.platform = "the-engine"
 
     monkeypatch.setattr(server, "create_app", fake_create_app)
-    monkeypatch.setattr(server, "ProjectRepository", FakeRepository)
+    monkeypatch.setattr(server, "ProjectDatabases", FakeDatabases)
     monkeypatch.setattr(server, "_build_completer", lambda config: (lambda *a, **k: ""))
     monkeypatch.setenv("BAF_LLM_PROVIDER", "ollama")
     monkeypatch.setenv("BAF_LLM_MODEL", "mistral:latest")

@@ -129,7 +129,7 @@ class TestListingAndReplacing:
     def test_projects_list_newest_first(self, system_version, repository, platform_project, ontology, graph_json):
         first = repository.create(project=platform_project, name="one", ontology=ontology, jsonld=graph_json, system_id=system_version(platform_project, 1))
         second = repository.create(project=platform_project, name="two", ontology=ontology, jsonld=graph_json, system_id=system_version(platform_project, 2))
-        listed = [p.id for p in repository.list(platform_project)]
+        listed = [p.id for p in repository.list()]
         assert listed.index(second.id) < listed.index(first.id)
 
     def test_deleting_a_project_takes_its_rows_with_it(self, system_version, repository, platform_project, ontology, graph_json):
@@ -155,7 +155,10 @@ class TestTheCatalogueStamp:
 
 
 class TestOneDatabase:
-    """This service owns a schema, not a database, and its rows know whose."""
+    """This service owns a schema in its project's database, and the database
+    is the project: rows carry no project of their own (isolation, I1.7), and
+    an assessment's card version must be a row of that database's
+    project.system (I5.3)."""
 
     def test_its_tables_are_in_its_own_schema(self, repository, platform_project):
         from sqlalchemy import inspect
@@ -175,39 +178,18 @@ class TestOneDatabase:
         assert created.project == platform_project
         assert repository.get(created.id).project == platform_project
 
-    def test_the_database_refuses_an_assessment_of_a_project_that_does_not_exist(
-        self, system_version, repository, platform_project, ontology, graph_json
+    def test_the_database_refuses_an_assessment_of_a_version_absent_from_project_system(
+        self, repository, platform_project, ontology, graph_json
     ):
+        """(Isolation, S-D13: replaces "refuses an assessment of a project that
+        does not exist"; the assessment has no project column any more, the
+        key that remains is system_id into project.system.)"""
         import uuid
 
         from sqlalchemy.exc import IntegrityError
 
         with pytest.raises(IntegrityError):
             repository.create(
-                project=str(uuid.uuid4()), name="nobody's", ontology=ontology, jsonld=graph_json,
-                system_id=system_version(platform_project, 1),
+                project=platform_project, name="nobody's", ontology=ontology, jsonld=graph_json,
+                system_id=str(uuid.uuid4()),
             )
-
-    def test_listing_shows_one_project_and_not_another(
-        self, system_version, repository, platform_project, ontology, graph_json
-    ):
-        """A module reads only what it needs: the assessments of the project
-        being looked at, never another project's."""
-        import uuid
-
-        from sqlalchemy import text
-
-        other = str(uuid.uuid4())
-        with repository._engine.begin() as connection:
-            connection.execute(
-                text("INSERT INTO core.project (pid, name, slug) VALUES (:p, 'Other', :s)"),
-                {"p": other, "s": f"other-{other[:8]}"},
-            )
-        mine = repository.create(
-            project=platform_project, name="mine", ontology=ontology, jsonld=graph_json, system_id=system_version(platform_project, 1))
-        theirs = repository.create(
-            project=other, name="theirs", ontology=ontology, jsonld=graph_json, system_id=system_version(other, 2))
-
-        listed = [record.id for record in repository.list(platform_project)]
-        assert listed == [mine.id]
-        assert theirs.id not in listed

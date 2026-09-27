@@ -28,6 +28,9 @@ dependencies = [
     "httpx>=0.27",
 ]
 
+[project.scripts]
+control-objectives-migrate = "aisc_control_objectives.migrate_projects:main"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",

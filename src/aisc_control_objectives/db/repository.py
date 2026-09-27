@@ -14,10 +14,12 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from sqlalchemy import create_engine, func, select, text
-from sqlalchemy.schema import CreateSchema
+from sqlalchemy import func, select, text
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.schema import CreateSchema
 
+from aisc_control_objectives import projectdb
 from aisc_control_objectives.db import tables
 from aisc_control_objectives.models.ontology import Ontology, OntologyRisk
 from aisc_control_objectives.prioritising import Severity
@@ -35,8 +37,9 @@ class ProjectRecord:
     """One project, as the rest of the service wants it."""
 
     id: str
-    #: The platform project this assessment belongs to.
-    project: str
+    #: The platform project this assessment belongs to: the project whose
+    #: database it was read from (the row itself names none, I1.7).
+    project: str | None
     name: str
     #: Both read from the stored card, which is the authority on them.
     system_name: str
@@ -44,7 +47,7 @@ class ProjectRecord:
     objectives_digest: str
     created_at: datetime
     updated_at: datetime
-    #: The AI card version (core.system pid) this assessment is of, its number,
+    #: The AI card version (project.system pid) this assessment is of, its number,
     #: and the project's latest number: only the latest version's assessment changes.
     system_id: str = ""
     version_number: int | None = None
@@ -56,41 +59,59 @@ class ProjectRecord:
     mapping_run: MappingRun | None = None
 
 
-#: A card version's number and the highest number in its project, read from
-#: the platform's `core.system`.
+#: A card version's number and the highest number of the project, read from
+#: `project.system` of the same database: the database is the project, so the
+#: highest number over the table is the project's latest.
 _VERSION_NUMBERS = text(
-    "SELECT s.number, (SELECT max(o.number) FROM core.system o"
-    " WHERE o.project_id = s.project_id) FROM core.system s WHERE s.pid = :sid"
+    "SELECT s.number, (SELECT max(o.number) FROM project.system o)"
+    " FROM project.system s WHERE s.pid::text = :sid"
 )
+
+_HAS_VERSION = text("SELECT 1 FROM project.system WHERE pid::text = :sid")
 
 
 class ProjectRepository:
-    def __init__(self, url: str, objectives_digest: str = ""):
-        self._engine = create_engine(url, pool_pre_ping=True)
+    """The assessments of one project, in that project's database.
+
+    Given a URL it makes its own engine (tests, scripts); given an engine (the
+    one `ProjectDatabases.open` let the caller into) it uses that. `pid` is the
+    project the database belongs to, which every record it returns carries.
+    """
+
+    def __init__(
+        self, url_or_engine: str | Engine, objectives_digest: str = "", *, pid: str | None = None
+    ):
+        if isinstance(url_or_engine, str):
+            self._engine = projectdb.make_engine(url_or_engine, pool_pre_ping=True)
+            self._url: str | None = url_or_engine
+        else:
+            self._engine = url_or_engine
+            self._url = None
         self._sessions = sessionmaker(self._engine, expire_on_commit=False)
-        self._url = url
         self._objectives_digest = objectives_digest
+        self._pid = pid
 
     @property
     def engine(self):
-        """The connection this repository holds.
-
-        Exposed for the one thing outside this module that needs it: the door
-        reads `core.project_member` through the same database, rather than
-        opening a second one or asking the platform over HTTP.
-        """
+        """The connection this repository holds."""
         return self._engine
+
+    @property
+    def pid(self) -> str | None:
+        """The platform project whose database this is."""
+        return self._pid
 
     def reopened(self) -> ProjectRepository:
         """A second repository on the same database: what a restart would give."""
-        return ProjectRepository(self._url, self._objectives_digest)
+        return ProjectRepository(self._url or self._engine, self._objectives_digest, pid=self._pid)
 
     def create_all(self) -> None:
         """Tests and first run. Deployments use `alembic upgrade head`."""
         with self._engine.begin() as connection:
-            # On the platform the schema is already there and this role may not
-            # make one; in a scratch database it is the first thing needed.
-            # `core` belongs to the platform and is never created here.
+            # In a project database the platform's template has made the schema
+            # and this role may not make one; in a scratch database it is the
+            # first thing needed. `project` belongs to the platform and is
+            # never created here.
             missing = connection.execute(
                 text("SELECT to_regnamespace(:s) IS NULL"), {"s": tables.SCHEMA}
             ).scalar()
@@ -105,15 +126,16 @@ class ProjectRepository:
     # ── writing ───────────────────────────────────────────────────────────
 
     def create(
-        self, project: str, name: str, ontology: Ontology, jsonld: str, *, system_id: str
+        self, project: str | None, name: str, ontology: Ontology, jsonld: str, *, system_id: str
     ) -> ProjectRecord:
-        """`project` is the platform project this assessment is part of, and
-        `system_id` the AI card version (core.system) it is of: one assessment
-        per version, which the database holds (UNIQUE system_id)."""
+        """`system_id` is the AI card version (a row of this database's
+        project.system) the assessment is of: one assessment per version, which
+        the database holds (UNIQUE system_id, and the key refuses a version it
+        does not have). `project` is accepted so callers read as before, and not
+        stored: the database is the project (I1.7)."""
         with self._sessions.begin() as session:
             row = tables.Project(
                 id=uuid.uuid4().hex[:12],
-                project_id=project,
                 system_id=system_id,
                 name=name,
                 objectives_digest=self._objectives_digest,
@@ -186,20 +208,23 @@ class ProjectRepository:
             )
             return self._to_record(session, project) if project else None
 
+    def has_version(self, system_id: str) -> bool:
+        """Whether this database's project.system has that card version."""
+        with self._engine.connect() as connection:
+            return connection.execute(_HAS_VERSION, {"sid": system_id}).first() is not None
+
     @staticmethod
     def is_latest(record: ProjectRecord) -> bool:
         """Whether the assessment is of the project's latest card version: only
         that one may still be mapped and rated."""
         return record.version_number is not None and record.version_number == record.latest_number
 
-    def list(self, project: str) -> list[ProjectRecord]:
-        """The assessments of one platform project. A module reads what it
-        needs and no more, so there is no way to list every project's."""
+    def list(self) -> list[ProjectRecord]:
+        """The assessments of this project, newest first. There is no way to
+        list another project's: they are in another database."""
         with self._sessions() as session:
             rows = session.scalars(
-                select(tables.Project)
-                .where(tables.Project.project_id == project)
-                .order_by(tables.Project.updated_at.desc())
+                select(tables.Project).order_by(tables.Project.updated_at.desc())
             ).all()
             return [self._to_record(session, row) for row in rows]
 
@@ -266,8 +291,7 @@ class ProjectRepository:
         except Exception:  # a stored card that no longer parses still lists
             return Ontology()
 
-    @staticmethod
-    def _to_record(session: Session, project: tables.Project) -> ProjectRecord:
+    def _to_record(self, session: Session, project: tables.Project) -> ProjectRecord:
         version_number, latest_number = ProjectRepository._version_numbers(
             session, project.system_id
         )
@@ -293,7 +317,7 @@ class ProjectRepository:
 
         record = ProjectRecord(
             id=project.id,
-            project=project.project_id,
+            project=self._pid,
             name=project.name,
             system_name=card.system_name,
             qualification_id=card.qualification_id,

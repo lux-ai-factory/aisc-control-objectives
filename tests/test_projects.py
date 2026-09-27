@@ -79,7 +79,7 @@ def _start(client, graph, project, name="MCAS", *, starter) -> dict:
     """An assessment of the project's next card version, read back through the API."""
     projects, versions = starter
     view = projects.create(project, name, json.dumps(graph), graph, versions(project))
-    response = client.get(f"/api/projects/{view.record.id}")
+    response = client.get(f"/p/{project}/api/projects/{view.record.id}")
     assert response.status_code == 200, response.text
     return response.json()
 
@@ -100,13 +100,13 @@ class TestStartingAProject:
 
     def test_a_project_survives_a_restart(self, _starter, platform_project, client, graph):
         project = _start(client, graph, platform_project, starter=_starter)
-        again = client.get(f"/api/projects/{project['id']}").json()
+        again = client.get(f"/p/{platform_project}/api/projects/{project['id']}").json()
         assert again["digest"] == project["digest"]
         assert len(again["risks"]) == 5
 
     def test_the_project_is_listed(self, _starter, platform_project, client, graph):
         project = _start(client, graph, platform_project, starter=_starter)
-        listed = client.get(f"/api/projects?project={platform_project}").json()
+        listed = client.get(f"/p/{platform_project}/api/projects").json()
         assert project["id"] in {p["id"] for p in listed}
 
 
@@ -116,7 +116,7 @@ class TestRankingTheRisks:
         moment the card is in, with no model call in between."""
         project = _start(client, graph, platform_project, starter=_starter)
         rated = client.post(
-            f"/api/projects/{project['id']}/severity", json={"risk2": 5, "risk4": 1}
+            f"/p/{platform_project}/api/projects/{project['id']}/severity", json={"risk2": 5, "risk4": 1}
         )
         assert rated.status_code == 200
         assert rated.json()["severity"]["ratings"] == {"risk2": 5, "risk4": 1}
@@ -124,15 +124,15 @@ class TestRankingTheRisks:
     def test_a_rating_for_a_risk_this_card_lacks_is_refused(self, _starter, platform_project, client, graph):
         project = _start(client, graph, platform_project, starter=_starter)
         response = client.post(
-            f"/api/projects/{project['id']}/severity", json={"risk99": 5}
+            f"/p/{platform_project}/api/projects/{project['id']}/severity", json={"risk99": 5}
         )
         assert response.status_code == 422
         assert "risk99" in response.text
 
     def test_the_ratings_survive_a_reload(self, _starter, platform_project, client, graph):
         project = _start(client, graph, platform_project, starter=_starter)
-        client.post(f"/api/projects/{project['id']}/severity", json={"risk2": 5})
-        again = client.get(f"/api/projects/{project['id']}").json()
+        client.post(f"/p/{platform_project}/api/projects/{project['id']}/severity", json={"risk2": 5})
+        again = client.get(f"/p/{platform_project}/api/projects/{project['id']}").json()
         assert again["severity"]["ratings"]["risk2"] == 5
 
 
@@ -140,7 +140,7 @@ class TestMappingAndTiers:
     @pytest.fixture()
     def mapped(self, _starter, platform_project, client, graph):
         project = _start(client, graph, platform_project, starter=_starter)
-        return client.post(f"/api/projects/{project['id']}/map").json()
+        return client.post(f"/p/{platform_project}/api/projects/{project['id']}/map").json()
 
     def test_every_risk_is_mapped(self, platform_project, mapped):
         assert set(mapped["mapping_run"]["mappings"]) == {f"risk{n}" for n in range(5)}
@@ -148,11 +148,11 @@ class TestMappingAndTiers:
 
     def test_rating_the_risks_moves_the_tiers(self, platform_project, client, mapped):
         oversight = client.post(
-            f"/api/projects/{mapped['id']}/severity",
+            f"/p/{platform_project}/api/projects/{mapped['id']}/severity",
             json={"risk2": 5, "risk1": 5, "risk4": 1, "risk0": 1, "risk3": 1},
         ).json()
         poisoning = client.post(
-            f"/api/projects/{mapped['id']}/severity",
+            f"/p/{platform_project}/api/projects/{mapped['id']}/severity",
             json={"risk2": 1, "risk1": 1, "risk4": 5, "risk3": 5, "risk0": 1},
         ).json()
         first = {p["objective_id"] for p in oversight["priorities"] if p["tier"] == 1}
@@ -162,7 +162,7 @@ class TestMappingAndTiers:
 
     def test_tier_one_never_exceeds_seven(self, platform_project, client, mapped):
         rated = client.post(
-            f"/api/projects/{mapped['id']}/severity",
+            f"/p/{platform_project}/api/projects/{mapped['id']}/severity",
             json={f"risk{n}": 5 for n in range(5)},
         ).json()
         assert sum(p["tier"] == 1 for p in rated["priorities"]) <= 7

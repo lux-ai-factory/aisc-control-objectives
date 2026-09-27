@@ -39,8 +39,11 @@ flowchart LR
 ```bash
 uv pip install -e '.[dev]'
 
-export DATABASE_URL=postgresql://user:password@localhost:5432/control-objectives
-alembic upgrade head
+# who is in which project: the platform database
+export DATABASE_URL=postgresql://user:password@localhost:5432/platform
+# each project's own database; {database} becomes project_<pid without hyphens>
+export PROJECT_DATABASE_URL=postgresql://user:password@localhost:5432/{database}
+python -m aisc_control_objectives.migrate_projects   # every project database, to head
 
 python -m aisc_control_objectives.server        # http://localhost:8090
 ```
@@ -132,22 +135,22 @@ FastAPI, port `8090`, interactive docs at `/docs`. The pages are `/`, `/objectiv
 | `GET /api/control-objectives?mode=control\|test` | the control / test partition |
 | `GET /api/control-objectives/{id}` | one objective, 404 if unknown |
 | `GET /api/macro-requirements` | R1 through R11 with their objectives nested |
-| `POST /api/projects` | start a project (body: the AI Card) |
-| `GET /api/projects`, `GET /api/projects/{id}` | the systems under assessment |
-| `POST /api/projects/{id}/card` | replace the card with a corrected export |
-| `POST /api/projects/{id}/severity` | rank the risks, body `{"risk2": 5, ...}` |
-| `POST /api/projects/{id}/map` | run the mapping (one model call per risk) |
-| `DELETE /api/projects/{id}` | delete a project and everything under it |
+| `GET /p/{project}/api/projects`, `GET /p/{project}/api/projects/{id}` | the project's assessments (`{project}` is its pid or slug) |
+| `POST /p/{project}/api/projects/{id}/severity` | rank the risks, body `{"risk2": 5, ...}` |
+| `POST /p/{project}/api/projects/{id}/map` | run the mapping (one model call per risk) |
+| `DELETE /p/{project}/api/projects/{id}` | delete an assessment and everything under it |
+
+An assessment is started from the page (`POST /p/{project}/projects`), of the project's latest AI card version. Everything under `/p/{project}` needs a signed-in member of that project (an editor to change anything), and is answered from that project's own database: an id of another project is a 404.
 
 Every objective is served with its derived fields: `macro_id`, `macro_title`, `requires_control`, `requires_test`, `legal_bases`.
 
 ## Storage
 
-Postgres, on the qualification app's blueprint: a table per real thing, `JSONB` only where nothing queries inside, cascading deletes from the project, and Alembic migrations in place of its Prisma ones.
+Postgres, one database per project (`project_<pid without hyphens>`, schema `control_objectives`), on the qualification app's blueprint: a table per real thing, `JSONB` only where nothing queries inside, cascading deletes from the project, and Alembic migrations in place of its Prisma ones.
 
 | Table | Holds |
 |---|---|
-| `project` | one system under assessment, with the catalogue digest it was assessed against |
+| `project` | one assessment of one AI card version (`system_id`, a row of `project.system` in the same database), with the catalogue digest it was assessed against |
 | `graph` | the uploaded card, **as the bytes that were uploaded**, with their sha256 |
 | `risk` | one AIRO chain flattened, with the assessor's severity on it |
 | `mapped_objective` | one objective a risk was mapped to, with the quote behind it |
@@ -161,7 +164,8 @@ Three layers, lowest to highest: **built-in defaults, then `control-objectives.t
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `DATABASE_URL` | local `control_objectives` database | the same variable the qualification app reads |
+| `DATABASE_URL` | local `platform` database | the platform database, read for membership only |
+| `PROJECT_DATABASE_URL` | `DATABASE_URL` with `{database}` | a project's own database, `{database}` replaced by `project_<hex>` |
 | `CONTROL_OBJECTIVES_CONFIG_FILE` | `<repo>/control-objectives.toml` | config file path |
 | `CONTROL_OBJECTIVES_FILE` | bundled CSV | serve a different objectives export |
 | `BAF_LLM_PROVIDER` | `mistral` | which provider, BAF's name for it |
@@ -202,7 +206,7 @@ The skill the model runs under is `src/aisc_control_objectives/skills/mapping-a-
 pytest
 ```
 
-192 tests. They run against a **real Postgres**, not SQLite, because testing on a different engine from production is how you find out `text[]` does not exist on the day you deploy. Each run creates and drops its own database; point `CONTROL_OBJECTIVES_TEST_DATABASE_URL` somewhere else if the default (`.../control_objectives_test`) is not right for your machine.
+192 tests. They run against a **real Postgres**, not SQLite, because testing on a different engine from production is how you find out `text[]` does not exist on the day you deploy. Each run creates and drops its own database, so `CONTROL_OBJECTIVES_TEST_DATABASE_URL` must name a scratch database on a throwaway Postgres: the suite refuses to run without it, on port 5432, or against `platform`, `postgres` or a `project_` database. The isolation tests also make real project databases in that cluster's `platform` (made by the repository's `init/*.sql`).
 
 ## Deployment
 
@@ -216,7 +220,7 @@ docker run -p 8090:8090 --env-file .env -e DATABASE_URL=... aisc-control-objecti
 `env.development` holds the settings for running inside the platform compose (served behind Caddy under `/control-objectives`, which is what `CONTROL_OBJECTIVES_ROOT_PATH` is for).
 
 > [!WARNING]
-> Run `alembic upgrade head` against the target database before starting the service. The container does not migrate on boot.
+> Run `python -m aisc_control_objectives.migrate_projects` (the `control-objectives-migrate` one-shot) before starting the service. The service also migrates a project database the first time it opens it.
 
 ## Not here yet
 

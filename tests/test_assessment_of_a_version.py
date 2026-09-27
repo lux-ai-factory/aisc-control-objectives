@@ -3,7 +3,7 @@
 "Start assessment" takes no file. It asks the platform for the project's latest
 system version, asks qualification for that version's card as JSON-LD, and
 stores the assessment against that version (`project.system_id`, a pid in
-`core.system`). One assessment per version; an older version's assessment is
+the project database's `project.system`). One assessment per version; an older version's assessment is
 kept as it was and can no longer be changed.
 
 The two upstream services are real HTTP servers here (a stub on a free port),
@@ -351,24 +351,17 @@ def test_s7_6_deleting_the_version_deletes_its_assessment(
     a1 = _assessment_id(_start(client, platform_project))
 
     with repository.engine.begin() as connection:
-        connection.execute(text("DELETE FROM core.system WHERE pid = :p"), {"p": v1})
+        connection.execute(text("DELETE FROM project.system WHERE pid = :p"), {"p": v1})
 
     assert repository.get(a1) is None
     assert repository.orphan_rows() == 0
 
 
-def test_s7_6_deleting_the_project_deletes_versions_and_assessments(
-    client, repository, platform_project, system_version, upstream, card_v1
-):
-    """# S7.6: through the project cascade, as the platform deletes it."""
-    v1 = system_version(platform_project, 1)
-    upstream.version(platform_project, v1, 1, card_v1)
-    a1 = _assessment_id(_start(client, platform_project))
-
-    with repository.engine.begin() as connection:
-        connection.execute(text("DELETE FROM core.project WHERE pid = :p"), {"p": platform_project})
-
-    assert repository.get(a1) is None
+# (Isolation, S-D13: "deleting the project deletes versions and assessments"
+# is gone from here. A deleted project's database is dropped whole, so there is
+# no cascade left to test in it; the drop and the 404 after it are
+# test_isolation_project_databases.py::test_I2_5_I17_1_a_dropped_database_is_evicted_and_answers_404
+# and the platform's delete tests.)
 
 
 # ── S7.7 the catalogue digest is per assessment ─────────────────────────────

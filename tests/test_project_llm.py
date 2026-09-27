@@ -96,7 +96,8 @@ def failing_client(repository, objectives, baf_llm):
 
 
 @pytest.mark.parametrize("kind", ["resolve", "build"])
-def test_s3_10_the_api_answers_502_with_the_reason_and_saves_nothing(failing_client, baf_llm, assessment, kind):
+def test_s3_10_the_api_answers_502_with_the_reason_and_saves_nothing(failing_client, baf_llm, assessment, kind,
+                                                                     platform_project):
     key = new_key()
     message = ("the platform could not resolve the risk mapper's model for project x: the stored key for "
                "openai cannot be decrypted; enter it again") if kind == "resolve" else \
@@ -104,11 +105,11 @@ def test_s3_10_the_api_answers_502_with_the_reason_and_saves_nothing(failing_cli
     exc = baf_llm.ResolveError(message) if kind == "resolve" else ValueError(message)
     projects, client = failing_client(exc)
     pid = assessment(projects)
-    r = client.post(f"/api/projects/{pid}/map")
+    r = client.post(f"/p/{platform_project}/api/projects/{pid}/map")
     assert r.status_code == 502, r.text
     assert r.json() == {"detail": message}
     assert key not in r.text
-    assert client.get(f"/api/projects/{pid}").json()["mapping_run"] is None
+    assert client.get(f"/p/{platform_project}/api/projects/{pid}").json()["mapping_run"] is None
 
 
 def test_s3_10_the_form_route_answers_502_plain_text_and_saves_nothing(failing_client, baf_llm, assessment,
@@ -120,7 +121,7 @@ def test_s3_10_the_form_route_answers_502_plain_text_and_saves_nothing(failing_c
     assert r.status_code == 502
     assert r.headers["content-type"].startswith("text/plain")
     assert message in r.text
-    assert client.get(f"/api/projects/{pid}").json()["mapping_run"] is None
+    assert client.get(f"/p/{platform_project}/api/projects/{pid}").json()["mapping_run"] is None
 
 
 # ── S3.9 server.build_app wires mapper_for to the platform ───────────────────

@@ -19,6 +19,7 @@ recomputed: the uploaded bytes, the ratings, and what the mapping cost.
 
 from __future__ import annotations
 
+import copy
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -59,7 +60,7 @@ class Projects:
 
     def __init__(
         self,
-        repository: ProjectRepository,
+        repository: ProjectRepository | None,
         catalogue: ControlObjectiveCatalogue,
         mapper: Mapper,
         model: str = "",
@@ -67,12 +68,22 @@ class Projects:
     ):
         """`mapper` and `model` are the service's own (its environment). With
         `mapper_for`, each map asks it for the mapper of the assessment's project
-        instead, so a project that chose its own model on the platform gets it."""
+        instead, so a project that chose its own model on the platform gets it.
+
+        `repository` is None in the service as deployed: each request works on
+        the repository of the one project database it was let into, `bound()`."""
         self._repository = repository
         self._catalogue = catalogue
         self._mapper = mapper
         self._model = model
         self._mapper_for = mapper_for
+
+    def bound(self, repository: ProjectRepository) -> Projects:
+        """The same service on one project's repository (a copy, so a subclass
+        and its configuration are kept as they are)."""
+        bound = copy.copy(self)
+        bound._repository = repository
+        return bound
 
     # ── the flow ──────────────────────────────────────────────────────────
 
@@ -81,8 +92,10 @@ class Projects:
     ) -> ProjectView:
         """Take the AI card of one version. Its risks are what the assessor rates next.
 
-        `project` is the platform project being assessed and `system_id` the
-        card version (core.system) the assessment is of: one per version.
+        `system_id` is the card version (a row of project.system in this
+        project's database) the assessment is of: one per version. `project` is
+        the platform project being assessed; the database is that project, so it
+        is not stored.
         """
         ontology = Ontology.from_jsonld(raw)
         record = self._repository.create(
@@ -90,6 +103,10 @@ class Projects:
             ontology=ontology, jsonld=jsonld, system_id=system_id,
         )
         return self.view(record.id)
+
+    def has_version(self, system_id: str) -> bool:
+        """Whether this project's database has that card version."""
+        return self._repository.has_version(system_id)
 
     def find_by_system(self, system_id: str) -> ProjectView | None:
         record = self._repository.find_by_system(system_id)
@@ -107,7 +124,10 @@ class Projects:
         return self.view(project_id)
 
     def map_risks_of(self, project_id: str) -> ProjectView:
-        """The one agentic step: which objectives mitigate each risk."""
+        """The one agentic step: which objectives mitigate each risk.
+
+        The model is the one chosen by the project whose database the
+        assessment is in (I5.6)."""
         record = self._repository.get(project_id)
         mapper, model = self._mapper, self._model
         if self._mapper_for is not None:
@@ -128,9 +148,9 @@ class Projects:
         record = self._repository.get(project_id)
         return self._derive(record) if record else None
 
-    def list(self, project: str) -> list[ProjectView]:
-        """The assessments of one platform project, and no other's."""
-        return [self._derive(record) for record in self._repository.list(project)]
+    def list(self) -> list[ProjectView]:
+        """The assessments of this project, and no other's (the database is the project)."""
+        return [self._derive(record) for record in self._repository.list()]
 
     def _derive(self, record: ProjectRecord) -> ProjectView:
         """Tiers, computed from what is stored. Never written back: a changed

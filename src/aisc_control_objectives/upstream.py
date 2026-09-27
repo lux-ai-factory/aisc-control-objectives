@@ -56,7 +56,7 @@ def _get(url: str, authorization: str | None, service: str) -> httpx.Response:
 
 
 def latest_version(project: str, authorization: str | None) -> dict | None:
-    """The project's latest card version (a core.system row), or None when it has none."""
+    """The project's latest card version (a row of the project database's project.system), or None when it has none."""
     url = f"{_base('PLATFORM_URL')}/projects/{project}/system-versions/latest"
     response = _get(url, authorization, "the platform")
     if response.status_code != 200:

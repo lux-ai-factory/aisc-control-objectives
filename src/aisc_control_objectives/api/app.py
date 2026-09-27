@@ -8,33 +8,39 @@ Two things to look at, and one project at a time:
     /p/{project}/projects           its assessments, one per AI card version
     /p/{project}/projects/{id}      the AI Card · rank its risks · map · tiers
 
-The JSON API mirrors the pages. Everything is persisted, so a restart loses
-nothing.
+    /p/{project}/api/projects[/{id}[/map|/severity]]   the JSON API, inside the project too
+
+Each project's assessments are in that project's own database (isolation
+2026-09-25): the gate opens the database of the project in the path, after
+deciding the caller may be there, and every handler works in that database
+only. An assessment of another project is not there, so it is a 404.
+Everything is persisted, so a restart loses nothing.
 """
 
 from __future__ import annotations
 
 import json
+import logging
 import os
 from typing import Literal
 
+from aisc_identity.headers import token_from_headers
 from fastapi import Body, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse
-from sqlalchemy.exc import IntegrityError
-
-from aisc_identity.headers import token_from_headers
-
-from aisc_control_objectives import upstream
-from aisc_control_objectives.access import (
-    REFUSALS,
-    ProjectAccess,
-    access_for,
-    decide,
-    project_pid,
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    PlainTextResponse,
+    RedirectResponse,
 )
+from sqlalchemy.exc import DBAPIError, IntegrityError
+
+from aisc_control_objectives import projectdb, upstream
+from aisc_control_objectives.access import REFUSALS, ProjectAccess
 from aisc_control_objectives.config import RunConfig
 from aisc_control_objectives.control_objectives import ControlObjectiveCatalogue
+from aisc_control_objectives.db.repository import ProjectRepository
 from aisc_control_objectives.models.control_objective import ControlObjective, MacroRequirement
 from aisc_control_objectives.models.ontology import Ontology
 from aisc_control_objectives.projects import ModelUnavailable, Projects
@@ -52,6 +58,11 @@ from aisc_control_objectives.rendering import (
 ModeFilter = Literal["control", "test"]
 
 NO_CARD = "No AI card for the latest version yet"
+
+#: A start whose version the project's own database does not have.
+NOT_IN_PROJECT = "The latest version is not in this project's database."
+
+logger = logging.getLogger(__name__)
 
 #: Where projects are chosen. One place, before any module is entered.
 LAUNCHER_URL = os.environ.get("LAUNCHER_URL", DEFAULT_LAUNCHER_URL)
@@ -125,7 +136,14 @@ def create_app(
     cors_origins: list[str] | None = None,
     source_name: str = "ai_act_control_objectives.csv",
     engine=None,
+    databases: projectdb.ProjectDatabases | None = None,
 ) -> FastAPI:
+    """The app. `engine` reads membership (the gate); `databases`, as deployed,
+    is the door to each project's own database. Without `databases` every
+    assessment is in `projects`' one repository (the single-database domain
+    tests); without `engine` there is no gate at all."""
+    if databases is not None and engine is None:
+        raise ValueError("databases needs the platform engine for its gate")
     config = base_config or RunConfig()
     app = FastAPI(title="AISC Control Objectives", root_path=root_path)
 
@@ -136,7 +154,7 @@ def create_app(
     # tests build it, and why server.build_app always passes one (pinned in
     # tests/test_api_auth.py).
     if engine is not None:
-        app.add_middleware(ProjectAccess, engine=engine)
+        app.add_middleware(ProjectAccess, engine=engine, databases=databases)
 
     app.add_middleware(
         CORSMiddleware,
@@ -154,64 +172,53 @@ def create_app(
             raise HTTPException(status_code=404)
         return FileResponse(path)
 
-    def _view_or_404(project_id: str):
-        view = projects.view(project_id)
+    if databases is not None:
+        @app.exception_handler(DBAPIError)
+        async def database_error(request: Request, exc: DBAPIError):
+            """A project database dropped under a running service (I2.5): forget
+            its engine, and the project is gone, 404. Anything else is a 500."""
+            opened = getattr(request.state, "opened", None)
+            if opened is not None and projectdb.is_missing_database(exc):
+                databases.evict(opened.pid)
+                message, status = REFUSALS["not-found"]
+            else:
+                logger.error("database error on %s: %s", request.url.path, type(exc).__name__)
+                message, status = "Internal Server Error", 500
+            if "/api/" in request.url.path:
+                return JSONResponse({"detail": message}, status_code=status)
+            return PlainTextResponse(message, status_code=status)
+
+    def projects_of(request: Request) -> Projects:
+        """The service on the database the gate opened for this request."""
+        opened = getattr(request.state, "opened", None)
+        if opened is None:
+            return projects
+        return projects.bound(
+            ProjectRepository(opened.engine, objectives_digest=objectives.digest, pid=opened.pid)
+        )
+
+    def view_in(request: Request, project_id: str):
+        """An assessment in this project's database, or the 404 an unknown id gets.
+
+        The gate has decided on the project in the path and opened its
+        database; an assessment of any other project is simply not in it.
+        """
+        view = projects_of(request).view(project_id)
         if view is None:
             raise HTTPException(status_code=404, detail=f"Unknown project {project_id}")
         return view
 
-    def _view_of(request: Request, project_id: str):
-        """An assessment addressed by id alone, decided by its OWN project.
-
-        The JSON API has no project in its path, so the middleware only knows
-        who is calling; this asks what the caller is to the project the
-        assessment belongs to. A stranger gets the answer an unknown id gets.
-        """
-        view = _view_or_404(project_id)
-        if engine is not None:
-            verdict = decide(
-                request.method, access_for(engine, view.record.project, request.state.caller)
-            )
-            if verdict == "not-found":
-                raise HTTPException(status_code=404, detail=f"Unknown project {project_id}")
-            if verdict != "allow":
-                message, status = REFUSALS[verdict]
-                raise HTTPException(status_code=status, detail=message)
-        return view
-
-    def _project_may(request: Request, project: str) -> None:
-        """The caller's verdict on a platform project named in a query string."""
-        if engine is None:
-            return
-        verdict = decide(request.method, access_for(engine, project, request.state.caller))
-        if verdict != "allow":
-            message, status = REFUSALS[verdict]
-            raise HTTPException(status_code=status, detail=message)
-
-    def _view_in(project: str, project_id: str):
-        """An assessment opened under /p/{project}: only under its own project.
-
-        The middleware has already decided on {project}; this refuses an
-        assessment of any other project, whether {project} is the pid or the
-        slug, with the answer an unknown id gets.
-        """
-        view = _view_or_404(project_id)
-        own = view.record.project
-        if own != project and (engine is None or project_pid(engine, project) != own):
-            raise HTTPException(status_code=404, detail=f"Unknown project {project_id}")
-        return view
-
-    _register_pages(app, objectives, projects, _view_in, source_name, root_path)
+    _register_pages(app, objectives, projects_of, view_in, source_name, root_path)
     _register_objective_api(app, objectives, config)
-    _register_project_api(app, projects, _view_of, _project_may)
+    _register_project_api(app, projects_of, view_in)
     return app
 
 
-def _register_pages(app, objectives, projects, _view_in, source_name, root_path):
+def _register_pages(app, objectives, projects_of, view_in, source_name, root_path):
     """The pages, and the forms that post to them.
 
     Anything that reads or writes an assessment lives under `/p/{project}`:
-    there is one database, and a page that lists assessments has to say whose.
+    the project's own database is where it is, and the path says which.
     The catalogue itself is the same for everyone, so it has no project in its
     path. Links therefore carry the project without a query string to lose.
     """
@@ -229,10 +236,10 @@ def _register_pages(app, objectives, projects, _view_in, source_name, root_path)
         return RedirectResponse(url=LAUNCHER_URL, status_code=307)
 
     @app.get("/p/{project}", include_in_schema=False, response_class=HTMLResponse)
-    def project_home_page(project: str) -> HTMLResponse:
+    def project_home_page(project: str, request: Request) -> HTMLResponse:
         return HTMLResponse(
             render_home_page(
-                objectives, len(projects.list(project)), root_path=root_path, project=project
+                objectives, len(projects_of(request).list()), root_path=root_path, project=project
             )
         )
 
@@ -251,9 +258,9 @@ def _register_pages(app, objectives, projects, _view_in, source_name, root_path)
         )
 
     @app.get("/p/{project}/projects", include_in_schema=False, response_class=HTMLResponse)
-    def projects_page(project: str) -> HTMLResponse:
+    def projects_page(project: str, request: Request) -> HTMLResponse:
         return HTMLResponse(
-            render_projects_page(projects.list(project), root_path=root_path, project=project)
+            render_projects_page(projects_of(request).list(), root_path=root_path, project=project)
         )
 
     @app.post("/p/{project}/projects", include_in_schema=False)
@@ -263,8 +270,12 @@ def _register_pages(app, objectives, projects, _view_in, source_name, root_path)
         No file: the platform says which version is the latest, qualification
         serves its card, and the assessment is stored against that version.
         Starting again on the same version opens the one it already has.
-        Nothing is stored on any error.
+        Nothing is stored on any error, and a version this project's database
+        does not have is refused (409), never stored against another's.
         """
+        projects = projects_of(request)
+        opened = getattr(request.state, "opened", None)
+        pid = opened.pid if opened is not None else project
         form = await request.form()
         name = str(form.get("name") or "").strip()
         # Behind the gateway the token arrives as X-Auth-Request-Access-Token
@@ -273,49 +284,55 @@ def _register_pages(app, objectives, projects, _view_in, source_name, root_path)
         token = token_from_headers(request.headers)
         auth = f"Bearer {token}" if token else None
 
-        def opened(view):
+        def redirect_to(view):
             return RedirectResponse(
                 url=_assessment_url(root_path, project, view.record.id), status_code=303
             )
 
         try:
-            latest = _latest_version(project, auth)
+            latest = _latest_version(pid, auth)
             existing = projects.find_by_system(latest["pid"])
             if existing is not None:
-                return opened(existing)
+                return redirect_to(existing)
             jsonld, raw = _card_of(latest, auth)
+            if not projects.has_version(latest["pid"]):
+                raise _Refused(NOT_IN_PROJECT, 409)
         except _Refused as refused:
             return PlainTextResponse(refused.message, status_code=refused.status_code)
         try:
             view = projects.create(
-                project=project, name=name, jsonld=jsonld, raw=raw, system_id=latest["pid"]
+                project=pid, name=name, jsonld=jsonld, raw=raw, system_id=latest["pid"]
             )
-        except IntegrityError:
+        except IntegrityError as exc:
+            if getattr(exc.orig, "sqlstate", None) == "23503":
+                # the version went from project.system between the check and the write
+                return PlainTextResponse(NOT_IN_PROJECT, status_code=409)
             # Started twice at once: the other start made it.
             found = projects.find_by_system(latest["pid"])
             if found is None:
                 raise
-            return opened(found)
-        return opened(view)
+            return redirect_to(found)
+        return redirect_to(view)
 
     @app.get(
         "/p/{project}/projects/{project_id}",
         include_in_schema=False,
         response_class=HTMLResponse,
     )
-    def project_page(project: str, project_id: str) -> HTMLResponse:
-        view = _view_in(project, project_id)
+    def project_page(project: str, project_id: str, request: Request) -> HTMLResponse:
+        view = view_in(request, project_id)
         return HTMLResponse(
             render_project_page(
                 view, objectives, root_path=root_path, project=project,
-                read_only=_read_only(projects, view),
+                read_only=_read_only(projects_of(request), view),
             )
         )
 
     @app.post("/p/{project}/projects/{project_id}/map", include_in_schema=False)
-    def map_form(project: str, project_id: str):
+    def map_form(project: str, project_id: str, request: Request):
         """The one agentic step, on a button: it costs a model call per risk."""
-        view = _view_in(project, project_id)
+        projects = projects_of(request)
+        view = view_in(request, project_id)
         if (why := _read_only(projects, view)) is not None:
             return PlainTextResponse(why, status_code=409)
         try:
@@ -328,7 +345,8 @@ def _register_pages(app, objectives, projects, _view_in, source_name, root_path)
 
     @app.post("/p/{project}/projects/{project_id}/severity", include_in_schema=False)
     async def rate_form(project: str, project_id: str, request: Request):
-        view = _view_in(project, project_id)
+        projects = projects_of(request)
+        view = view_in(request, project_id)
         if (why := _read_only(projects, view)) is not None:
             return PlainTextResponse(why, status_code=409)
         form = await request.form()
@@ -381,8 +399,12 @@ def _register_objective_api(app, objectives, config):
         return objectives.macro_requirements()
 
 
-def _register_project_api(app, projects, _view_of, _project_may):
-    """One assessed system: its graph, its ranking, its mapping, its tiers."""
+def _register_project_api(app, projects_of, view_in):
+    """One assessed system: its graph, its ranking, its mapping, its tiers.
+
+    Under the project, as the pages are (I5.2): the gate has decided on
+    `{project}` and opened its database, and an id is looked for there only.
+    """
 
     def payload(view) -> dict:
         record = view.record
@@ -405,39 +427,39 @@ def _register_project_api(app, projects, _view_of, _project_may):
             "mapped": view.mapped,
         }
 
-    def _latest_or_409(view) -> None:
+    def _latest_or_409(projects, view) -> None:
         if (why := _read_only(projects, view)) is not None:
             raise HTTPException(status_code=409, detail=why)
 
-    @app.get("/api/projects")
-    def list_projects(
-        request: Request,
-        project: str = Query(..., description="The platform project to list"),
-    ) -> list[dict]:
-        _project_may(request, project)
-        return [payload(view) for view in projects.list(project)]
+    @app.get("/p/{project}/api/projects")
+    def list_projects(project: str, request: Request) -> list[dict]:
+        return [payload(view) for view in projects_of(request).list()]
 
-    @app.get("/api/projects/{project_id}")
-    def get_project(project_id: str, request: Request) -> dict:
-        return payload(_view_of(request, project_id))
+    @app.get("/p/{project}/api/projects/{project_id}")
+    def get_project(project: str, project_id: str, request: Request) -> dict:
+        return payload(view_in(request, project_id))
 
-    @app.post("/api/projects/{project_id}/map")
-    def map_risks(project_id: str, request: Request) -> dict:
-        _latest_or_409(_view_of(request, project_id))
+    @app.post("/p/{project}/api/projects/{project_id}/map")
+    def map_risks(project: str, project_id: str, request: Request) -> dict:
+        projects = projects_of(request)
+        _latest_or_409(projects, view_in(request, project_id))
         try:
             return payload(projects.map_risks_of(project_id))
         except ModelUnavailable as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    @app.post("/api/projects/{project_id}/severity")
-    def rate(project_id: str, request: Request, ratings: dict[str, int] = Body(...)) -> dict:
-        _latest_or_409(_view_of(request, project_id))
+    @app.post("/p/{project}/api/projects/{project_id}/severity")
+    def rate(
+        project: str, project_id: str, request: Request, ratings: dict[str, int] = Body(...)
+    ) -> dict:
+        projects = projects_of(request)
+        _latest_or_409(projects, view_in(request, project_id))
         try:
             return payload(projects.rate(project_id, ratings))
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    @app.delete("/api/projects/{project_id}", status_code=204)
-    def delete_project(project_id: str, request: Request) -> None:
-        _view_of(request, project_id)
-        projects.delete(project_id)
+    @app.delete("/p/{project}/api/projects/{project_id}", status_code=204)
+    def delete_project(project: str, project_id: str, request: Request) -> None:
+        view_in(request, project_id)
+        projects_of(request).delete(project_id)
