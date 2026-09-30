@@ -45,7 +45,7 @@ EXAMPLE_PID = "3f2b8c1e-0d4a-4e7b-9a55-1c2d3e4f5a6b"
 EXAMPLE_DB = "project_3f2b8c1e0d4a4e7b9a551c2d3e4f5a6b"
 
 #: I2.6: what report_ro and dashboard_ro may SELECT in control_objectives.
-READER_TABLES = ("project", "graph", "risk", "mapped_objective", "mapping_run")
+READER_TABLES = ("project", "graph", "risk", "mapped_objective", "mapping_run", "objective_selection")
 READERS = ("report_ro", "dashboard_ro")
 
 

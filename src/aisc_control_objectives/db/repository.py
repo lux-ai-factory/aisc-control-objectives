@@ -57,6 +57,9 @@ class ProjectRecord:
     ontology: Ontology = field(default_factory=Ontology)
     severity: Severity = field(default_factory=Severity)
     mapping_run: MappingRun | None = None
+    #: The objectives ticked to take forward; None until anything (the mapping
+    #: or the assessor) has chosen, [] when everything was unticked.
+    selected: list[str] | None = None
 
 
 #: A card version's number and the highest number of the project, read from
@@ -68,6 +71,13 @@ _VERSION_NUMBERS = text(
 )
 
 _HAS_VERSION = text("SELECT 1 FROM project.system WHERE pid::text = :sid")
+
+#: The assessment of the closest earlier card version, if any.
+_PREVIOUS_ASSESSMENT = text(
+    "SELECT a.id FROM control_objectives.project a JOIN project.system s ON s.pid = a.system_id"
+    " WHERE s.number < (SELECT number FROM project.system WHERE pid::text = :sid)"
+    " ORDER BY s.number DESC LIMIT 1"
+)
 
 
 class ProjectRepository:
@@ -152,9 +162,28 @@ class ProjectRepository:
                 if row.risk_id in ratings:
                     row.severity = ratings[row.risk_id]
 
-    def save_mapping_run(self, project_id: str, run: MappingRun, model: str = "") -> None:
+    def save_selection(self, project_id: str, objective_ids: list[str]) -> None:
+        """Replace the objectives this assessment takes forward."""
+        with self._sessions.begin() as session:
+            self._set_selection(session, session.get(tables.Project, project_id), objective_ids)
+
+    @staticmethod
+    def _set_selection(session: Session, project: tables.Project, objective_ids) -> None:
+        ids = sorted(set(objective_ids))
+        if project.selection is None:
+            session.add(tables.ObjectiveSelectionRow(project_id=project.id, objective_ids=ids))
+        else:
+            project.selection.objective_ids = ids
+
+    def save_mapping_run(
+        self, project_id: str, run: MappingRun, model: str = "",
+        selected: list[str] | None = None,
+    ) -> None:
+        """`selected`, when given, replaces the selection in the same transaction."""
         with self._sessions.begin() as session:
             project = session.get(tables.Project, project_id)
+            if selected is not None:
+                self._set_selection(session, project, selected)
             if project.mapping_run is not None:
                 session.delete(project.mapping_run)
             for row in project.risks:
@@ -206,6 +235,13 @@ class ProjectRepository:
             project = session.scalar(
                 select(tables.Project).where(tables.Project.system_id == system_id)
             )
+            return self._to_record(session, project) if project else None
+
+    def previous_of(self, record: ProjectRecord) -> ProjectRecord | None:
+        """The assessment of the closest earlier card version, if there is one."""
+        with self._sessions() as session:
+            found = session.execute(_PREVIOUS_ASSESSMENT, {"sid": record.system_id}).scalar()
+            project = session.get(tables.Project, found) if found else None
             return self._to_record(session, project) if project else None
 
     def has_version(self, system_id: str) -> bool:
@@ -334,6 +370,7 @@ class ProjectRepository:
                 system_name=card.system_name,
                 risks=risks,
             ),
+            selected=list(project.selection.objective_ids) if project.selection else None,
             severity=Severity(
                 ratings={
                     row.risk_id: row.severity

@@ -24,7 +24,9 @@ from sqlalchemy import create_engine, text
 from conftest import CORE_PROJECT_DDL, refused_database
 
 BASELINE = "20260926000000_project_database"
-TABLES = ("project", "graph", "risk", "mapped_objective", "mapping_run")
+#: The objective selection (evidence links plan 2026-09-30, step A), on top of the baseline.
+HEAD = "20261001000000_selection"
+TABLES = ("project", "graph", "risk", "mapped_objective", "mapping_run", "objective_selection")
 
 
 def _scratch(database_url: str, suffix: str):
@@ -101,18 +103,18 @@ def _columns(connection) -> list[tuple]:
     ]
 
 
-def test_upgrading_to_head_gives_the_baseline_and_the_tables(migrated):
+def test_upgrading_to_head_gives_the_head_and_the_tables(migrated):
     with migrated.connect() as connection:
         assert connection.execute(
             text("SELECT version_num FROM control_objectives.alembic_version")
-        ).scalars().all() == [BASELINE]
+        ).scalars().all() == [HEAD]
         tables = set(connection.execute(text(
             "SELECT table_name FROM information_schema.tables WHERE table_schema = 'control_objectives'"
         )).scalars())
     assert tables == set(TABLES) | {"alembic_version"}
 
 
-def test_the_baseline_is_the_only_head():
+def test_the_selection_is_the_only_head_and_sits_on_the_baseline():
     from alembic.config import Config
     from alembic.script import ScriptDirectory
 
@@ -121,8 +123,23 @@ def test_the_baseline_is_the_only_head():
     config = Config(str(projectdb.ALEMBIC_INI))
     config.set_main_option("script_location", str(projectdb.ALEMBIC_DIR))
     script = ScriptDirectory.from_config(config)
-    assert script.get_heads() == [BASELINE]
+    assert script.get_heads() == [HEAD]
+    assert script.get_revision(HEAD).down_revision == BASELINE
     assert script.get_revision(BASELINE).down_revision is None
+
+
+def test_the_readers_read_the_selection_and_the_platform_is_granted_nothing(migrated):
+    """Step 4 is a platform page that reads as report_ro (D4): platform_rw gets nothing here."""
+    with migrated.connect() as connection:
+        def can(role, table, what="SELECT"):
+            return connection.execute(
+                text("SELECT has_table_privilege(:r, :t, :w)"),
+                {"r": role, "t": f"control_objectives.{table}", "w": what},
+            ).scalar()
+
+        assert can("dashboard_ro", "objective_selection")
+        assert not can("dashboard_ro", "objective_selection", "INSERT")
+        assert not can("platform_rw", "objective_selection")
 
 
 def test_upgrading_again_changes_nothing(migrated):
@@ -190,3 +207,49 @@ def test_the_model_and_the_migration_agree(migrated, repository):
         return {definition.replace(f" {name} ON ", " ON ") for name, definition in indexes}
 
     assert unnamed(from_model[1]) == unnamed(from_migration[1])
+
+
+def test_an_assessment_mapped_before_the_selection_gets_its_mapped_objectives(database_url):
+    """D1 for what was there before: an assessment already mapped when the selection arrives starts
+    with every objective its mapping linked ticked; one not yet mapped gets no selection."""
+    from alembic import command
+    from alembic.config import Config
+
+    from aisc_control_objectives import projectdb
+
+    engine, drop = _scratch(database_url, "alembic_backfill")
+    try:
+        config = Config(str(projectdb.ALEMBIC_INI))
+        config.set_main_option("script_location", str(projectdb.ALEMBIC_DIR))
+        with engine.begin() as connection:
+            config.attributes["connection"] = connection
+            command.upgrade(config, BASELINE)
+        v1, v2 = str(uuid.uuid4()), str(uuid.uuid4())
+        with engine.begin() as connection:
+            connection.execute(text("INSERT INTO project.system (pid, number, name) VALUES (:a, 1, 'S'), (:b, 2, 'S')"),
+                               {"a": v1, "b": v2})
+            connection.execute(text(
+                "INSERT INTO control_objectives.project (id, name, objectives_digest, created_at, updated_at, system_id)"
+                " VALUES ('mapped', 'S', '', now(), now(), :a), ('fresh', 'S', '', now(), now(), :b)"),
+                {"a": v1, "b": v2})
+            for assessment, risk in (("mapped", "risk0"), ("mapped", "risk1"), ("fresh", "risk0")):
+                connection.execute(text(
+                    "INSERT INTO control_objectives.risk (project_id, risk_id, position, text, short_label, source,"
+                    " vulnerability, consequence, impact, stakeholder, control, follow_up_control, areas, vair_terms,"
+                    " provenance) VALUES (:p, :r, 0, 't', '', '', '', '', '', '', '', '', '{}', '{}', 'form')"),
+                    {"p": assessment, "r": risk})
+            connection.execute(text(
+                "INSERT INTO control_objectives.mapped_objective (risk_row_id, objective_id, quote, rationale)"
+                " SELECT r.id, o, '', '' FROM control_objectives.risk r,"
+                " unnest(CASE r.risk_id WHEN 'risk0' THEN ARRAY['R1.1', 'R2.3'] ELSE ARRAY['R2.3', 'R6.1'] END) o"
+                " WHERE r.project_id = 'mapped'"))
+            connection.execute(text(
+                "INSERT INTO control_objectives.mapping_run (project_id, findings, stops, stop, attempts, error,"
+                " model, ran_at) VALUES ('mapped', '[]', '{}', 'clean', 1, '', 'm', now())"))
+        projectdb.migrate(engine)
+        with engine.connect() as connection:
+            rows = connection.execute(text(
+                "SELECT project_id, objective_ids FROM control_objectives.objective_selection")).all()
+        assert [tuple(r) for r in rows] == [("mapped", ["R1.1", "R2.3", "R6.1"])]
+    finally:
+        drop()

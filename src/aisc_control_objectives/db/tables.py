@@ -103,6 +103,9 @@ class Project(Base):
     mapping_run: Mapped[MappingRunRow | None] = relationship(
         back_populates="project", cascade="all, delete-orphan", uselist=False
     )
+    selection: Mapped[ObjectiveSelectionRow | None] = relationship(
+        back_populates="project", cascade="all, delete-orphan", uselist=False, lazy="selectin"
+    )
 
 
 class Graph(Base):
@@ -197,3 +200,23 @@ class MappingRunRow(Base):
     ran_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     project: Mapped[Project] = relationship(back_populates="mapping_run")
+
+
+class ObjectiveSelectionRow(Base):
+    """Which objectives the project takes forward from this assessment (evidence
+    links plan 2026-09-30, step A). Only these reach step 4, where tests and
+    controls are linked to them. No row: nothing chosen yet, not even by the
+    mapping; a row with no ids: the assessor unticked everything."""
+
+    __tablename__ = "objective_selection"
+
+    project_id: Mapped[str] = mapped_column(
+        ForeignKey("project.id", ondelete="CASCADE"), primary_key=True
+    )
+    #: "R1.1", ... No foreign key, as for mapped_objective: the catalogue is a CSV.
+    objective_ids: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now
+    )
+
+    project: Mapped[Project] = relationship(back_populates="selection")

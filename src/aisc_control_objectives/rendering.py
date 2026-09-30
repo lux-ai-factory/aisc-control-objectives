@@ -198,5 +198,6 @@ def render_project_page(
         risks=_risk_views(record),
         objective_labels={o.id: o.sub_requirement_label for o in catalogue},
         read_only=read_only,
+        selected=set(record.selected or []),
         **_navigation(root_path, project),
     )

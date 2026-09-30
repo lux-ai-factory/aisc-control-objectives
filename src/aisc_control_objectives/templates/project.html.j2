@@ -118,6 +118,20 @@
     <div class="co-stat"><div class="v">{{ counts.tier3 }}</div><div class="k">Tier 3 · later</div></div>
   </div>
 
+  {#- Which objectives go forward to step 4, where tests and controls are linked
+     to them. The mapped ones start ticked; the checkboxes below belong to this form. #}
+  <div class="qf-section">
+    <h2>Select the objectives to take forward</h2>
+    <p class="qf-help">{{ selected | length }} of {{ counts.tier1 + counts.tier2 + counts.tier3 }} selected.
+       Only the selected objectives reach <b>Collect evidence</b>, where tests and controls are linked to them.
+       The mapped ones start ticked.</p>
+    {%- if not read_only %}
+    <form id="selection" method="post" action="{{ project_base }}/projects/{{ record.id }}/selection">
+      <div class="qf-actions"><button class="btn" type="submit">Save selection</button></div>
+    </form>
+    {%- endif %}
+  </div>
+
   {%- for section in sections %}
   <section class="qf-section co-tier--{{ section.key }}" id="tier-{{ section.key }}">
     <div class="co-macro-head">
@@ -132,6 +146,10 @@
         <span class="co-family">{{ objective.macro_id }} {{ objective.macro_title }}</span>
         <span class="qf-tag qf-tag--tier{{ priority.tier }}">Tier {{ priority.tier }}</span>
         {%- if priority.non_binding %}<span class="qf-tag qf-tag--voluntary">Non-binding</span>{% endif %}
+        {%- if read_only %}{% if objective.id in selected %}<span class="qf-tag">Selected</span>{% endif %}
+        {%- else %}
+        <label class="co-pick"><input type="checkbox" form="selection" name="objective" value="{{ objective.id }}"{% if objective.id in selected %} checked{% endif %}> Take forward</label>
+        {%- endif %}
       </div>
       <p class="co-reason co-why">{% if priority.tier == 1 %}<b>Start here.</b> {% endif %}{{ priority.reasons | join('; ') }}.</p>
       <p class="co-text">{{ objective.text }}</p>

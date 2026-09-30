@@ -157,8 +157,9 @@ def test_I5_4_the_database_is_at_the_baseline_and_readers_get_their_reads(cluste
 
     a, _, _, _ = two
     database = projects.database(a)
+    # the head: the selection revision (evidence links 2026-09-30) on the baseline
     baseline = (Path(__file__).resolve().parents[1] / "alembic" / "versions"
-                / "20260926000000_project_database.py").read_text()
+                / "20261001000000_selection.py").read_text()
     revision = re.search(r"^revision\s*=\s*['\"]([^'\"]+)", baseline, re.M).group(1)
     assert _rows(cluster, database, "SELECT version_num FROM control_objectives.alembic_version") == [
         (revision,)
@@ -190,6 +191,8 @@ def _id_routes(pid, aid, risk="r1"):
         ("GET", _api(pid, aid), {}),
         ("POST", _api(pid, aid, "/map"), {}),
         ("POST", _api(pid, aid, "/severity"), {"json": {risk: 3}}),
+        ("POST", f"/p/{pid}/projects/{aid}/selection", {"data": {"objective": "R1.1"}}),
+        ("POST", _api(pid, aid, "/selection"), {"json": {"objective_ids": ["R1.1"]}}),
         ("DELETE", _api(pid, aid), {}),
     ]
 
@@ -215,6 +218,7 @@ def test_I16_5_I5_2_an_assessment_of_A_under_Bs_pid_is_404_on_every_route(
     assert _rows(cluster, projects.database(a),
                  "SELECT id, severity FROM control_objectives.risk ORDER BY id") == before
     assert _count(cluster, projects.database(a), "control_objectives.mapping_run") == 0
+    assert _count(cluster, projects.database(a), "control_objectives.objective_selection") == 0
     assert client.get(_api(a, aid), headers=token(BOTH)).status_code == 200
 
 

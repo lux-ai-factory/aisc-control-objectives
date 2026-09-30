@@ -28,7 +28,7 @@ from aisc_control_objectives.control_objectives import ControlObjectiveCatalogue
 from aisc_control_objectives.db.repository import ProjectRecord, ProjectRepository
 from aisc_control_objectives.models.ontology import Ontology
 from aisc_control_objectives.prioritising import Priority, prioritise
-from aisc_control_objectives.risk_mapping import Mapper, map_risks
+from aisc_control_objectives.risk_mapping import Mapper, MappingRun, map_risks
 
 #: platform project pid -> (the mapper to use for it, "<provider>/<model>" of its model)
 MapperFor = Callable[[str], tuple[Mapper, str]]
@@ -136,8 +136,33 @@ class Projects:
             except (ResolveError, ValueError) as exc:
                 raise ModelUnavailable(str(exc)) from exc
         run = map_risks(record.ontology.risks, mapper, self._catalogue)
-        self._repository.save_mapping_run(project_id, run, model=model)
+        self._repository.save_mapping_run(
+            project_id, run, model=model, selected=self._carried_selection(record, run)
+        )
         return self.view(project_id)
+
+    def select(self, project_id: str, objective_ids: list[str]) -> ProjectView:
+        """Tick the objectives the project takes forward (replaces the selection)."""
+        unknown = sorted({oid for oid in objective_ids if self._catalogue.by_id(oid) is None})
+        if unknown:
+            raise ValueError(f"not in the catalogue: {', '.join(unknown)}")
+        self._repository.save_selection(project_id, objective_ids)
+        return self.view(project_id)
+
+    def _carried_selection(self, record: ProjectRecord, run: MappingRun) -> list[str]:
+        """The selection after a mapping (D1, D2).
+
+        It starts from this assessment's own selection, else the previous card
+        version's; with neither, every mapped objective is ticked. From that
+        start, what the earlier mapping had and this one lost is unticked, what
+        this one adds is ticked, and every other choice is kept.
+        """
+        base = record if record.selected is not None else self._repository.previous_of(record)
+        now = _mapped_ids(run)
+        if base is None or base.selected is None:
+            return sorted(now)
+        before = _mapped_ids(base.mapping_run)
+        return sorted((set(base.selected) - (before - now)) | (now - before))
 
     def delete(self, project_id: str) -> None:
         self._repository.delete(project_id)
@@ -162,3 +187,10 @@ class Projects:
             record.ontology.risks,
         )
         return ProjectView(record=record, priorities=priorities)
+
+
+def _mapped_ids(run: MappingRun | None) -> set[str]:
+    """Every objective a mapping linked to at least one risk."""
+    if run is None:
+        return set()
+    return {item.objective_id for mapping in run.mappings.values() for item in mapping.objectives}

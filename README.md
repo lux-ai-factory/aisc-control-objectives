@@ -138,7 +138,10 @@ FastAPI, port `8090`, interactive docs at `/docs`. The pages are `/`, `/objectiv
 | `GET /p/{project}/api/projects`, `GET /p/{project}/api/projects/{id}` | the project's assessments (`{project}` is its pid or slug) |
 | `POST /p/{project}/api/projects/{id}/severity` | rank the risks, body `{"risk2": 5, ...}` |
 | `POST /p/{project}/api/projects/{id}/map` | run the mapping (one model call per risk) |
+| `POST /p/{project}/api/projects/{id}/selection` | the objectives to take forward to step 4, body `{"objective_ids": ["R1.1", ...]}` (replaces; unknown ids 422) |
 | `DELETE /p/{project}/api/projects/{id}` | delete an assessment and everything under it |
+
+**Selection.** Only the selected objectives reach step 4 (Collect evidence), where tests and controls are linked to them. The payload's `selected` lists them. The mapping ticks every mapped objective the first time; after that each mapping keeps the assessor's choices, unticks what the previous mapping had and this one lost, and ticks what it adds. A new card version starts from the previous version's selection by the same rule.
 
 An assessment is started from the page (`POST /p/{project}/projects`), of the project's latest AI card version. Everything under `/p/{project}` needs a signed-in member of that project (an editor to change anything), and is answered from that project's own database: an id of another project is a 404.
 

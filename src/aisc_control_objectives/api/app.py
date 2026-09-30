@@ -364,6 +364,23 @@ def _register_pages(app, objectives, projects_of, view_in, source_name, root_pat
         )
 
 
+    @app.post("/p/{project}/projects/{project_id}/selection", include_in_schema=False)
+    async def select_form(project: str, project_id: str, request: Request):
+        """"Save selection": the ticked objectives, and only those, go forward."""
+        projects = projects_of(request)
+        view = view_in(request, project_id)
+        if (why := _read_only(projects, view)) is not None:
+            return PlainTextResponse(why, status_code=409)
+        form = await request.form()
+        try:
+            projects.select(project_id, [str(v) for v in form.getlist("objective")])
+        except ValueError as exc:
+            return PlainTextResponse(f"Invalid selection: {exc}", status_code=400)
+        return RedirectResponse(
+            url=_assessment_url(root_path, project, project_id), status_code=303
+        )
+
+
 def _register_objective_api(app, objectives, config):
     """The catalogue: what the objectives are, independent of any system."""
 
@@ -425,6 +442,7 @@ def _register_project_api(app, projects_of, view_in):
             "mapping_run": record.mapping_run.model_dump() if record.mapping_run else None,
             "priorities": [p.model_dump() for p in view.priorities],
             "mapped": view.mapped,
+            "selected": sorted(record.selected or []),
         }
 
     def _latest_or_409(projects, view) -> None:
@@ -456,6 +474,19 @@ def _register_project_api(app, projects_of, view_in):
         _latest_or_409(projects, view_in(request, project_id))
         try:
             return payload(projects.rate(project_id, ratings))
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.post("/p/{project}/api/projects/{project_id}/selection")
+    def select(
+        project: str, project_id: str, request: Request,
+        objective_ids: list[str] = Body(..., embed=True),
+    ) -> dict:
+        """Which objectives the project takes forward to step 4 (replaces)."""
+        projects = projects_of(request)
+        _latest_or_409(projects, view_in(request, project_id))
+        try:
+            return payload(projects.select(project_id, objective_ids))
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 

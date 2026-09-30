@@ -105,9 +105,11 @@ def _revision_files() -> list[Path]:
 
 
 def test_I5_4_one_baseline_revision():
-    assert [p.stem for p in _revision_files()] == [BASELINE]
-    text = (VERSIONS / f"{BASELINE}.py").read_text()
-    assert re.search(r"^down_revision\s*=\s*None", text, re.M), "the baseline revises nothing"
+    """One baseline; the objective selection (evidence links 2026-09-30) sits on it."""
+    assert [p.stem for p in _revision_files()] == [BASELINE, "20261001000000_selection"]
+    roots = [p.stem for p in _revision_files()
+             if re.search(r"^down_revision\s*=\s*None", p.read_text(), re.M)]
+    assert roots == [BASELINE], "the baseline, and only it, revises nothing"
 
 
 def test_I5_4_no_revision_names_core():
