@@ -27,7 +27,7 @@ from aisc_control_objectives.baf_llm import ResolveError
 from aisc_control_objectives.control_objectives import ControlObjectiveCatalogue
 from aisc_control_objectives.db.repository import ProjectRecord, ProjectRepository
 from aisc_control_objectives.models.ontology import Ontology
-from aisc_control_objectives.prioritising import Priority, prioritise
+from aisc_control_objectives.prioritising import Priority, Severity, prioritise
 from aisc_control_objectives.risk_mapping import MappedObjective, Mapping, Mapper, MappingRun, map_risks
 
 #: platform project pid -> (the mapper to use for it, "<provider>/<model>" of its model)
@@ -115,12 +115,17 @@ class Projects:
     def is_latest(self, view: ProjectView) -> bool:
         return self._repository.is_latest(view.record)
 
-    def rate(self, project_id: str, ratings: dict[str, int]) -> ProjectView:
+    def rate(self, project_id: str, ratings: dict[str, int],
+             comments: dict[str, str] | None = None) -> ProjectView:
+        """Ratings and, optionally, comments on them ("" or blank clears one). Everything is
+        checked before anything is written."""
         known = {risk.id for risk in self._repository.get(project_id).ontology.risks}
-        unknown = sorted(set(ratings) - known)
+        unknown = sorted((set(ratings) | set(comments or {})) - known)
         if unknown:
-            raise ValueError(f"rated risk(s) not on this card: {', '.join(unknown)}")
-        self._repository.rate(project_id, ratings)
+            raise ValueError(f"risk(s) not on this card: {', '.join(unknown)}")
+        cleaned = None if comments is None else {rid: (text or "").strip() for rid, text in comments.items()}
+        Severity(ratings=ratings, comments={rid: t for rid, t in (cleaned or {}).items() if t})  # the checks
+        self._repository.rate(project_id, ratings, cleaned)
         return self.view(project_id)
 
     def map_risks_of(self, project_id: str) -> ProjectView:

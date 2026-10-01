@@ -108,7 +108,8 @@ def test_I5_4_one_baseline_revision():
     """One baseline; the objective selection (evidence links 2026-09-30), the O1 ... O50 ids and
     who mapped a risk (2026-10-01) sit on it."""
     assert [p.stem for p in _revision_files()] == [
-        BASELINE, "20261001000000_selection", "20261001100000_objective_ids", "20261001110000_mapping_source"]
+        BASELINE, "20261001000000_selection", "20261001100000_objective_ids", "20261001110000_mapping_source",
+        "20261001120000_severity_comment"]
     roots = [p.stem for p in _revision_files()
              if re.search(r"^down_revision\s*=\s*None", p.read_text(), re.M)]
     assert roots == [BASELINE], "the baseline, and only it, revises nothing"

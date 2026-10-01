@@ -157,6 +157,8 @@ class Risk(Base):
     provenance: Mapped[str] = mapped_column(Text, default="form")
     #: The assessor's 1-5. The irreplaceable part: a model did not produce it.
     severity: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: Why the assessor rated it so, optional (2026-10-01); "" when there is none.
+    severity_comment: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
 
     project: Mapped[Project] = relationship(back_populates="risks")
     mapped: Mapped[list[MappedObjectiveRow]] = relationship(

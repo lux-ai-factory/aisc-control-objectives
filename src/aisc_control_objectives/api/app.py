@@ -372,7 +372,12 @@ def _register_pages(app, objectives, projects_of, view_in, source_name, root_pat
                 for risk in view.record.ontology.risks
                 if form.get(risk.id)
             }
-            projects.rate(project_id, ratings)
+            # an optional comment per risk, `comment:<risk id>`; a blank one clears it
+            comments = {
+                key.split(":", 1)[1]: str(value)
+                for key, value in form.items() if key.startswith("comment:")
+            }
+            projects.rate(project_id, ratings, comments)
         except ValueError as exc:
             return PlainTextResponse(f"Invalid rating: {exc}", status_code=400)
         return RedirectResponse(
@@ -503,6 +508,18 @@ def _register_project_api(app, projects_of, view_in):
         _latest_or_409(projects, view_in(request, project_id))
         try:
             return payload(projects.rate(project_id, ratings))
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.post("/p/{project}/api/projects/{project_id}/severity-comments")
+    def comment_severities(
+        project: str, project_id: str, request: Request, comments: dict[str, str] = Body(...)
+    ) -> dict:
+        """Why each risk is rated as it is: {risk id: comment}; a blank comment clears it."""
+        projects = projects_of(request)
+        _latest_or_409(projects, view_in(request, project_id))
+        try:
+            return payload(projects.rate(project_id, {}, comments))
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 

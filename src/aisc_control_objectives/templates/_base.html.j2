@@ -171,6 +171,29 @@
   .co-tier--1 { border-left: 4px solid var(--primary); }
   .co-tier--2 { border-left: 4px solid var(--info-soft); }
   .co-tier--no .co-obj, .co-tier--undetermined .co-obj { opacity: 0.75; }
+  /* Step 2: every part folds; the head is the handle */
+  details.co-fold > summary { cursor: pointer; list-style: none; }
+  details.co-fold > summary::-webkit-details-marker { display: none; }
+  details.co-fold > summary::after { content: ""; width: 8px; height: 8px; margin-left: 4px;
+    border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted);
+    transform: rotate(45deg); transition: transform .15s; }
+  details.co-fold:not([open]) > summary::after { transform: rotate(-45deg); }
+  details.co-fold:not([open]) > summary { margin-bottom: 0; padding-bottom: 0; border-bottom: 0; }
+  details.co-fold:not([open]) > summary h2 { margin-bottom: 0; }
+  details.co-fold > summary { align-items: center; }
+  /* A comment on a severity */
+  .co-sev-label { display: block; margin-top: 10px; font-size: 12px; }
+  .co-sev-label span { color: var(--muted); font-weight: 400; }
+  .field textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 13px; resize: vertical; }
+  .co-sev-comment { margin: 4px 0 0; font-size: 13px; color: var(--muted); font-style: italic; }
+  /* Map with AI, and its ? */
+  .co-ai { display: flex; align-items: center; gap: 10px; margin: 6px 0 14px; }
+  .co-help { width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--border);
+             background: var(--panel); color: var(--primary); font-weight: 700; cursor: pointer; padding: 0; }
+  .co-help:hover { border-color: var(--primary); }
+  .co-help-pop { max-width: 420px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 6px;
+                 background: var(--panel); color: var(--text); font-size: 13px; line-height: 1.5;
+                 box-shadow: 0 8px 24px rgba(20, 24, 60, .18); }
   /* Step 2: each risk's mapping, by the AI or by hand */
   .co-map { padding: 14px 0; border-top: 1px solid var(--border); }
   .co-map-head { display: flex; align-items: baseline; gap: 10px; }
@@ -192,7 +215,6 @@
   .co-map-dim legend { margin-bottom: 4px; }
   .co-map-pick { display: block; font-size: 13px; padding: 2px 0; }
   .co-map-pick b { display: inline-block; min-width: 34px; }
-  .co-map-warn { margin: 0 0 0 12px; }
   /* The trustworthiness dimension of an objective, in the tools catalogue's colours */
   .co-dim { display: inline-block; padding: 2px 8px; border-radius: 999px; border: 1px solid;
             font-size: 11px; font-weight: 600; letter-spacing: 0.02em; white-space: nowrap; }
@@ -213,7 +235,7 @@
   .co-why b { font-weight: 800; }
 
   /* One row per risk: the chain on the left, its severity on the right */
-  .co-risk { display: grid; grid-template-columns: minmax(0, 1fr) 120px; gap: 20px;
+  .co-risk { display: grid; grid-template-columns: minmax(0, 1fr) 240px; gap: 24px;
              padding: 18px 0; border-top: 1px solid var(--border); }
   .co-risk:first-of-type { border-top: 0; padding-top: 4px; }
   .co-risk h3 { font-size: 16px; margin: 0 0 10px; }

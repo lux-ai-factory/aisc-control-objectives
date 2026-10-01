@@ -126,8 +126,10 @@ class _RiskView:
 
     risk: object
     rating: int
-    mapped: list = field(default_factory=list)   # (objective_id, rationale)
+    mapped: list = field(default_factory=list)   # (objective_id, rationale, source)
     findings: list = field(default_factory=list)
+    #: Why the assessor rated it so; "" when they said nothing.
+    comment: str = ""
 
 
 def _risk_views(record) -> list:
@@ -145,6 +147,7 @@ def _risk_views(record) -> list:
                 mapped=[(item.objective_id, item.rationale, item.source)
                         for item in (mapping.objectives if mapping else [])],
                 findings=[f for f in (run.findings if run else []) if f.risk_id == risk.id],
+                comment=record.severity.comments.get(risk.id, ""),
             )
         )
     return sorted(views, key=lambda view: (-view.rating, view.risk.position))

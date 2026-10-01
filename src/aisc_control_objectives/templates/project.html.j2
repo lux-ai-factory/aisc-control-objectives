@@ -15,19 +15,19 @@
   {%- endif %}
 
   {# ── 1. rank the risks ──────────────────────────────────────────────── #}
-  <div class="qf-section">
-    <div class="co-macro-head">
+  <details class="qf-section co-fold" open>
+    <summary class="co-macro-head">
       <span class="co-macro-id">1</span>
       <h2>Rank the risks on the card</h2>
       <span class="n">{{ view.rated }} of {{ record.ontology.risks | length }} rated</span>
-    </div>
+    </summary>
 
     {%- if not record.ontology.risks %}
     <div class="error">This AI Card carries no risks, so there is nothing to rank and
        nothing to order the objectives by. Save a card version whose AIRO graph has them, then start its assessment.</div>
     {%- else %}
-    <p class="qf-help">Rate each risk 1 (marginal for this system) to 5 (decisive).
-       The objectives answering the worst risks become Tier 1. Unrated risks count as 3.</p>
+    <p class="qf-help">Rate each risk 1 (marginal for this system) to 5 (decisive), and say why if
+       you like. The objectives answering the worst risks become Tier 1. Unrated risks count as 3.</p>
     {%- if not read_only %}
     <form method="post" action="{{ project_base }}/projects/{{ record.id }}/severity">
     {%- else %}
@@ -63,12 +63,16 @@
           <label for="{{ risk.risk.id }}">Severity</label>
           {%- if read_only %}
           <span id="{{ risk.risk.id }}">{{ risk.rating or "unrated" }}</span>
+          {%- if risk.comment %}<p class="co-sev-comment">{{ risk.comment }}</p>{% endif %}
           {%- else %}
           <select id="{{ risk.risk.id }}" name="{{ risk.risk.id }}">
             {%- for n in [5, 4, 3, 2, 1] %}
             <option value="{{ n }}" {% if risk.rating == n %}selected{% endif %}>{{ n }}</option>
             {%- endfor %}
           </select>
+          <label class="co-sev-label" for="comment-{{ risk.risk.id }}">Why <span>(optional)</span></label>
+          <textarea id="comment-{{ risk.risk.id }}" name="comment:{{ risk.risk.id }}" maxlength="1000" rows="3"
+                    placeholder="What makes it this severe for this system">{{ risk.comment }}</textarea>
           {%- endif %}
         </div>
       </div>
@@ -80,33 +84,36 @@
     </div>
       {%- endif %}
     {%- endif %}
-  </div>
+  </details>
 
   {# ── 2. map them to objectives ──────────────────────────────────────
      By the AI (the risk mapper, one model call per risk) or by a person, risk
      by risk; a person can also correct what the AI proposed. #}
   {%- if record.ontology.risks %}
-  <div class="qf-section">
-    <div class="co-macro-head">
+  <details class="qf-section co-fold" open>
+    <summary class="co-macro-head">
       <span class="co-macro-id">2</span>
       <h2>Map the risks to control objectives</h2>
       <span class="n">{% if view.mapped %}mapped{% else %}not yet mapped{% endif %}</span>
-    </div>
+    </summary>
 
     {%- if view.mapped and record.mapping_run.attempts and record.mapping_run.stop != "clean" %}
     <div class="error">The mapping stopped on <code>{{ record.mapping_run.stop }}</code>{% if record.mapping_run.error %}: {{ record.mapping_run.error }}{% endif %}.
        What survived its checks is above; what did not is listed with each risk.</div>
     {%- endif %}
-    <p class="qf-help">Map each risk to the objectives that would mitigate it, by hand below, or let
-       the AI read each risk against the catalogue and propose them, each resting on a quote from
-       that risk's own chain. Either way you can correct any risk's mapping afterwards. An
-       objective scores the sum of the severities of the risks mapped to it.</p>
+    <p class="qf-help">Map each risk to the objectives that would mitigate it, by hand below, or with
+       the AI. An objective scores the sum of the severities of the risks mapped to it.</p>
     {%- if not read_only %}
-    <form method="post" action="{{ project_base }}/projects/{{ record.id }}/map">
-      <div class="qf-actions">
-        {%- set ai_ran = record.mapping_run and record.mapping_run.attempts %}
-        <button class="btn" type="submit">{% if ai_ran %}Map again with AI{% else %}Map with AI{% endif %}</button>
-        {%- if view.mapped %}<span class="qf-help co-map-warn">Mapping with AI replaces the whole mapping, edits by hand included.</span>{% endif %}
+    <form class="co-ai" method="post" action="{{ project_base }}/projects/{{ record.id }}/map">
+      {%- set ai_ran = record.mapping_run and record.mapping_run.attempts %}
+      <button class="btn" type="submit">{% if ai_ran %}Map again with AI{% else %}Map with AI{% endif %}</button>
+      <button type="button" class="co-help" popovertarget="ai-help" aria-label="What mapping with AI does">?</button>
+      <div id="ai-help" class="co-help-pop" popover>
+        <b>Mapping with AI.</b> The AI reads each risk against the catalogue and proposes the
+        objectives that would mitigate it, each resting on a quote from that risk's own chain;
+        a proposal with no such quote is sent back. It costs one model call per risk, with the
+        model chosen in Manage, Keys. It replaces the whole mapping, edits by hand included:
+        correct a risk's mapping by hand afterwards.
       </div>
     </form>
     {%- endif %}
@@ -117,6 +124,7 @@
         <span class="co-map-sev" title="Severity">{{ risk.rating }}</span>
         <h3>{{ risk.risk.short_label or risk.risk.text }}</h3>
       </div>
+      {%- if risk.comment %}<p class="co-sev-comment">{{ risk.comment }}</p>{% endif %}
       <p class="co-map-list">
         {%- for objective_id, rationale, source in risk.mapped %}
         <span class="co-map-item" title="{{ rationale or '' }}"><b>{{ objective_id }}</b> {{ objective_labels.get(objective_id, '') }}
@@ -143,7 +151,7 @@
       {%- endif %}
     </div>
     {%- endfor %}
-  </div>
+  </details>
   {%- endif %}
 
   {# ── 3. the objectives, in tiers ─────────────────────────────────────
@@ -158,8 +166,12 @@
 
   {#- Which objectives go forward to step 4, where tests and controls are linked
      to them. The mapped ones start ticked; the checkboxes below belong to this form. #}
-  <div class="qf-section">
-    <h2>Select the objectives to take forward</h2>
+  <details class="qf-section co-fold" open>
+    <summary class="co-macro-head">
+      <span class="co-macro-id">3</span>
+      <h2>Select the objectives to take forward</h2>
+      <span class="n">{{ selected | length }} selected</span>
+    </summary>
     <p class="qf-help">{{ selected | length }} of {{ counts.tier1 + counts.tier2 + counts.tier3 }} selected.
        Only the selected objectives reach <b>Collect evidence</b>, where tests and controls are linked to them.
        The mapped ones start ticked.</p>
@@ -168,14 +180,14 @@
       <div class="qf-actions"><button class="btn" type="submit">Save selection</button></div>
     </form>
     {%- endif %}
-  </div>
+  </details>
 
   {%- for section in sections %}
-  <section class="qf-section co-tier--{{ section.key }}" id="tier-{{ section.key }}">
-    <div class="co-macro-head">
+  <details class="qf-section co-fold co-tier--{{ section.key }}" open id="tier-{{ section.key }}">
+    <summary class="co-macro-head">
       <h2>{{ section.title }}</h2>
       <span class="n">{{ section.subtitle }} · {{ section.objectives | length }}</span>
-    </div>
+    </summary>
     {%- for objective, priority in section.objectives %}
     <article class="co-obj">
       <div class="co-obj-head">
@@ -194,7 +206,7 @@
       {% include "_objective_meta.html.j2" %}
     </article>
     {%- endfor %}
-  </section>
+  </details>
   {%- endfor %}
   {%- endif %}
 

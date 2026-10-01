@@ -46,6 +46,9 @@ DEFAULT_SEVERITY = 3
 #: weaker than "a risk they rated 1 points at this".
 UNDRIVEN_SCORE = 0.0
 
+#: The longest comment a severity may carry.
+MAX_COMMENT = 1000
+
 #: How many objectives a Tier 1 may hold. Seven is what an assessor can open a
 #: workstream on; beyond that the tier stops meaning anything.
 TIER_ONE_BUDGET = 7
@@ -55,6 +58,8 @@ class Severity(BaseModel):
     """How severe each of this system's risks is: 1 (marginal) to 5 (decisive)."""
 
     ratings: dict[str, int] = Field(default_factory=dict)
+    #: Why a risk is rated as it is, optional; only risks with a comment are here.
+    comments: dict[str, str] = Field(default_factory=dict)
 
     @field_validator("ratings")
     @classmethod
@@ -66,6 +71,14 @@ class Severity(BaseModel):
             if not (isinstance(rating, int) and 1 <= rating <= 5):
                 raise ValueError(f"{risk_id}: severity {rating!r} is not 1-5")
         return ratings
+
+    @field_validator("comments")
+    @classmethod
+    def _short_enough(cls, comments: dict[str, str]) -> dict[str, str]:
+        for risk_id, comment in comments.items():
+            if len(comment) > MAX_COMMENT:
+                raise ValueError(f"{risk_id}: a comment is at most {MAX_COMMENT} characters")
+        return comments
 
     def of(self, risk_id: str) -> int:
         return self.ratings.get(risk_id, DEFAULT_SEVERITY)

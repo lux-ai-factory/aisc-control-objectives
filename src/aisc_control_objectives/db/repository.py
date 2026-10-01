@@ -155,12 +155,16 @@ class ProjectRepository:
             session.flush()
             return self._to_record(session, row)
 
-    def rate(self, project_id: str, ratings: dict[str, int]) -> None:
+    def rate(self, project_id: str, ratings: dict[str, int],
+             comments: dict[str, str] | None = None) -> None:
+        """Set the given ratings and, when given, the comments ("" clears one), in one transaction."""
         with self._sessions.begin() as session:
             project = session.get(tables.Project, project_id)
             for row in project.risks:
                 if row.risk_id in ratings:
                     row.severity = ratings[row.risk_id]
+                if comments is not None and row.risk_id in comments:
+                    row.severity_comment = comments[row.risk_id]
 
     def save_selection(self, project_id: str, objective_ids: list[str]) -> None:
         """Replace the objectives this assessment takes forward."""
@@ -398,7 +402,8 @@ class ProjectRepository:
                     row.risk_id: row.severity
                     for row in project.risks
                     if row.severity is not None
-                }
+                },
+                comments={row.risk_id: row.severity_comment for row in project.risks if row.severity_comment},
             ),
         )
         if project.mapping_run is not None:

@@ -29,7 +29,9 @@ SELECTION = "20261001000000_selection"
 #: The objective ids O1 ... O50 (2026-10-01), on top of the selection.
 RENAME = "20261001100000_objective_ids"
 #: Who mapped a risk to an objective, the AI or a person (2026-10-01), on top of the rename.
-HEAD = "20261001110000_mapping_source"
+SOURCE = "20261001110000_mapping_source"
+#: An optional comment on a risk's severity (2026-10-01), on top of the source.
+HEAD = "20261001120000_severity_comment"
 TABLES = ("project", "graph", "risk", "mapped_objective", "mapping_run", "objective_selection")
 
 
@@ -128,7 +130,8 @@ def test_the_chain_is_baseline_selection_rename_source():
     config.set_main_option("script_location", str(projectdb.ALEMBIC_DIR))
     script = ScriptDirectory.from_config(config)
     assert script.get_heads() == [HEAD]
-    assert script.get_revision(HEAD).down_revision == RENAME
+    assert script.get_revision(HEAD).down_revision == SOURCE
+    assert script.get_revision(SOURCE).down_revision == RENAME
     assert script.get_revision(RENAME).down_revision == SELECTION
     assert script.get_revision(SELECTION).down_revision == BASELINE
     assert script.get_revision(BASELINE).down_revision is None
@@ -311,3 +314,12 @@ def test_every_row_mapped_before_is_the_ais(migrated):
             " WHERE table_schema = 'control_objectives' AND table_name = 'mapped_objective'"
             "   AND column_name = 'source'")).one()
     assert column[0] == "NO" and "'ai'" in column[1]
+
+
+def test_every_risk_starts_with_no_comment(migrated):
+    with migrated.connect() as connection:
+        column = connection.execute(text(
+            "SELECT is_nullable, column_default FROM information_schema.columns"
+            " WHERE table_schema = 'control_objectives' AND table_name = 'risk'"
+            "   AND column_name = 'severity_comment'")).one()
+    assert column[0] == "NO" and "''" in column[1]

@@ -157,9 +157,9 @@ def test_I5_4_the_database_is_at_the_baseline_and_readers_get_their_reads(cluste
 
     a, _, _, _ = two
     database = projects.database(a)
-    # the head: who mapped a risk (2026-10-01), on the O ids, the selection and the baseline
+    # the head: the severity comment (2026-10-01), on who mapped, the O ids, the selection, the baseline
     baseline = (Path(__file__).resolve().parents[1] / "alembic" / "versions"
-                / "20261001110000_mapping_source.py").read_text()
+                / "20261001120000_severity_comment.py").read_text()
     revision = re.search(r"^revision\s*=\s*['\"]([^'\"]+)", baseline, re.M).group(1)
     assert _rows(cluster, database, "SELECT version_num FROM control_objectives.alembic_version") == [
         (revision,)
