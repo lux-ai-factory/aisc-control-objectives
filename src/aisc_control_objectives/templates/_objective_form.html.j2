@@ -1,0 +1,48 @@
+{#- The fields of an objective in a user's set. `o` is the objective being edited, or none. -#}
+{%- set v = o or {} %}
+<div class="co-form-grid">
+  <div class="field">
+    <label>Dimension</label>
+    <select name="dimension" required>
+      {%- for rid, title in dimensions.items() %}
+      <option value="{{ rid }}"{% if v.macro_id == rid %} selected{% endif %}>{{ rid }} · {{ title }}</option>
+      {%- endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label>Assessment mode</label>
+    <select name="assessment_mode" required>
+      {%- for mode in modes %}
+      <option value="{{ mode }}"{% if v.assessment_mode == mode %} selected{% endif %}>{{ mode }}</option>
+      {%- endfor %}
+    </select>
+  </div>
+  <div class="field co-form-wide">
+    <label>Short label</label>
+    <input name="label" type="text" required maxlength="120" value="{{ v.sub_requirement_label or '' }}" placeholder="Model change approval">
+  </div>
+  <div class="field co-form-wide">
+    <label>Objective</label>
+    <textarea name="text" required rows="3" placeholder="A state that must hold, e.g. every model change is approved before use.">{{ v.text or '' }}</textarea>
+  </div>
+  <div class="field">
+    <label>Legal basis <span>(optional)</span></label>
+    <input name="legal_basis" type="text" value="{{ '' if v.legal_basis == no_basis else (v.legal_basis or '') }}" placeholder="AI Act Art. 9; internal policy 7">
+  </div>
+  <div class="field">
+    <label>Target <span>(optional)</span></label>
+    <input name="target" type="text" value="{{ v.target or '' }}" placeholder="G, D, M, C, S">
+  </div>
+  <div class="field">
+    <label>Standards grounding <span>(optional)</span></label>
+    <input name="standards_grounding" type="text" value="{{ v.standards_grounding or '' }}" placeholder="ISO/IEC 42001 Ann. A.6">
+  </div>
+  <div class="field">
+    <label>Grounding tier <span>(optional)</span></label>
+    <input name="grounding_tier_flag" type="text" value="{{ v.grounding_tier_flag or '' }}" placeholder="Tier 3">
+  </div>
+  <div class="field co-form-wide">
+    <label>Notes <span>(optional)</span></label>
+    <input name="notes" type="text" value="{{ v.notes or '' }}">
+  </div>
+</div>

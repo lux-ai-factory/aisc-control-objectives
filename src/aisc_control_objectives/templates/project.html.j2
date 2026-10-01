@@ -14,6 +14,36 @@
   <div class="error">{{ read_only }}. This assessment is kept as it was: open the latest version's assessment from the projects page to rank and map.</div>
   {%- endif %}
 
+  {# ── the objective profile it runs on ──────────────────────────────────
+     Everything below sees only this profile's objectives. #}
+  <div class="co-profile">
+    <span class="co-profile-k">Objective profile</span>
+    <b class="co-profile-name">{{ profile['label'] }}</b>
+    {%- if profile['update'] and not read_only %}
+    <form method="post" action="{{ project_base }}/projects/{{ record.id }}/profile" class="co-profile-update">
+      <input type="hidden" name="profile" value="{{ profile['id'] }}">
+      <span>Version {{ profile['update']['to'] }} is out.</span>
+      <button class="btn btn--small" type="submit">Take version {{ profile['update']['to'] }}</button>
+    </form>
+    {%- elif profile['update'] %}<span class="co-profile-note">Version {{ profile['update']['to'] }} is out.</span>
+    {%- endif %}
+    {%- if not read_only %}
+    <details class="co-profile-change">
+      <summary>Change profile</summary>
+      <form method="post" action="{{ project_base }}/projects/{{ record.id }}/profile">
+        <select name="profile" aria-label="Objective profile">
+          {%- for p in profiles %}
+          <option value="{{ p.id }}"{% if p.id == profile['id'] %} selected{% endif %}>{{ p.name }}{% if p.number %} (version {{ p.number }}){% endif %} · {{ p.objectives }} objectives</option>
+          {%- endfor %}
+        </select>
+        <button class="btn btn--small" type="submit">Use this profile</button>
+        <p class="qf-help">Mappings and selected objectives outside the new profile are dropped.
+           Profiles are made on the <a href="{{ project_base }}/profiles">Profiles</a> page.</p>
+      </form>
+    </details>
+    {%- endif %}
+  </div>
+
   {# ── 1. rank the risks ──────────────────────────────────────────────── #}
   <details class="qf-section co-fold" open>
     <summary class="co-macro-head">

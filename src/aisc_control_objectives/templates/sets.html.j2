@@ -1,0 +1,51 @@
+{% extends "_base.html.j2" %}
+
+{% block title %}Objective sets · AI Act Control Objectives{% endblock %}
+
+{% block content %}
+  <div class="co-header">
+    <h1>Objective sets</h1>
+    <p>A set is where control objectives are written. Its <strong>code</strong> starts every id in
+       it: a set coded BNK has BNK1, BNK2, ... A number is never given twice. Write the objectives,
+       then publish: profiles pick from published versions, and a published version never changes.</p>
+  </div>
+
+  <details class="qf-section co-fold" open>
+    <summary class="co-macro-head"><h2>Make a set</h2></summary>
+    <form method="post" action="{{ project_base }}/sets">
+      <div class="co-form-grid">
+        <div class="field">
+          <label for="code">Code <span>(2 to 6 capital letters, fixed once made)</span></label>
+          <input id="code" name="code" type="text" required pattern="[A-Z]{2,6}" maxlength="6" placeholder="BNK"
+                 title="2 to 6 capital letters, A to Z">
+        </div>
+        <div class="field">
+          <label for="name">Name</label>
+          <input id="name" name="name" type="text" required placeholder="Bank policies">
+        </div>
+        <div class="field co-form-wide">
+          <label for="description">Description <span>(optional)</span></label>
+          <input id="description" name="description" type="text">
+        </div>
+      </div>
+      <div class="qf-actions"><button class="btn" type="submit">Make the set</button></div>
+    </form>
+  </details>
+
+  <details class="qf-section co-fold" open>
+    <summary class="co-macro-head"><h2>Sets</h2><span class="n">{{ sets | length }}</span></summary>
+    {%- for s in sets %}
+    <article class="co-obj">
+      <div class="co-obj-head">
+        <span class="co-code">{{ s.code }}</span>
+        <h3><a href="{{ project_base }}/{{ 'objectives' if s.read_only else 'sets/' ~ s.id }}">{{ s.name }}</a></h3>
+        {%- if s.read_only %}<span class="qf-tag">Built-in · read-only</span>
+        {%- elif s.latest is none %}<span class="qf-tag qf-tag--pending">Not published yet</span>
+        {%- else %}<span class="qf-tag qf-tag--in">Version {{ s.latest }}</span>{% if s.unpublished %}<span class="qf-tag qf-tag--pending">Unpublished changes</span>{% endif %}
+        {%- endif %}
+      </div>
+      <p class="co-reason">{{ s.objectives }} objective{{ 's' if s.objectives != 1 }}{% if s.latest %} in the latest version{% endif %}{% if s.description %} · {{ s.description }}{% endif %}</p>
+    </article>
+    {%- endfor %}
+  </details>
+{% endblock %}

@@ -1,0 +1,28 @@
+{% extends "_base.html.j2" %}
+
+{% block title %}Objective profiles · AI Act Control Objectives{% endblock %}
+
+{% block content %}
+  <div class="co-header">
+    <h1>Objective profiles</h1>
+    <p>A profile is the choice of control objectives an assessment works with, picked from the
+       built-in set and from your published <a href="{{ project_base }}/sets">sets</a>. Each save is a
+       new version; an assessment keeps the version it runs on until you take a newer one.</p>
+  </div>
+  <div class="co-set-actions"><a class="btn" href="{{ project_base }}/profiles/new">New profile</a></div>
+
+  <details class="qf-section co-fold" open>
+    <summary class="co-macro-head"><h2>Profiles</h2><span class="n">{{ profiles | length }}</span></summary>
+    {%- for p in profiles %}
+    <article class="co-obj">
+      <div class="co-obj-head">
+        <h3><a href="{{ project_base }}/profiles/{{ p.id }}">{{ p.name }}</a></h3>
+        {%- if p.read_only %}<span class="qf-tag">Built-in · read-only</span>
+        {%- else %}<span class="qf-tag qf-tag--in">Version {{ p.number }}</span>{% endif %}
+        {%- if p.update_available %}<span class="qf-tag qf-tag--pending">Update available</span>{% endif %}
+      </div>
+      <p class="co-reason">{{ p.objectives }} objective{{ 's' if p.objectives != 1 }}{% if p.description %} · {{ p.description }}{% endif %}</p>
+    </article>
+    {%- endfor %}
+  </details>
+{% endblock %}

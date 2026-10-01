@@ -1,0 +1,72 @@
+{% extends "_base.html.j2" %}
+
+{% block title %}{{ view.profile.name if view else "New profile" }} · Objective profiles{% endblock %}
+
+{% block content %}
+  <a class="co-back" href="{{ project_base }}/profiles">← Profiles</a>
+  {%- set read_only = view and view.profile.read_only %}
+  <div class="co-header">
+    <h1>{{ view.profile.name if view else "New profile" }}</h1>
+    <p>{% if read_only %}Built-in, read-only: every objective of the built-in AI Act set. Make a profile of your own to choose.
+       {%- elif view %}Version {{ view.current.number }} · {{ view.picks | length }} objectives{% if view.profile.description %} · {{ view.profile.description }}{% endif %}
+       {%- else %}Pick the objectives an assessment should work with.{% endif %}</p>
+  </div>
+
+  {%- if view and view.updates %}
+  <div class="co-update">
+    {%- for code, pair in view.updates.items() %}
+    <p><b>{{ code }} version {{ pair[1] }} is out</b> (this profile takes version {{ pair[0] }}). Saving takes it;
+       an objective it retired is dropped.</p>
+    {%- endfor %}
+  </div>
+  {%- endif %}
+
+  {%- if read_only %}
+  <details class="qf-section co-fold" open>
+    <summary class="co-macro-head"><h2>Objectives</h2><span class="n">{{ view.picks | length }}</span></summary>
+    <ul class="co-versions">
+      {%- for o in builtin %}<li><b>{{ o.id }}</b> {{ o.sub_requirement_label }}</li>{% endfor %}
+    </ul>
+  </details>
+  {%- else %}
+  <form method="post" action="{{ project_base }}/profiles{% if view %}/{{ view.profile.id }}{% endif %}">
+    <div class="qf-section">
+      <div class="co-form-grid">
+        <div class="field">
+          <label for="name">Name</label>
+          <input id="name" name="name" type="text" required value="{{ view.profile.name if view else '' }}" placeholder="Bank high-risk">
+        </div>
+        <div class="field">
+          <label for="description">Description <span>(optional)</span></label>
+          <input id="description" name="description" type="text" value="{{ view.profile.description if view else '' }}">
+        </div>
+      </div>
+    </div>
+    {%- set picks = view.picks if view else [] %}
+    {%- for s, macros in groups %}
+    <details class="qf-section co-fold" open>
+      <summary class="co-macro-head"><span class="co-code">{{ s.code }}</span><h2>{{ s.name }}</h2>
+        <span class="n">{% if not s.read_only %}version {{ s.latest }}{% endif %}</span></summary>
+      {%- for macro, objectives in macros %}
+      <fieldset class="co-map-dim">
+        <legend><span class="co-dim co-dim--r{{ macro.id[1:] }}">{{ macro.id }} · {{ macro.title }}</span></legend>
+        {%- for o in objectives %}
+        <label class="co-map-pick"><input type="checkbox" name="objective" value="{{ o.id }}"{% if o.id in picks %} checked{% endif %}>
+          <b>{{ o.id }}</b> {{ o.sub_requirement_label }}</label>
+        {%- endfor %}
+      </fieldset>
+      {%- endfor %}
+    </details>
+    {%- endfor %}
+    <div class="qf-actions"><button class="btn" type="submit">{% if view %}Save as version {{ view.current.number + 1 }}{% else %}Make the profile{% endif %}</button></div>
+  </form>
+  {%- if view %}
+  <details class="qf-section co-fold">
+    <summary class="co-macro-head"><h2>Versions</h2><span class="n">{{ view.versions | length }}</span></summary>
+    <ul class="co-versions">
+      {%- for v in view.versions %}<li><b>Version {{ v.number }}</b> · {{ v.created_at.strftime('%Y-%m-%d %H:%M') }}{% if v.created_by %} · {{ v.created_by }}{% endif %}</li>{% endfor %}
+    </ul>
+  </details>
+  {%- endif %}
+  {%- endif %}
+{% endblock %}

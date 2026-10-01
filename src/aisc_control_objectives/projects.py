@@ -21,11 +21,12 @@ from __future__ import annotations
 
 import copy
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from aisc_control_objectives.baf_llm import ResolveError
 from aisc_control_objectives.control_objectives import ControlObjectiveCatalogue
 from aisc_control_objectives.db.repository import ProjectRecord, ProjectRepository
+from aisc_control_objectives.library import FULL_AI_ACT, Library
 from aisc_control_objectives.models.ontology import Ontology
 from aisc_control_objectives.prioritising import Priority, Severity, prioritise
 from aisc_control_objectives.risk_mapping import MappedObjective, Mapping, Mapper, MappingRun, map_risks
@@ -44,6 +45,12 @@ class ProjectView:
 
     record: ProjectRecord
     priorities: list[Priority]
+    #: The objectives of the profile version it runs on.
+    catalogue: ControlObjectiveCatalogue | None = None
+    #: {"id", "version", "label", "update"}: the profile, and a newer version of it if one is out.
+    profile: dict | None = None
+    #: What the last profile switch dropped (only on the view a switch returns).
+    dropped: list[str] = field(default_factory=list)
 
     @property
     def mapped(self) -> bool:
@@ -102,7 +109,40 @@ class Projects:
             project=project, name=name or ontology.system_name,
             ontology=ontology, jsonld=jsonld, system_id=system_id,
         )
+        # a new card version's assessment starts on the profile the previous one ran on
+        previous = self._repository.previous_of(record)
+        if previous is not None and previous.profile_version_id is not None:
+            self._repository.set_profile(record.id, previous.profile_version_id, keep=set())
         return self.view(record.id)
+
+    # ── the objective profile ─────────────────────────────────────────────
+
+    @property
+    def library(self) -> Library:
+        """The objective sets and profiles of the project whose database this is."""
+        return Library(self._repository.engine, self._catalogue)
+
+    def _catalogue_for(self, record: ProjectRecord) -> ControlObjectiveCatalogue:
+        if record.profile_version_id is None:
+            return self._catalogue
+        return self.library.catalogue_of(record.profile_version_id)
+
+    def use_profile(self, project_id: str, profile_id: str) -> ProjectView:
+        """Run the assessment on a profile's current version (switching, or taking a newer
+        version). Mappings and selected objectives outside it are dropped; the view says which."""
+        library = self.library
+        if profile_id == FULL_AI_ACT:
+            version_id = None
+        else:
+            try:
+                version_id = library.get_profile(profile_id).current.id
+            except LookupError as exc:
+                raise ValueError(f"no profile {profile_id}") from exc
+        keep = {o.id for o in library.catalogue_of(version_id)}
+        dropped = self._repository.set_profile(project_id, version_id, keep)
+        view = self.view(project_id)
+        view.dropped = dropped
+        return view
 
     def has_version(self, system_id: str) -> bool:
         """Whether this project's database has that card version."""
@@ -140,7 +180,7 @@ class Projects:
                 mapper, model = self._mapper_for(record.project)
             except (ResolveError, ValueError) as exc:
                 raise ModelUnavailable(str(exc)) from exc
-        run = map_risks(record.ontology.risks, mapper, self._catalogue)
+        run = map_risks(record.ontology.risks, mapper, self._catalogue_for(record))
         self._repository.save_mapping_run(
             project_id, run, model=model, selected=self._carried_selection(record, run)
         )
@@ -154,13 +194,14 @@ class Projects:
         record = self._repository.get(project_id)
         if risk_id not in {risk.id for risk in record.ontology.risks}:
             raise ValueError(f"no risk {risk_id} on this card")
-        unknown = sorted({oid for oid in objective_ids if self._catalogue.by_id(oid) is None})
+        catalogue = self._catalogue_for(record)
+        unknown = sorted({oid for oid in objective_ids if catalogue.by_id(oid) is None})
         if unknown:
-            raise ValueError(f"not in the catalogue: {', '.join(unknown)}")
+            raise ValueError(f"not in this assessment's objective profile: {', '.join(unknown)}")
         before = record.mapping_run.mappings if record.mapping_run else {}
         kept = {item.objective_id: item for item in before.get(risk_id, Mapping(risk_id=risk_id)).objectives}
         items = [kept.get(oid) or MappedObjective(objective_id=oid, source="person")
-                 for oid in self._in_order(set(objective_ids))]
+                 for oid in self._in_order(catalogue, set(objective_ids))]
         after = MappingRun(mappings={**before, risk_id: Mapping(risk_id=risk_id, objectives=items)})
         self._repository.save_risk_mapping(
             project_id, risk_id, items, selected=self._carried_selection(record, after))
@@ -168,16 +209,18 @@ class Projects:
 
     def select(self, project_id: str, objective_ids: list[str]) -> ProjectView:
         """Tick the objectives the project takes forward (replaces the selection)."""
-        unknown = sorted({oid for oid in objective_ids if self._catalogue.by_id(oid) is None})
+        catalogue = self._catalogue_for(self._repository.get(project_id))
+        unknown = sorted({oid for oid in objective_ids if catalogue.by_id(oid) is None})
         if unknown:
-            raise ValueError(f"not in the catalogue: {', '.join(unknown)}")
-        self._repository.save_selection(project_id, self._in_order(set(objective_ids)))
+            raise ValueError(f"not in this assessment's objective profile: {', '.join(unknown)}")
+        self._repository.save_selection(project_id, self._in_order(catalogue, set(objective_ids)))
         return self.view(project_id)
 
-    def _in_order(self, objective_ids) -> list[str]:
+    @staticmethod
+    def _in_order(catalogue: ControlObjectiveCatalogue, objective_ids) -> list[str]:
         """Catalogue order (O9 before O10); an id the catalogue lacks goes last."""
         def key(oid):
-            found = self._catalogue.by_id(oid)
+            found = catalogue.by_id(oid)
             return (0, found.sort_key, oid) if found else (1, (), oid)
         return sorted(objective_ids, key=key)
 
@@ -191,10 +234,11 @@ class Projects:
         """
         base = record if record.selected is not None else self._repository.previous_of(record)
         now = _mapped_ids(run)
+        catalogue = self._catalogue_for(record)
         if base is None or base.selected is None:
-            return self._in_order(now)
+            return self._in_order(catalogue, now)
         before = _mapped_ids(base.mapping_run)
-        return self._in_order((set(base.selected) - (before - now)) | (now - before))
+        return self._in_order(catalogue, (set(base.selected) - (before - now)) | (now - before))
 
     def delete(self, project_id: str) -> None:
         self._repository.delete(project_id)
@@ -212,13 +256,15 @@ class Projects:
     def _derive(self, record: ProjectRecord) -> ProjectView:
         """Tiers, computed from what is stored. Never written back: a changed
         rating must not leave a stale tier."""
+        catalogue = self._catalogue_for(record)
         priorities = prioritise(
-            self._catalogue,
+            catalogue,
             record.severity,
             record.mapping_run.mappings if record.mapping_run else {},
             record.ontology.risks,
         )
-        return ProjectView(record=record, priorities=priorities)
+        return ProjectView(record=record, priorities=priorities, catalogue=catalogue,
+                           profile=self.library.version_info(record.profile_version_id))
 
 
 def _mapped_ids(run: MappingRun | None) -> set[str]:

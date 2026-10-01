@@ -24,7 +24,11 @@ AssessmentMode = Literal["Control", "Test", "Control + Test"]
 #: What governs a legal basis. `ai_act` and `gdpr` are read off the basis
 #: text; `conditional` and `voluntary` are the author's note tags and cover
 #: the whole row.
-Regime = Literal["ai_act", "gdpr", "conditional", "voluntary"]
+Regime = Literal["ai_act", "gdpr", "conditional", "voluntary", "other"]
+
+#: The built-in AI Act set's code: its objectives are O1 ... O50. A set a user makes has a code of
+#: 2 to 6 capital letters (2026-10-01), so no id of theirs can be read as a built-in one.
+BUILTIN_CODE = "O"
 
 #: A CONDITIONAL note must name its condition in words this list knows. A note
 #: naming none of them fails at load rather than passing as unconditional.
@@ -38,8 +42,9 @@ class ControlObjective(BaseModel):
     #: are called out on the pages; "Paired" only explains a Control + Test row.
     NOTE_TAGS: ClassVar[tuple[str, ...]] = ("GAP", "CONDITIONAL", "VOLUNTARY", "Paired")
 
-    #: "O1" ... "O50", in catalogue order (2026-10-01; the R1.1 ids are in objective_id_renames.csv).
-    id: str = Field(pattern=r"^O[1-9]\d*$")
+    #: The set's code and the objective's number in it: "O1" ... "O50" in the built-in set (2026-10-01;
+    #: the R1.1 ids are in objective_id_renames.csv), "BNK3" in a set a user made.
+    id: str = Field(pattern=r"^(O|[A-Z]{2,6})[1-9]\d*$")
     macro_requirement: str = Field(pattern=r"^R\d+\s+\S")
     legal_basis: str = Field(min_length=1)
     sub_requirement_label: str
@@ -68,6 +73,16 @@ class ControlObjective(BaseModel):
     def macro_title(self) -> str:
         """"Human Agency and Oversight" from "R1 Human Agency and Oversight"."""
         return self.macro_requirement.split(None, 1)[1]
+
+    @computed_field
+    @property
+    def set_code(self) -> str:
+        """"O" for the built-in set, "BNK" for BNK3."""
+        return self.id.rstrip("0123456789")
+
+    @property
+    def number(self) -> int:
+        return int(self.id[len(self.set_code):])
 
     @computed_field
     @property
@@ -124,14 +139,18 @@ class ControlObjective(BaseModel):
             elif regimes and basis.startswith(("Art", "Annex", "Recital")):
                 # "AI Act Art. 11; Annex IV": the second cites the same instrument.
                 regimes.append(regimes[-1])
+            elif self.set_code != BUILTIN_CODE:
+                # a user's set may rest on a policy or a standard of its own
+                regimes.append("other")
             else:
                 raise ValueError(f"legal basis {basis!r} fits no regime")
         return regimes
 
     @property
-    def sort_key(self) -> tuple[int]:
-        """Catalogue order, so O9 precedes O10 (string order would not)."""
-        return (int(self.id[1:]),)
+    def sort_key(self) -> tuple[int, str, int]:
+        """The built-in set first, then each set by its code; by number within a set, so O9
+        precedes O10 (string order would not)."""
+        return (0 if self.set_code == BUILTIN_CODE else 1, self.set_code, self.number)
 
 
 class MacroRequirement(BaseModel):

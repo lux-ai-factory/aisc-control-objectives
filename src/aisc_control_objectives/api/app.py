@@ -38,6 +38,7 @@ from sqlalchemy.exc import DBAPIError, IntegrityError
 
 from aisc_control_objectives import projectdb, upstream
 from aisc_control_objectives.access import REFUSALS, ProjectAccess
+from aisc_control_objectives.api.library_routes import register_library
 from aisc_control_objectives.config import RunConfig
 from aisc_control_objectives.control_objectives import ControlObjectiveCatalogue
 from aisc_control_objectives.db.repository import ProjectRepository
@@ -211,6 +212,7 @@ def create_app(
     _register_pages(app, objectives, projects_of, view_in, source_name, root_path)
     _register_objective_api(app, objectives, config)
     _register_project_api(app, projects_of, view_in)
+    register_library(app, projects_of, root_path)
     return app
 
 
@@ -325,6 +327,7 @@ def _register_pages(app, objectives, projects_of, view_in, source_name, root_pat
             render_project_page(
                 view, objectives, root_path=root_path, project=project,
                 read_only=_read_only(projects_of(request), view),
+                profiles=projects_of(request).library.profiles(),
             )
         )
 
@@ -357,6 +360,22 @@ def _register_pages(app, objectives, projects_of, view_in, source_name, root_pat
             return PlainTextResponse(f"Invalid mapping: {exc}", status_code=400)
         return RedirectResponse(
             url=_assessment_url(root_path, project, project_id) + f"#map-{risk_id}", status_code=303
+        )
+
+    @app.post("/p/{project}/projects/{project_id}/profile", include_in_schema=False)
+    async def profile_form(project: str, project_id: str, request: Request):
+        """Run the assessment on another objective profile, or on its profile's newer version."""
+        projects = projects_of(request)
+        view = view_in(request, project_id)
+        if (why := _read_only(projects, view)) is not None:
+            return PlainTextResponse(why, status_code=409)
+        form = await request.form()
+        try:
+            projects.use_profile(project_id, str(form.get("profile") or ""))
+        except ValueError as exc:
+            return PlainTextResponse(f"Invalid profile: {exc}", status_code=400)
+        return RedirectResponse(
+            url=_assessment_url(root_path, project, project_id), status_code=303
         )
 
     @app.post("/p/{project}/projects/{project_id}/severity", include_in_schema=False)
@@ -464,6 +483,8 @@ def _register_project_api(app, projects_of, view_in):
             "priorities": [p.model_dump() for p in view.priorities],
             "mapped": view.mapped,
             "selected": list(record.selected or []),
+            "profile": view.profile,
+            "dropped": view.dropped,
         }
 
     def _latest_or_409(projects, view) -> None:
@@ -508,6 +529,18 @@ def _register_project_api(app, projects_of, view_in):
         _latest_or_409(projects, view_in(request, project_id))
         try:
             return payload(projects.rate(project_id, ratings))
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.post("/p/{project}/api/projects/{project_id}/profile")
+    def use_profile(
+        project: str, project_id: str, request: Request, profile_id: str = Body(..., embed=True),
+    ) -> dict:
+        """Run the assessment on a profile's current version; what falls outside is dropped."""
+        projects = projects_of(request)
+        _latest_or_409(projects, view_in(request, project_id))
+        try:
+            return payload(projects.use_profile(project_id, profile_id))
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 

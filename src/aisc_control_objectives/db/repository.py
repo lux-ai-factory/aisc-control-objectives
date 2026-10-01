@@ -60,6 +60,8 @@ class ProjectRecord:
     #: The objectives ticked to take forward; None until anything (the mapping
     #: or the assessor) has chosen, [] when everything was unticked.
     selected: list[str] | None = None
+    #: The objective profile version it runs on; None is the built-in Full AI Act.
+    profile_version_id: str | None = None
 
 
 #: A card version's number and the highest number of the project, read from
@@ -242,6 +244,24 @@ class ProjectRepository:
                                                  stop="clean", attempts=0, error="", model=""))
             self._set_selection(session, project, selected)
 
+    def set_profile(self, project_id: str, profile_version_id: str | None, keep: set[str]) -> list[str]:
+        """Put the assessment on a profile version, and drop every mapping and selected objective
+        not in `keep` (the new profile's objectives). Returns the objectives dropped."""
+        with self._sessions.begin() as session:
+            project = session.get(tables.Project, project_id)
+            project.profile_version_id = profile_version_id
+            dropped: set[str] = set()
+            for risk in project.risks:
+                for row in list(risk.mapped):
+                    if row.objective_id not in keep:
+                        dropped.add(row.objective_id)
+                        risk.mapped.remove(row)
+            if project.selection is not None:
+                ids = list(project.selection.objective_ids)
+                dropped |= {oid for oid in ids if oid not in keep}
+                project.selection.objective_ids = [oid for oid in ids if oid in keep]
+            return sorted(dropped)
+
     def delete(self, project_id: str) -> None:
         with self._sessions.begin() as session:
             project = session.get(tables.Project, project_id)
@@ -397,6 +417,7 @@ class ProjectRepository:
                 risks=risks,
             ),
             selected=list(project.selection.objective_ids) if project.selection else None,
+            profile_version_id=project.profile_version_id,
             severity=Severity(
                 ratings={
                     row.risk_id: row.severity

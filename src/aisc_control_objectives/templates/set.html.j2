@@ -1,0 +1,76 @@
+{% extends "_base.html.j2" %}
+
+{% block title %}{{ view.set.code }} · Objective sets{% endblock %}
+
+{% block content %}
+  {%- set s = view.set %}
+  <a class="co-back" href="{{ project_base }}/sets">← Sets</a>
+  <div class="co-header">
+    <h1><span class="co-code co-code--big">{{ s.code }}</span> {{ s.name }}</h1>
+    <p>{% if s.description %}{{ s.description }} · {% endif %}
+       {%- if s.latest is none %}not published yet{% else %}Version {{ s.latest }} published{% if s.unpublished %}, with unpublished changes{% endif %}{% endif %}</p>
+  </div>
+
+  <div class="co-set-actions">
+    {%- if s.latest is none or s.unpublished %}
+    <form method="post" action="{{ project_base }}/sets/{{ s.id }}/publish">
+      <button class="btn" type="submit">Publish version {{ (s.latest or 0) + 1 }}</button>
+    </form>
+    {%- endif %}
+    {%- if s.latest is none %}
+    <form method="post" action="{{ project_base }}/sets/{{ s.id }}/delete">
+      <button class="btn btn--ghost" type="submit">Delete this set</button>
+    </form>
+    {%- endif %}
+  </div>
+
+  <details class="qf-section co-fold"{% if not view.draft_rows %} open{% endif %}>
+    <summary class="co-macro-head"><h2>Add an objective</h2><span class="n">gets {{ s.code }}{{ next_number }}</span></summary>
+    <form method="post" action="{{ project_base }}/sets/{{ s.id }}/objectives">
+      {%- with o = none %}{% include "_objective_form.html.j2" %}{% endwith %}
+      <div class="qf-actions"><button class="btn" type="submit">Add the objective</button></div>
+    </form>
+  </details>
+
+  <details class="qf-section co-fold" open>
+    <summary class="co-macro-head"><h2>Objectives</h2><span class="n">{{ view.draft | length }} active</span></summary>
+    {%- for o, retired in view.draft_rows %}
+    <article class="co-obj{% if retired %} co-obj--retired{% endif %}" id="obj-{{ o.id }}">
+      <div class="co-obj-head">
+        <span class="co-obj-id">{{ o.id }}</span>
+        <h3>{{ o.sub_requirement_label }}</h3>
+        <span class="co-dim co-dim--r{{ o.macro_id[1:] }}">{{ o.macro_id }} · {{ o.macro_title }}</span>
+        <span class="qf-tag">{{ o.assessment_mode }}</span>
+        {%- if retired %}<span class="qf-tag qf-tag--pending">Retired</span>{% endif %}
+      </div>
+      <p class="co-text">{{ o.text }}</p>
+      {%- if o.legal_basis != no_basis %}<p class="co-reason">Legal basis: {{ o.legal_basis }}</p>{% endif %}
+      <div class="co-obj-actions">
+        <details class="co-map-edit">
+          <summary>Edit</summary>
+          <form method="post" action="{{ project_base }}/sets/{{ s.id }}/objectives/{{ o.id }}">
+            {%- include "_objective_form.html.j2" %}
+            <div class="qf-actions"><button class="btn" type="submit">Save {{ o.id }}</button></div>
+          </form>
+        </details>
+        <form method="post" action="{{ project_base }}/sets/{{ s.id }}/objectives/{{ o.id }}/{{ 'restore' if retired else 'retire' }}">
+          <button class="btn btn--ghost btn--small" type="submit">{{ 'Restore' if retired else 'Retire' }}</button>
+        </form>
+      </div>
+    </article>
+    {%- else %}
+    <p class="qf-help">No objective yet: add the first above.</p>
+    {%- endfor %}
+  </details>
+
+  {%- if view.versions %}
+  <details class="qf-section co-fold">
+    <summary class="co-macro-head"><h2>Published versions</h2><span class="n">{{ view.versions | length }}</span></summary>
+    <ul class="co-versions">
+      {%- for number, at, by in view.versions %}
+      <li><b>Version {{ number }}</b> · {{ at.strftime('%Y-%m-%d %H:%M') }}{% if by %} · {{ by }}{% endif %}</li>
+      {%- endfor %}
+    </ul>
+  </details>
+  {%- endif %}
+{% endblock %}

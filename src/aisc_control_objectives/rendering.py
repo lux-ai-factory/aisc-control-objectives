@@ -169,10 +169,13 @@ def render_projects_page(views: list, root_path: str = "", project: str = "") ->
 
 def render_project_page(
     view, catalogue: ControlObjectiveCatalogue, root_path: str = "", project: str = "",
-    read_only: str | None = None,
+    read_only: str | None = None, profiles: list | None = None,
 ) -> str:
     """One project: its risks, and the tiers they produce. `read_only` says why
-    an older version's assessment can no longer be ranked or mapped."""
+    an older version's assessment can no longer be ranked or mapped. The objectives
+    are the assessment's profile's (`view.catalogue`); `profiles` are the ones it may
+    switch to."""
+    catalogue = view.catalogue or catalogue
     record = view.record
     priorities = {p.objective_id: p for p in view.priorities}
     counts = _Counts()
@@ -204,5 +207,49 @@ def render_project_page(
         macros=catalogue.macro_requirements(),
         read_only=read_only,
         selected=set(record.selected or []),
+        profile=view.profile or {},
+        profiles=profiles or [],
         **_navigation(root_path, project),
     )
+
+
+# ── objective sets and profiles (2026-10-01) ───────────────────────────────────
+
+
+def _library_context(library) -> dict:
+    from aisc_control_objectives.library import MODES, NO_BASIS
+    return {"dimensions": library.dimensions, "modes": MODES, "no_basis": NO_BASIS}
+
+
+def render_sets_page(library, root_path: str = "", project: str = "") -> str:
+    return _environment().get_template("sets.html.j2").render(
+        sets=library.sets(), here="sets", **_navigation(root_path, project))
+
+
+def render_set_page(library, set_id: str, root_path: str = "", project: str = "") -> str:
+    view = library.get_set(set_id)
+    numbers = [o.number for o, _ in view.draft_rows]
+    return _environment().get_template("set.html.j2").render(
+        view=view, next_number=(max(numbers) + 1) if numbers else 1, here="sets",
+        **_library_context(library), **_navigation(root_path, project))
+
+
+def render_profiles_page(library, root_path: str = "", project: str = "") -> str:
+    return _environment().get_template("profiles.html.j2").render(
+        profiles=library.profiles(), here="profiles", **_navigation(root_path, project))
+
+
+def render_profile_page(library, profile_id: str | None, root_path: str = "", project: str = "") -> str:
+    """One profile (None: a new one). The picker groups what can be picked by set, then dimension."""
+    view = library.get_profile(profile_id) if profile_id else None
+    available = library.available()
+    groups = []
+    for summary in library.sets():
+        if summary.latest is None:
+            continue
+        mine = ControlObjectiveCatalogue([o for o in available if o.set_code == summary.code])
+        if len(mine):
+            groups.append((summary, [(m, m.objectives) for m in mine.macro_requirements()]))
+    return _environment().get_template("profile.html.j2").render(
+        view=view, groups=groups, builtin=[o for o in available if o.set_code == "O"],
+        here="profiles", **_navigation(root_path, project))

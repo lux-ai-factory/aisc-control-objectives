@@ -31,8 +31,12 @@ RENAME = "20261001100000_objective_ids"
 #: Who mapped a risk to an objective, the AI or a person (2026-10-01), on top of the rename.
 SOURCE = "20261001110000_mapping_source"
 #: An optional comment on a risk's severity (2026-10-01), on top of the source.
-HEAD = "20261001120000_severity_comment"
-TABLES = ("project", "graph", "risk", "mapped_objective", "mapping_run", "objective_selection")
+COMMENT = "20261001120000_severity_comment"
+#: Objective sets and profiles (2026-10-01), on top of the comment.
+HEAD = "20261002000000_objective_sets"
+TABLES = ("project", "graph", "risk", "mapped_objective", "mapping_run", "objective_selection",
+          "objective_set", "objective_draft", "objective_set_version", "objective_set_version_item",
+          "objective_profile", "objective_profile_version", "objective_profile_version_item")
 
 
 def _scratch(database_url: str, suffix: str):
@@ -130,7 +134,8 @@ def test_the_chain_is_baseline_selection_rename_source():
     config.set_main_option("script_location", str(projectdb.ALEMBIC_DIR))
     script = ScriptDirectory.from_config(config)
     assert script.get_heads() == [HEAD]
-    assert script.get_revision(HEAD).down_revision == SOURCE
+    assert script.get_revision(HEAD).down_revision == COMMENT
+    assert script.get_revision(COMMENT).down_revision == SOURCE
     assert script.get_revision(SOURCE).down_revision == RENAME
     assert script.get_revision(RENAME).down_revision == SELECTION
     assert script.get_revision(SELECTION).down_revision == BASELINE
@@ -195,11 +200,15 @@ def test_the_assessment_has_one_key_into_project_system_and_no_project_id(migrat
             " WHERE conrelid = 'control_objectives.project'::regclass AND contype = 'f'"
         )).all()
         columns = [c for (t, c, *_rest) in _columns(connection) if t == "project"]
-    assert [tuple(k) for k in keys] == [(
-        "fk_project_system_id_project_system",
-        "FOREIGN KEY (system_id) REFERENCES project.system(pid) ON DELETE CASCADE",
-    )]
-    assert columns == ["id", "name", "objectives_digest", "created_at", "updated_at", "system_id"]
+    # one key into project.system; the other (2026-10-01) is the profile version it runs on
+    assert sorted(tuple(k) for k in keys) == [
+        ("fk_project_profile_version_id",
+         "FOREIGN KEY (profile_version_id) REFERENCES objective_profile_version(id) ON DELETE RESTRICT"),
+        ("fk_project_system_id_project_system",
+         "FOREIGN KEY (system_id) REFERENCES project.system(pid) ON DELETE CASCADE"),
+    ]
+    assert columns == ["id", "name", "objectives_digest", "created_at", "updated_at", "system_id",
+                       "profile_version_id"]
 
 
 def test_the_model_and_the_migration_agree(migrated, repository):
@@ -323,3 +332,15 @@ def test_every_risk_starts_with_no_comment(migrated):
             " WHERE table_schema = 'control_objectives' AND table_name = 'risk'"
             "   AND column_name = 'severity_comment'")).one()
     assert column[0] == "NO" and "''" in column[1]
+
+
+def test_the_readers_read_the_sets_and_profiles(migrated):
+    """The report and the platform's step 4 page name a user's objectives from these (as report_ro)."""
+    with migrated.connect() as connection:
+        for table in ("objective_set", "objective_set_version", "objective_set_version_item",
+                      "objective_profile", "objective_profile_version", "objective_profile_version_item"):
+            for role in ("report_ro", "dashboard_ro"):
+                if connection.execute(text("SELECT 1 FROM pg_roles WHERE rolname = :r"), {"r": role}).first():
+                    assert connection.execute(text(
+                        "SELECT has_table_privilege(:r, :t, 'SELECT')"),
+                        {"r": role, "t": f"control_objectives.{table}"}).scalar(), (role, table)

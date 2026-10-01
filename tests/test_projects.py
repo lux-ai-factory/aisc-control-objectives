@@ -224,7 +224,7 @@ class TestThePages:
         assert "Rank the risks on the card" in page
         assert "Loan officers rubber-stamp" in page          # the risk itself
         assert "Overreliance" in page                        # its VAIR typing
-        assert page.count("<select") == 5                    # one per risk
+        assert page.count("<select") == 6                    # one per risk, and the profile
         assert "Map with AI" in page
 
     def test_nothing_asks_the_three_questions(self, _starter, platform_project, client, graph):

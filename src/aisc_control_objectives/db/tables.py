@@ -22,11 +22,14 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
     Column,
     DateTime,
     ForeignKey,
     Integer,
     MetaData,
+    PrimaryKeyConstraint,
     String,
     Table,
     Text,
@@ -82,6 +85,14 @@ class Project(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, onupdate=_now
+    )
+    #: The objective profile version this assessment runs on (2026-10-01); None is the built-in
+    #: Full AI Act profile, all fifty objectives.
+    profile_version_id: Mapped[str | None] = mapped_column(
+        String(32),
+        ForeignKey("objective_profile_version.id", ondelete="RESTRICT",
+                   name="fk_project_profile_version_id"),
+        nullable=True,
     )
     #: The AI card version this assessment is of, a row of this database's
     #: project.system. One assessment per version; deleting the version takes
@@ -225,3 +236,123 @@ class ObjectiveSelectionRow(Base):
     )
 
     project: Mapped[Project] = relationship(back_populates="selection")
+
+
+# ── objective sets and profiles (2026-10-01) ───────────────────────────────────
+
+
+class _ObjectiveFields:
+    """What an objective of a user's set says, as the built-in CSV's columns do."""
+
+    #: R1 ... R11, the trustworthiness dimension.
+    dimension: Mapped[str] = mapped_column(Text, nullable=False)
+    label: Mapped[str] = mapped_column(Text, nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    legal_basis: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    assessment_mode: Mapped[str] = mapped_column(Text, nullable=False)
+    target: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    standards_grounding: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    grounding_tier_flag: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    notes: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+
+
+class ObjectiveSet(Base):
+    """A set of objectives a user writes. Its code starts every id in it (BNK1, BNK2, ...)."""
+
+    __tablename__ = "objective_set"
+    __table_args__ = (
+        UniqueConstraint("code", name="uq_objective_set_code"),
+        CheckConstraint("code ~ '^[A-Z]{2,6}$'", name="ck_objective_set_code"),
+    )
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    code: Mapped[str] = mapped_column(Text, nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    #: The number the next objective gets: numbers are never reused.
+    next_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    created_by: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+
+
+class ObjectiveDraft(_ObjectiveFields, Base):
+    """The set's working copy of one objective: edited freely until published."""
+
+    __tablename__ = "objective_draft"
+    __table_args__ = (
+        PrimaryKeyConstraint("set_id", "number", name="pk_objective_draft"),
+        UniqueConstraint("objective_id", name="uq_objective_draft_objective_id"),
+    )
+
+    set_id: Mapped[str] = mapped_column(ForeignKey("objective_set.id", ondelete="CASCADE"))
+    number: Mapped[int] = mapped_column(Integer)
+    #: The set's code and the number: "BNK3".
+    objective_id: Mapped[str] = mapped_column(Text, nullable=False)
+    #: Kept, with its number, but left out of the next version.
+    retired: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+
+
+class ObjectiveSetVersion(Base):
+    """A published version of a set: numbered 1, 2, ... and never changed."""
+
+    __tablename__ = "objective_set_version"
+    __table_args__ = (UniqueConstraint("set_id", "number", name="uq_objective_set_version_number"),)
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    set_id: Mapped[str] = mapped_column(ForeignKey("objective_set.id", ondelete="RESTRICT"), index=True)
+    number: Mapped[int] = mapped_column(Integer, nullable=False)
+    published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    published_by: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+
+
+class ObjectiveSetVersionItem(_ObjectiveFields, Base):
+    """One objective as a published set version words it."""
+
+    __tablename__ = "objective_set_version_item"
+    __table_args__ = (PrimaryKeyConstraint("set_version_id", "objective_id", name="pk_objective_set_version_item"),)
+
+    set_version_id: Mapped[str] = mapped_column(ForeignKey("objective_set_version.id", ondelete="CASCADE"))
+    objective_id: Mapped[str] = mapped_column(Text)
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class ObjectiveProfile(Base):
+    """A user's choice of objectives, from the built-in set and published sets."""
+
+    __tablename__ = "objective_profile"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    created_by: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+
+
+class ObjectiveProfileVersion(Base):
+    """A saved profile: numbered 1, 2, ... and never changed. Assessments pin one."""
+
+    __tablename__ = "objective_profile_version"
+    __table_args__ = (UniqueConstraint("profile_id", "number", name="uq_objective_profile_version_number"),)
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    profile_id: Mapped[str] = mapped_column(ForeignKey("objective_profile.id", ondelete="RESTRICT"), index=True)
+    number: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    created_by: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+
+
+class ObjectiveProfileVersionItem(Base):
+    """One objective a profile version takes, and from which set version."""
+
+    __tablename__ = "objective_profile_version_item"
+    __table_args__ = (
+        PrimaryKeyConstraint("profile_version_id", "objective_id", name="pk_objective_profile_version_item"),
+    )
+
+    profile_version_id: Mapped[str] = mapped_column(
+        ForeignKey("objective_profile_version.id", ondelete="CASCADE"))
+    objective_id: Mapped[str] = mapped_column(Text)
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    set_code: Mapped[str] = mapped_column(Text, nullable=False)
+    #: The set version it was taken from; None for the built-in set.
+    set_version_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
