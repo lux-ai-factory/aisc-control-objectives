@@ -205,3 +205,32 @@ class TestThePage:
         page = http.get(f"/p/{platform_project}/projects/{first}").text
         assert 'name="objective"' not in page
         assert "Save selection" not in page
+
+
+# ── each objective carries its trustworthiness dimension as a tag (2026-10-01) ──
+
+def test_each_objective_shows_its_dimension_as_a_tag(client, start, platform_project, objectives):
+    import re
+    http, _ = client
+    assessment = start()
+    http.post(_api(platform_project, assessment, "/map"))
+    page = http.get(f"/p/{platform_project}/projects/{assessment}")
+    assert page.status_code == 200, page.text
+    articles = re.findall(r'<article class="co-obj">(.*?)</article>', page.text, re.S)
+    assert articles
+    by_id = {o.id: o for o in objectives}
+    for article in articles:
+        oid = re.search(r'<span class="co-obj-id">([^<]+)</span>', article).group(1)
+        o = by_id[oid]
+        n = o.macro_id.lstrip("R")
+        assert (f'<span class="co-dim co-dim--r{n}" title="Trustworthiness dimension">'
+                f'{o.macro_id} · {o.macro_title}</span>') in article, oid
+        assert 'class="co-family"' not in article
+
+
+def test_every_dimension_has_its_colour():
+    from pathlib import Path
+    import aisc_control_objectives
+    base = (Path(aisc_control_objectives.__file__).parent / "templates/_base.html.j2").read_text()
+    for n in range(1, 12):
+        assert f".co-dim--r{n} " in base, n

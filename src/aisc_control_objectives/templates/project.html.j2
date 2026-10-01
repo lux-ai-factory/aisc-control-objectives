@@ -143,7 +143,7 @@
       <div class="co-obj-head">
         <span class="co-obj-id">{{ objective.id }}</span>
         <h3>{{ objective.sub_requirement_label }}</h3>
-        <span class="co-family">{{ objective.macro_id }} {{ objective.macro_title }}</span>
+        <span class="co-dim co-dim--r{{ objective.macro_id[1:] }}" title="Trustworthiness dimension">{{ objective.macro_id }} · {{ objective.macro_title }}</span>
         <span class="qf-tag qf-tag--tier{{ priority.tier }}">Tier {{ priority.tier }}</span>
         {%- if priority.non_binding %}<span class="qf-tag qf-tag--voluntary">Non-binding</span>{% endif %}
         {%- if read_only %}{% if objective.id in selected %}<span class="qf-tag">Selected</span>{% endif %}

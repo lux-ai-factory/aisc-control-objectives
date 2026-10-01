@@ -171,8 +171,20 @@
   .co-tier--1 { border-left: 4px solid var(--primary); }
   .co-tier--2 { border-left: 4px solid var(--info-soft); }
   .co-tier--no .co-obj, .co-tier--undetermined .co-obj { opacity: 0.75; }
-  .co-family { font-size: 11px; font-weight: 700; text-transform: uppercase;
-               letter-spacing: 0.04em; color: var(--muted); }
+  /* The trustworthiness dimension of an objective, in the tools catalogue's colours */
+  .co-dim { display: inline-block; padding: 2px 8px; border-radius: 999px; border: 1px solid;
+            font-size: 11px; font-weight: 600; letter-spacing: 0.02em; white-space: nowrap; }
+  .co-dim--r1 { background: #fff3e0; border-color: #ffd8a8; color: #a33a00; }
+  .co-dim--r2 { background: #e7f0ff; border-color: #bcd0fb; color: #2f4bb8; }
+  .co-dim--r3 { background: #e8f5e9; border-color: #b9dfbd; color: #256b29; }
+  .co-dim--r4 { background: #e0f7fa; border-color: #a8e3ea; color: #00695c; }
+  .co-dim--r5 { background: #fce4ec; border-color: #f5b8cb; color: #b02424; }
+  .co-dim--r6 { background: #f3e5f5; border-color: #ddbde3; color: #6a1b9a; }
+  .co-dim--r7 { background: #fff8e1; border-color: #f2dc95; color: #7a4a00; }
+  .co-dim--r8 { background: #e8eaf6; border-color: #c3c8ea; color: #283593; }
+  .co-dim--r9 { background: #efebe9; border-color: #d5cbc6; color: #4e342e; }
+  .co-dim--r10 { background: #eceff1; border-color: #cbd3d8; color: #37474f; }
+  .co-dim--r11 { background: #f4f4f4; border-color: #d6d6d6; color: #424242; }
   .co-stat--tier1 { background: var(--primary); border-color: var(--primary); }
   .co-stat--tier1 .v, .co-stat--tier1 .k { color: #ffffff; }
   .co-why { color: var(--text); font-weight: 500; }
