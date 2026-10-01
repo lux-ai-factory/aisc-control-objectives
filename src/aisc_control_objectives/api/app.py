@@ -343,6 +343,22 @@ def _register_pages(app, objectives, projects_of, view_in, source_name, root_pat
             url=_assessment_url(root_path, project, project_id), status_code=303
         )
 
+    @app.post("/p/{project}/projects/{project_id}/risks/{risk_id}/mapping", include_in_schema=False)
+    async def map_by_hand_form(project: str, project_id: str, risk_id: str, request: Request):
+        """A person's mapping of one risk: the ticked objectives, and only those."""
+        projects = projects_of(request)
+        view = view_in(request, project_id)
+        if (why := _read_only(projects, view)) is not None:
+            return PlainTextResponse(why, status_code=409)
+        form = await request.form()
+        try:
+            projects.map_by_hand(project_id, risk_id, [str(v) for v in form.getlist("objective")])
+        except ValueError as exc:
+            return PlainTextResponse(f"Invalid mapping: {exc}", status_code=400)
+        return RedirectResponse(
+            url=_assessment_url(root_path, project, project_id) + f"#map-{risk_id}", status_code=303
+        )
+
     @app.post("/p/{project}/projects/{project_id}/severity", include_in_schema=False)
     async def rate_form(project: str, project_id: str, request: Request):
         projects = projects_of(request)
@@ -442,7 +458,7 @@ def _register_project_api(app, projects_of, view_in):
             "mapping_run": record.mapping_run.model_dump() if record.mapping_run else None,
             "priorities": [p.model_dump() for p in view.priorities],
             "mapped": view.mapped,
-            "selected": sorted(record.selected or []),
+            "selected": list(record.selected or []),
         }
 
     def _latest_or_409(projects, view) -> None:
@@ -465,6 +481,19 @@ def _register_project_api(app, projects_of, view_in):
             return payload(projects.map_risks_of(project_id))
         except ModelUnavailable as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    @app.post("/p/{project}/api/projects/{project_id}/risks/{risk_id}/mapping")
+    def map_by_hand(
+        project: str, project_id: str, risk_id: str, request: Request,
+        objective_ids: list[str] = Body(..., embed=True),
+    ) -> dict:
+        """A person maps one risk to its objectives (replaces that risk's mapping)."""
+        projects = projects_of(request)
+        _latest_or_409(projects, view_in(request, project_id))
+        try:
+            return payload(projects.map_by_hand(project_id, risk_id, objective_ids))
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @app.post("/p/{project}/api/projects/{project_id}/severity")
     def rate(

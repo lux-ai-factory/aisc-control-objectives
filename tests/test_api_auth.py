@@ -184,7 +184,7 @@ def test_the_public_catalogue_and_health_stay_open(client, rooted, signing):
                 "/api/config",
                 "/api/control-objectives",
                 "/api/control-objectives?mode=test",
-                "/api/control-objectives/R1.1",
+                "/api/control-objectives/O1",
                 "/api/macro-requirements",
                 "/static/laif-logo.svg",
             ):
@@ -196,7 +196,7 @@ def test_public_means_exactly_those_paths(client, signing, project_member):
     """A public prefix is not a way in to what is beside it."""
     for path in (
         "/objectives/x",
-        "/api/control-objectives/R1.1/x",
+        "/api/control-objectives/O1/x",
         "/api/configx",
         "/static/a/b",
         "/healthz",

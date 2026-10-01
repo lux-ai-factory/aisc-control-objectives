@@ -24,7 +24,7 @@ TOKEN = "pytest-internal-" + uuid.uuid4().hex
 
 
 class FakeMapper:
-    def __init__(self, objective="R1.1"):
+    def __init__(self, objective="O1"):
         self.objective, self.calls = objective, 0
 
     def propose(self, risk, findings=()):
@@ -57,7 +57,7 @@ def assessment(graph, platform_project, system_version):
 
 def test_s3_9_map_uses_the_mapper_of_the_records_project_and_records_its_label(
         repository, objectives, assessment, platform_project):
-    fixed, chosen, asked = FakeMapper("R1.1"), FakeMapper("R5.1"), []
+    fixed, chosen, asked = FakeMapper("O1"), FakeMapper("O21"), []
 
     def mapper_for(pid):
         asked.append(pid)

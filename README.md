@@ -88,11 +88,22 @@ Each AIRO chain on the card (the risk, its source, the vulnerability that source
 
 Failing items go back to the model with their findings, at most three attempts. The loop ends `clean`, `fixpoint` (the same findings twice running), `cap` (the round limit) or `failed` (no answer, or not the shape asked for), and **every exit publishes**, findings attached: the project page is where a person corrects it, and withholding a flawed answer leaves them nothing to correct.
 
+A person can map a risk instead, or correct what the model proposed: each risk on the project page has
+an editor listing all fifty objectives by dimension. An objective kept from the model stays the
+model's, with its quote; one the person adds is theirs (`mapped_objective.source`, `ai` or `person`).
+Mapping with AI again replaces the whole mapping, edits by hand included.
+
 ### 3. Read the tiers
 
-`prioritising.prioritise`, no model involved. An objective inherits the severity of the worst risk it mitigates.
+`prioritising.prioritise`, no model involved. An objective scores the sum of the severities of the
+risks mapped to it (an unrated risk counts 3):
 
-- **Tier 1, start here.** The top of the driven work, capped at seven, and holding only objectives a risk actually points at. A short Tier 1 is an honest answer; a padded one is not.
+    S(o) = sum of s_r over the risks r mapped to o  =  how many risks x their average severity
+
+They are ranked by S, then by the worst single risk, then a directly binding duty before one only
+grounded in standards, then catalogue order.
+
+- **Tier 1, start here.** The top of the driven work, capped at seven, and holding only objectives a risk rated 3 or more points at. A short Tier 1 is an honest answer; a padded one is not.
 - **Tier 2, next.** The rest of the work the identified risks drive.
 - **Tier 3, later.** Owed, but not where this system's danger lies, plus the two voluntary objectives, which bind nobody and so cannot displace a legal duty.
 
@@ -105,7 +116,7 @@ The objectives are domain data, authored outside this repo and shipped with the 
 
 | Column | Meaning |
 |---|---|
-| `ID` | `R1.1`, `R9.9`, ... (macro requirement + sub-requirement) |
+| `ID` | `O1` ... `O50`, in catalogue order (until 2026-10-01 `R1.1` ... `R11.4`; the table is `data/objective_id_renames.csv`) |
 | `Macro_Requirement` | `R1 Human Agency and Oversight` |
 | `Legal_Basis` | `AI Act Art. 14`, `AI Act Arts. 18, 19; GDPR Art. 5(1)(e)`, ... |
 | `Sub_Requirement_Label` | short name of the sub-requirement |
@@ -131,14 +142,15 @@ FastAPI, port `8090`, interactive docs at `/docs`. The pages are `/`, `/objectiv
 |---|---|
 | `GET /health` | liveness |
 | `GET /api/config` | the effective `RunConfig` (which model) |
-| `GET /api/control-objectives` | every objective, in requirement order (`R9.9` before `R10.1`) |
+| `GET /api/control-objectives` | every objective, in catalogue order (`O9` before `O10`) |
 | `GET /api/control-objectives?mode=control\|test` | the control / test partition |
 | `GET /api/control-objectives/{id}` | one objective, 404 if unknown |
 | `GET /api/macro-requirements` | R1 through R11 with their objectives nested |
 | `GET /p/{project}/api/projects`, `GET /p/{project}/api/projects/{id}` | the project's assessments (`{project}` is its pid or slug) |
 | `POST /p/{project}/api/projects/{id}/severity` | rank the risks, body `{"risk2": 5, ...}` |
 | `POST /p/{project}/api/projects/{id}/map` | run the mapping (one model call per risk) |
-| `POST /p/{project}/api/projects/{id}/selection` | the objectives to take forward to step 4, body `{"objective_ids": ["R1.1", ...]}` (replaces; unknown ids 422) |
+| `POST /p/{project}/api/projects/{id}/selection` | the objectives to take forward to step 4, body `{"objective_ids": ["O1", ...]}` (replaces; unknown ids 422) |
+| `POST /p/{project}/api/projects/{id}/risks/{risk}/mapping` | a person maps one risk, body `{"objective_ids": ["O1", ...]}` (replaces that risk's mapping; kept rows stay the AI's, added ones are the person's; unknown ids 422) |
 | `DELETE /p/{project}/api/projects/{id}` | delete an assessment and everything under it |
 
 **Selection.** Only the selected objectives reach step 4 (Collect evidence), where tests and controls are linked to them. The payload's `selected` lists them. The mapping ticks every mapped objective the first time; after that each mapping keeps the assessor's choices, unticks what the previous mapping had and this one lost, and ticks what it adds. A new card version starts from the previous version's selection by the same rule.

@@ -160,7 +160,8 @@ class Risk(Base):
 
     project: Mapped[Project] = relationship(back_populates="risks")
     mapped: Mapped[list[MappedObjectiveRow]] = relationship(
-        back_populates="risk", cascade="all, delete-orphan", lazy="selectin"
+        back_populates="risk", cascade="all, delete-orphan", lazy="selectin",
+        order_by="MappedObjectiveRow.id",
     )
 
 
@@ -174,10 +175,12 @@ class MappedObjectiveRow(Base):
     risk_row_id: Mapped[int] = mapped_column(
         ForeignKey("risk.id", ondelete="CASCADE"), index=True
     )
-    #: "R1.1". No foreign key: the catalogue is a CSV in the package, not a table.
+    #: "O1". No foreign key: the catalogue is a CSV in the package, not a table.
     objective_id: Mapped[str] = mapped_column(Text, nullable=False)
     quote: Mapped[str] = mapped_column(Text, default="")
     rationale: Mapped[str] = mapped_column(Text, default="")
+    #: Who mapped it: "ai" (the risk mapper) or "person" (2026-10-01).
+    source: Mapped[str] = mapped_column(Text, nullable=False, default="ai", server_default="ai")
 
     risk: Mapped[Risk] = relationship(back_populates="mapped")
 
@@ -213,7 +216,7 @@ class ObjectiveSelectionRow(Base):
     project_id: Mapped[str] = mapped_column(
         ForeignKey("project.id", ondelete="CASCADE"), primary_key=True
     )
-    #: "R1.1", ... No foreign key, as for mapped_objective: the catalogue is a CSV.
+    #: "O1", ... No foreign key, as for mapped_objective: the catalogue is a CSV.
     objective_ids: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, onupdate=_now

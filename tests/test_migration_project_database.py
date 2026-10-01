@@ -25,7 +25,11 @@ from conftest import CORE_PROJECT_DDL, refused_database
 
 BASELINE = "20260926000000_project_database"
 #: The objective selection (evidence links plan 2026-09-30, step A), on top of the baseline.
-HEAD = "20261001000000_selection"
+SELECTION = "20261001000000_selection"
+#: The objective ids O1 ... O50 (2026-10-01), on top of the selection.
+RENAME = "20261001100000_objective_ids"
+#: Who mapped a risk to an objective, the AI or a person (2026-10-01), on top of the rename.
+HEAD = "20261001110000_mapping_source"
 TABLES = ("project", "graph", "risk", "mapped_objective", "mapping_run", "objective_selection")
 
 
@@ -114,7 +118,7 @@ def test_upgrading_to_head_gives_the_head_and_the_tables(migrated):
     assert tables == set(TABLES) | {"alembic_version"}
 
 
-def test_the_selection_is_the_only_head_and_sits_on_the_baseline():
+def test_the_chain_is_baseline_selection_rename_source():
     from alembic.config import Config
     from alembic.script import ScriptDirectory
 
@@ -124,7 +128,9 @@ def test_the_selection_is_the_only_head_and_sits_on_the_baseline():
     config.set_main_option("script_location", str(projectdb.ALEMBIC_DIR))
     script = ScriptDirectory.from_config(config)
     assert script.get_heads() == [HEAD]
-    assert script.get_revision(HEAD).down_revision == BASELINE
+    assert script.get_revision(HEAD).down_revision == RENAME
+    assert script.get_revision(RENAME).down_revision == SELECTION
+    assert script.get_revision(SELECTION).down_revision == BASELINE
     assert script.get_revision(BASELINE).down_revision is None
 
 
@@ -250,6 +256,58 @@ def test_an_assessment_mapped_before_the_selection_gets_its_mapped_objectives(da
         with engine.connect() as connection:
             rows = connection.execute(text(
                 "SELECT project_id, objective_ids FROM control_objectives.objective_selection")).all()
-        assert [tuple(r) for r in rows] == [("mapped", ["R1.1", "R2.3", "R6.1"])]
+        assert [tuple(r) for r in rows] == [("mapped", ["O1", "O7", "O24"])]
     finally:
         drop()
+
+
+def test_the_stored_ids_become_o_ids_in_catalogue_order(database_url):
+    """2026-10-01: every stored objective id is renamed by objective_id_renames.csv; a selection is
+    kept in catalogue order (O7 before O24); an id the table does not know is left as it is."""
+    from alembic import command
+    from alembic.config import Config
+
+    from aisc_control_objectives import projectdb
+
+    engine, drop = _scratch(database_url, "alembic_rename")
+    try:
+        config = Config(str(projectdb.ALEMBIC_INI))
+        config.set_main_option("script_location", str(projectdb.ALEMBIC_DIR))
+        with engine.begin() as connection:
+            config.attributes["connection"] = connection
+            command.upgrade(config, SELECTION)
+        v1 = str(uuid.uuid4())
+        with engine.begin() as connection:
+            connection.execute(text("INSERT INTO project.system (pid, number, name) VALUES (:a, 1, 'S')"), {"a": v1})
+            connection.execute(text(
+                "INSERT INTO control_objectives.project (id, name, objectives_digest, created_at, updated_at, system_id)"
+                " VALUES ('a', 'S', '', now(), now(), :a)"), {"a": v1})
+            connection.execute(text(
+                "INSERT INTO control_objectives.risk (project_id, risk_id, position, text, short_label, source,"
+                " vulnerability, consequence, impact, stakeholder, control, follow_up_control, areas, vair_terms,"
+                " provenance) VALUES ('a', 'risk0', 0, 't', '', '', '', '', '', '', '', '', '{}', '{}', 'form')"))
+            connection.execute(text(
+                "INSERT INTO control_objectives.mapped_objective (risk_row_id, objective_id, quote, rationale)"
+                " SELECT r.id, o, '', '' FROM control_objectives.risk r, unnest(ARRAY['R11.4', 'R2.3', 'R77.1']) o"))
+            connection.execute(text(
+                "INSERT INTO control_objectives.objective_selection (project_id, objective_ids, updated_at)"
+                " VALUES ('a', ARRAY['R6.1', 'R11.4', 'R2.3'], now())"))
+        projectdb.migrate(engine)
+        with engine.connect() as connection:
+            mapped = connection.execute(text(
+                "SELECT objective_id FROM control_objectives.mapped_objective ORDER BY id")).scalars().all()
+            selected = connection.execute(text(
+                "SELECT objective_ids FROM control_objectives.objective_selection")).scalar_one()
+        assert mapped == ["O50", "O7", "R77.1"]
+        assert selected == ["O7", "O24", "O50"]
+    finally:
+        drop()
+
+
+def test_every_row_mapped_before_is_the_ais(migrated):
+    with migrated.connect() as connection:
+        column = connection.execute(text(
+            "SELECT is_nullable, column_default FROM information_schema.columns"
+            " WHERE table_schema = 'control_objectives' AND table_name = 'mapped_objective'"
+            "   AND column_name = 'source'")).one()
+    assert column[0] == "NO" and "'ai'" in column[1]

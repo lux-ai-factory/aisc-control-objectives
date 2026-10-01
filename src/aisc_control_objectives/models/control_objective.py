@@ -38,7 +38,8 @@ class ControlObjective(BaseModel):
     #: are called out on the pages; "Paired" only explains a Control + Test row.
     NOTE_TAGS: ClassVar[tuple[str, ...]] = ("GAP", "CONDITIONAL", "VOLUNTARY", "Paired")
 
-    id: str = Field(pattern=r"^R\d+\.\d+$")
+    #: "O1" ... "O50", in catalogue order (2026-10-01; the R1.1 ids are in objective_id_renames.csv).
+    id: str = Field(pattern=r"^O[1-9]\d*$")
     macro_requirement: str = Field(pattern=r"^R\d+\s+\S")
     legal_basis: str = Field(min_length=1)
     sub_requirement_label: str
@@ -53,8 +54,6 @@ class ControlObjective(BaseModel):
 
     @model_validator(mode="after")
     def _derivations_hold(self) -> ControlObjective:
-        if self.id.split(".", 1)[0] != self.macro_id:
-            raise ValueError(f"id {self.id!r} is not under macro requirement {self.macro_id!r}")
         _ = self.regimes  # evaluated for its side effect: raises on a basis it cannot place
         return self
 
@@ -130,10 +129,9 @@ class ControlObjective(BaseModel):
         return regimes
 
     @property
-    def sort_key(self) -> tuple[int, int]:
-        """Requirement order, so R9.9 precedes R10.1 (string order would not)."""
-        macro, _, sub = self.id[1:].partition(".")
-        return (int(macro), int(sub))
+    def sort_key(self) -> tuple[int]:
+        """Catalogue order, so O9 precedes O10 (string order would not)."""
+        return (int(self.id[1:]),)
 
 
 class MacroRequirement(BaseModel):

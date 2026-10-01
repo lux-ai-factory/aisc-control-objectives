@@ -157,9 +157,9 @@ def test_I5_4_the_database_is_at_the_baseline_and_readers_get_their_reads(cluste
 
     a, _, _, _ = two
     database = projects.database(a)
-    # the head: the selection revision (evidence links 2026-09-30) on the baseline
+    # the head: who mapped a risk (2026-10-01), on the O ids, the selection and the baseline
     baseline = (Path(__file__).resolve().parents[1] / "alembic" / "versions"
-                / "20261001000000_selection.py").read_text()
+                / "20261001110000_mapping_source.py").read_text()
     revision = re.search(r"^revision\s*=\s*['\"]([^'\"]+)", baseline, re.M).group(1)
     assert _rows(cluster, database, "SELECT version_num FROM control_objectives.alembic_version") == [
         (revision,)
@@ -191,8 +191,8 @@ def _id_routes(pid, aid, risk="r1"):
         ("GET", _api(pid, aid), {}),
         ("POST", _api(pid, aid, "/map"), {}),
         ("POST", _api(pid, aid, "/severity"), {"json": {risk: 3}}),
-        ("POST", f"/p/{pid}/projects/{aid}/selection", {"data": {"objective": "R1.1"}}),
-        ("POST", _api(pid, aid, "/selection"), {"json": {"objective_ids": ["R1.1"]}}),
+        ("POST", f"/p/{pid}/projects/{aid}/selection", {"data": {"objective": "O1"}}),
+        ("POST", _api(pid, aid, "/selection"), {"json": {"objective_ids": ["O1"]}}),
         ("DELETE", _api(pid, aid), {}),
     ]
 

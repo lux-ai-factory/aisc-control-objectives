@@ -169,7 +169,8 @@ class ProjectRepository:
 
     @staticmethod
     def _set_selection(session: Session, project: tables.Project, objective_ids) -> None:
-        ids = sorted(set(objective_ids))
+        # in the order given (the service gives catalogue order: O9 before O10), once each
+        ids = list(dict.fromkeys(objective_ids))
         if project.selection is None:
             session.add(tables.ObjectiveSelectionRow(project_id=project.id, objective_ids=ids))
         else:
@@ -202,6 +203,7 @@ class ProjectRepository:
                             objective_id=item.objective_id,
                             quote=item.quote,
                             rationale=item.rationale,
+                            source="ai",
                         )
                     )
             session.add(
@@ -215,6 +217,26 @@ class ProjectRepository:
                     model=model,
                 )
             )
+
+    def save_risk_mapping(
+        self, project_id: str, risk_id: str, objectives: list[MappedObjective],
+        selected: list[str],
+    ) -> None:
+        """Replace one risk's mapping (a person's edit) and the selection, in one transaction. An
+        assessment no AI ever mapped gets an empty run, so it reads as mapped."""
+        with self._sessions.begin() as session:
+            project = session.get(tables.Project, project_id)
+            row = next(r for r in project.risks if r.risk_id == risk_id)
+            row.mapped.clear()
+            session.flush()
+            for item in objectives:
+                session.add(tables.MappedObjectiveRow(
+                    risk_row_id=row.id, objective_id=item.objective_id, quote=item.quote,
+                    rationale=item.rationale, source=item.source))
+            if project.mapping_run is None:
+                session.add(tables.MappingRunRow(project_id=project_id, findings=[], stops={},
+                                                 stop="clean", attempts=0, error="", model=""))
+            self._set_selection(session, project, selected)
 
     def delete(self, project_id: str) -> None:
         with self._sessions.begin() as session:
@@ -390,6 +412,7 @@ class ProjectRepository:
                                 objective_id=item.objective_id,
                                 quote=item.quote,
                                 rationale=item.rationale,
+                                source=item.source,
                             )
                             for item in row.mapped
                         ],

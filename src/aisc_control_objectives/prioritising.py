@@ -7,10 +7,11 @@ AIRO chains its AI Card carries, rated by the assessor:
     the assessor rates each risk 1-5
               |
               v
-    the mapper says which objectives mitigate that risk
+    the mapping (the AI's or a person's) says which objectives mitigate that risk
               |
               v
-    an objective inherits the severity of the worst risk it mitigates
+    an objective scores the sum of the severities of the risks it mitigates:
+    S = how many risks point at it x how severe they are on average
               |
               v
     tier 1 = the highest scoring, up to a budget an assessor can actually start
@@ -40,20 +41,15 @@ from aisc_control_objectives.risk_mapping import Mapping
 #: rated anything.
 DEFAULT_SEVERITY = 3
 
-#: What an objective no risk maps to scores. Below the whole 1-5 scale, because
-#: "nothing the assessor identified points at this" is weaker than "a risk they
-#: rated 1 points at this". Sharing the neutral value put 33 of MCAS's 50 into
-#: Tier 2 and made "Next" mean almost nothing.
+#: What an objective no risk maps to scores: an empty sum. Below any risk the
+#: assessor rated, because "nothing the assessor identified points at this" is
+#: weaker than "a risk they rated 1 points at this".
 UNDRIVEN_SCORE = 0.0
 
 #: How many objectives a Tier 1 may hold. Seven is what an assessor can open a
 #: workstream on; beyond that the tier stops meaning anything.
 TIER_ONE_BUDGET = 7
 
-#: A directly binding duty outranks one grounded only in a draft standard.
-BINDING_WEIGHT = 1.0
-#: Voluntary objectives sort below every legal duty, whatever the risks say.
-VOLUNTARY_FLOOR = -100.0
 
 class Severity(BaseModel):
     """How severe each of this system's risks is: 1 (marginal) to 5 (decisive)."""
@@ -77,13 +73,16 @@ class Severity(BaseModel):
 
 class Priority(BaseModel):
     objective_id: str
-    #: The severity of the worst risk driving it, before any tiebreak. The
-    #: threshold for Tier 1 reads this, not `score`: the binding bonus is a
-    #: tiebreak among work, and adding it first let a risk rated 2 over the line.
+    #: The severity of the worst risk driving it. The threshold for Tier 1 reads
+    #: this, not `score`: many marginal risks are still marginal work.
     driving_severity: int = 0
     #: 1 start here, 2 next, 3 later. None when the objective does not apply.
     tier: int | None = None
+    #: The sum of the severities of the risks it mitigates.
     score: float = 0.0
+    #: 1 ... 50: score, then the worst single risk, then a binding duty first,
+    #: then catalogue order. A voluntary objective ranks after every legal duty.
+    rank: int = 0
     #: Printable, one per signal that placed this objective.
     reasons: list[str] = Field(default_factory=list)
     #: The risks this objective mitigates, worst first.
@@ -91,29 +90,29 @@ class Priority(BaseModel):
     non_binding: bool = False
 
 
+def _and(values: list[int]) -> str:
+    words = [str(v) for v in values]
+    return words[0] if len(words) == 1 else ", ".join(words[:-1]) + " and " + words[-1]
+
+
 def _score(
     objective: ControlObjective,
-    severity: Severity,
     driving: list[tuple[int, OntologyRisk]],
     non_binding: bool,
 ) -> tuple[float, list[str]]:
-    if non_binding:
-        return VOLUNTARY_FLOOR, ["voluntary: binds nobody, so it sorts last"]
-
     if driving:
-        rating, risk = driving[0]
-        score = float(rating)
-        reasons = [
-            f"mitigates a risk rated {rating}/5: {risk.text[:90]}"
-            + (f" (and {len(driving) - 1} more)" if len(driving) > 1 else "")
-        ]
+        ratings = [rating for rating, _ in driving]
+        score = float(sum(ratings))
+        n = len(driving)
+        reasons = [f"mitigates {n} risk{'s' if n != 1 else ''} rated {_and(ratings)}: score {sum(ratings)}"
+                   f" (worst: {driving[0][1].text[:90]})"]
     else:
         score = UNDRIVEN_SCORE
         reasons = ["no identified risk maps to it: owed, but not where this system's danger is"]
-
-    if "Binding" in objective.grounding_tier_flag:
-        score += BINDING_WEIGHT
-        reasons.append("a directly binding duty, not only standards-grounded")
+    if non_binding:
+        reasons.append("voluntary: binds nobody, so it sorts last")
+    elif "Binding" in objective.grounding_tier_flag:
+        reasons.append("a directly binding duty: ahead of an equal score that is only standards-grounded")
     return score, reasons
 
 
@@ -140,19 +139,15 @@ def _driving_risks(
     return driving
 
 
-def _assign_tiers(scored: list[tuple[float, tuple[int, int], Priority]], budget: int) -> None:
+def _assign_tiers(ordered: list[Priority], budget: int) -> None:
     """Tier 1 is the top of the driven work, and only that.
 
-    Driven-ness is a fact about the mapping, not a threshold on the score: a
-    binding objective nothing points at still scores above the undriven floor,
-    and "binding" is a tiebreak among work, not a reason to schedule work
-    nobody identified. An objective answering a risk the assessor called
-    marginal does not belong in "start here" either, however much room is left
-    in the budget: a short Tier 1 is an honest answer, a padded one is not.
+    An objective answering only risks the assessor called marginal does not
+    belong in "start here", however much room is left in the budget: a short
+    Tier 1 is an honest answer, a padded one is not.
     """
-    scored.sort(key=lambda row: (-row[0], row[1]))
     urgent = 0
-    for _score, _, priority in scored:
+    for priority in ordered:
         if priority.non_binding or not priority.risk_ids:
             priority.tier = 3
         elif priority.driving_severity >= DEFAULT_SEVERITY and urgent < budget:
@@ -176,7 +171,7 @@ def prioritise(
         raise ValueError(f"rated risk(s) not in this system's graph: {', '.join(unknown)}")
 
     driving = _driving_risks(mappings, risks, severity)
-    scored: list[tuple[float, tuple[int, int], Priority]] = []
+    keyed: list[tuple[tuple, Priority]] = []
     priorities: dict[str, Priority] = {}
 
     for objective in catalogue:
@@ -186,9 +181,15 @@ def prioritise(
         entries = driving.get(objective.id, [])
         priority.risk_ids = [risk.id for _, risk in entries]
         priority.driving_severity = entries[0][0] if entries else 0
-        priority.score, priority.reasons = _score(objective, severity, entries, non_binding)
-        # catalogue order breaks ties, so the same input always tiers the same
-        scored.append((priority.score, objective.sort_key, priority))
+        priority.score, priority.reasons = _score(objective, entries, non_binding)
+        binding = "Binding" in objective.grounding_tier_flag
+        # catalogue order breaks the last tie, so the same input always ranks the same
+        keyed.append(((non_binding, -priority.score, -priority.driving_severity, not binding,
+                       objective.sort_key), priority))
 
-    _assign_tiers(scored, budget)
+    keyed.sort(key=lambda row: row[0])
+    ordered = [priority for _, priority in keyed]
+    for rank, priority in enumerate(ordered, 1):
+        priority.rank = rank
+    _assign_tiers(ordered, budget)
     return [priorities[objective.id] for objective in catalogue]

@@ -48,6 +48,8 @@ class MappedObjective(BaseModel):
     #: A literal span of the risk chain: what in the risk this objective answers.
     quote: str = ""
     rationale: str = ""
+    #: "ai" when the risk mapper proposed it, "person" when somebody added it by hand.
+    source: Literal["ai", "person"] = "ai"
 
 
 class Mapping(BaseModel):

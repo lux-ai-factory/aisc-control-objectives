@@ -37,12 +37,12 @@ class TestControlObjectives:
     def test_lists_every_objective_in_requirement_order(self, client):
         payload = client.get("/api/control-objectives").json()
         assert len(payload) == 50
-        assert payload[0]["id"] == "R1.1"
-        assert payload[-1]["id"] == "R11.4"
+        assert payload[0]["id"] == "O1"
+        assert payload[-1]["id"] == "O50"
 
     def test_an_objective_carries_its_derived_routing_fields(self, client):
         payload = client.get("/api/control-objectives").json()
-        paired = next(item for item in payload if item["id"] == "R2.1")
+        paired = next(item for item in payload if item["id"] == "O5")
         assert paired["macro_id"] == "R2"
         assert paired["requires_control"] is True
         assert paired["requires_test"] is True
@@ -55,14 +55,14 @@ class TestControlObjectives:
         assert len(controls) == 41
         assert len(tests) == 14
         # a paired objective is in both partitions
-        assert "R2.1" in {item["id"] for item in controls}
-        assert "R2.1" in {item["id"] for item in tests}
+        assert "O5" in {item["id"] for item in controls}
+        assert "O5" in {item["id"] for item in tests}
 
     def test_an_unknown_mode_is_rejected(self, client):
         assert client.get("/api/control-objectives?mode=banana").status_code == 422
 
     def test_fetch_one_objective_by_id(self, client):
-        payload = client.get("/api/control-objectives/R1.1").json()
+        payload = client.get("/api/control-objectives/O1").json()
         assert payload["sub_requirement_label"] == "Operator oversight capability"
         assert payload["legal_bases"] == ["AI Act Art. 14"]
 
@@ -181,7 +181,7 @@ class TestObjectivesPage:
         catalogue = ControlObjectiveCatalogue(
             [
                 ControlObjective(
-                    id="R1.1",
+                    id="O1",
                     macro_requirement="R1 Human Agency and Oversight",
                     legal_basis="AI Act Art. 14",
                     sub_requirement_label="Injected",

@@ -28,7 +28,7 @@ from aisc_control_objectives.control_objectives import ControlObjectiveCatalogue
 from aisc_control_objectives.db.repository import ProjectRecord, ProjectRepository
 from aisc_control_objectives.models.ontology import Ontology
 from aisc_control_objectives.prioritising import Priority, prioritise
-from aisc_control_objectives.risk_mapping import Mapper, MappingRun, map_risks
+from aisc_control_objectives.risk_mapping import MappedObjective, Mapping, Mapper, MappingRun, map_risks
 
 #: platform project pid -> (the mapper to use for it, "<provider>/<model>" of its model)
 MapperFor = Callable[[str], tuple[Mapper, str]]
@@ -141,13 +141,40 @@ class Projects:
         )
         return self.view(project_id)
 
+    def map_by_hand(self, project_id: str, risk_id: str, objective_ids: list[str]) -> ProjectView:
+        """A person's mapping of one risk (replaces that risk's mapping, 2026-10-01).
+
+        An objective the risk already had keeps its row as it was (the AI's quote and source);
+        one added is the person's. The selection follows the change as after a mapping (D1, D2)."""
+        record = self._repository.get(project_id)
+        if risk_id not in {risk.id for risk in record.ontology.risks}:
+            raise ValueError(f"no risk {risk_id} on this card")
+        unknown = sorted({oid for oid in objective_ids if self._catalogue.by_id(oid) is None})
+        if unknown:
+            raise ValueError(f"not in the catalogue: {', '.join(unknown)}")
+        before = record.mapping_run.mappings if record.mapping_run else {}
+        kept = {item.objective_id: item for item in before.get(risk_id, Mapping(risk_id=risk_id)).objectives}
+        items = [kept.get(oid) or MappedObjective(objective_id=oid, source="person")
+                 for oid in self._in_order(set(objective_ids))]
+        after = MappingRun(mappings={**before, risk_id: Mapping(risk_id=risk_id, objectives=items)})
+        self._repository.save_risk_mapping(
+            project_id, risk_id, items, selected=self._carried_selection(record, after))
+        return self.view(project_id)
+
     def select(self, project_id: str, objective_ids: list[str]) -> ProjectView:
         """Tick the objectives the project takes forward (replaces the selection)."""
         unknown = sorted({oid for oid in objective_ids if self._catalogue.by_id(oid) is None})
         if unknown:
             raise ValueError(f"not in the catalogue: {', '.join(unknown)}")
-        self._repository.save_selection(project_id, objective_ids)
+        self._repository.save_selection(project_id, self._in_order(set(objective_ids)))
         return self.view(project_id)
+
+    def _in_order(self, objective_ids) -> list[str]:
+        """Catalogue order (O9 before O10); an id the catalogue lacks goes last."""
+        def key(oid):
+            found = self._catalogue.by_id(oid)
+            return (0, found.sort_key, oid) if found else (1, (), oid)
+        return sorted(objective_ids, key=key)
 
     def _carried_selection(self, record: ProjectRecord, run: MappingRun) -> list[str]:
         """The selection after a mapping (D1, D2).
@@ -160,9 +187,9 @@ class Projects:
         base = record if record.selected is not None else self._repository.previous_of(record)
         now = _mapped_ids(run)
         if base is None or base.selected is None:
-            return sorted(now)
+            return self._in_order(now)
         before = _mapped_ids(base.mapping_run)
-        return sorted((set(base.selected) - (before - now)) | (now - before))
+        return self._in_order((set(base.selected) - (before - now)) | (now - before))
 
     def delete(self, project_id: str) -> None:
         self._repository.delete(project_id)

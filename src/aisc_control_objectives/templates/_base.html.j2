@@ -171,6 +171,28 @@
   .co-tier--1 { border-left: 4px solid var(--primary); }
   .co-tier--2 { border-left: 4px solid var(--info-soft); }
   .co-tier--no .co-obj, .co-tier--undetermined .co-obj { opacity: 0.75; }
+  /* Step 2: each risk's mapping, by the AI or by hand */
+  .co-map { padding: 14px 0; border-top: 1px solid var(--border); }
+  .co-map-head { display: flex; align-items: baseline; gap: 10px; }
+  .co-map-head h3 { font-size: 15px; margin: 0; }
+  .co-map-sev { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%;
+                background: var(--panel-2); border: 1px solid var(--border); font-size: 12px; font-weight: 700; }
+  .co-map-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 6px; }
+  .co-map-item { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; font-size: 12.5px;
+                 border: 1px solid var(--border); border-radius: 4px; background: var(--panel); }
+  .co-map-source { font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+                   padding: 1px 5px; border-radius: 3px; }
+  .co-map-source--ai { background: var(--info-soft); color: #00337a; }
+  .co-map-source--person { background: #e8f5e9; color: #256b29; }
+  .co-map-edit summary { cursor: pointer; font-size: 13px; color: var(--primary); }
+  .co-map-edit form { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+                     gap: 4px 28px; align-items: start; }
+  .co-map-edit form .qf-actions { grid-column: 1 / -1; }
+  .co-map-dim { border: 0; margin: 10px 0 0; padding: 0; min-width: 0; }
+  .co-map-dim legend { margin-bottom: 4px; }
+  .co-map-pick { display: block; font-size: 13px; padding: 2px 0; }
+  .co-map-pick b { display: inline-block; min-width: 34px; }
+  .co-map-warn { margin: 0 0 0 12px; }
   /* The trustworthiness dimension of an objective, in the tools catalogue's colours */
   .co-dim { display: inline-block; padding: 2px 8px; border-radius: 999px; border: 1px solid;
             font-size: 11px; font-weight: 600; letter-spacing: 0.02em; white-space: nowrap; }

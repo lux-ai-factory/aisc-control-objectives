@@ -37,7 +37,7 @@ def _mapping(*items) -> Mapping:
     return Mapping(risk_id="risk2", objectives=list(items))
 
 
-def _good(objective_id="R1.1", quote="The mandatory human review becomes a formality"):
+def _good(objective_id="O1", quote="The mandatory human review becomes a formality"):
     return MappedObjective(
         objective_id=objective_id, quote=quote, rationale="the oversight duty this risk defeats"
     )
@@ -109,7 +109,7 @@ class TestTheLoop:
         run = map_risks([RUBBER_STAMP], FakeMapper(_mapping(_good())), objectives)
         assert run.stop == "clean"
         assert run.attempts == 1
-        assert run.mappings["risk2"].objectives[0].objective_id == "R1.1"
+        assert run.mappings["risk2"].objectives[0].objective_id == "O1"
 
     def test_findings_go_back_and_a_fixed_attempt_is_clean(self, objectives):
         mapper = FakeMapper(_mapping(_good("R42.9")), _mapping(_good()))
@@ -132,17 +132,17 @@ class TestTheLoop:
         """Every exit publishes, but an invented objective id must not survive
         into the tiers: publishing it would schedule work on a duty that does
         not exist."""
-        stubborn = _mapping(_good("R42.9"), _good("R1.1"))
+        stubborn = _mapping(_good("R42.9"), _good("O1"))
         run = map_risks([RUBBER_STAMP], FakeMapper(stubborn), objectives)
         assert run.stop == "fixpoint"
         published = {o.objective_id for o in run.mappings["risk2"].objectives}
-        assert published == {"R1.1"}
+        assert published == {"O1"}
         assert any(f.flag == "unknown-objective" for f in run.findings)
 
     def test_an_unquoted_objective_is_dropped_too(self, objectives):
-        run = map_risks([RUBBER_STAMP], FakeMapper(_mapping(_good(quote=""), _good("R1.3"))), objectives)
+        run = map_risks([RUBBER_STAMP], FakeMapper(_mapping(_good(quote=""), _good("O3"))), objectives)
         published = {o.objective_id for o in run.mappings["risk2"].objectives}
-        assert published == {"R1.3"}
+        assert published == {"O3"}
 
     def test_a_dead_model_publishes_an_empty_mapping_not_a_crash(self, objectives):
         run = map_risks([RUBBER_STAMP], FakeMapper(error=RuntimeError("no key")), objectives)
@@ -221,15 +221,15 @@ class FakeCompleter:
 class TestTheMapper:
     def test_it_shows_the_model_the_risk_and_the_objectives(self, objectives):
         answer = json.dumps({"risk_id": "risk2", "objectives": [
-            {"objective_id": "R1.1", "quote": "Automation bias", "rationale": "why"}]})
+            {"objective_id": "O1", "quote": "Automation bias", "rationale": "why"}]})
         complete = FakeCompleter(answer)
         mapping = RiskMapper(complete=complete, catalogue=objectives).propose(RUBBER_STAMP)
-        assert mapping.objectives[0].objective_id == "R1.1"
+        assert mapping.objectives[0].objective_id == "O1"
         system, user = complete.calls[0]
         assert "mitigate" in system.lower()
         assert "rubber-stamp" in user
-        assert "R1.1" in user and "Operator oversight capability" in user
-        assert "R11.4" in user                      # the whole catalogue is offered
+        assert "O1" in user and "Operator oversight capability" in user
+        assert "O50" in user                      # the whole catalogue is offered
 
     def test_the_skill_carries_a_literal_answer_schema(self):
         from aisc_control_objectives.skills import load_skill

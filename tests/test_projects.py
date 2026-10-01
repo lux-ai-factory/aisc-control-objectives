@@ -25,11 +25,11 @@ from aisc_control_objectives.risk_mapping import MappedObjective, Mapping
 
 class FakeMapper:
     BY_RISK = {
-        "risk0": ["R3.1", "R5.1", "R2.5"],
-        "risk1": ["R5.1", "R5.2", "R5.3"],
-        "risk2": ["R1.1", "R1.4", "R1.2"],
-        "risk3": ["R4.1", "R4.3", "R2.2"],
-        "risk4": ["R2.3", "R3.6", "R3.1"],
+        "risk0": ["O11", "O21", "O9"],
+        "risk1": ["O21", "O22", "O23"],
+        "risk2": ["O1", "O4", "O2"],
+        "risk3": ["O17", "O19", "O6"],
+        "risk4": ["O7", "O16", "O11"],
     }
 
     def propose(self, risk, findings=()):
@@ -157,8 +157,8 @@ class TestMappingAndTiers:
         ).json()
         first = {p["objective_id"] for p in oversight["priorities"] if p["tier"] == 1}
         second = {p["objective_id"] for p in poisoning["priorities"] if p["tier"] == 1}
-        assert "R1.1" in first and "R1.1" not in second
-        assert "R2.3" in second and "R2.3" not in first
+        assert "O1" in first and "O1" not in second
+        assert "O7" in second and "O7" not in first
 
     def test_tier_one_never_exceeds_seven(self, platform_project, client, mapped):
         rated = client.post(
@@ -225,7 +225,7 @@ class TestThePages:
         assert "Loan officers rubber-stamp" in page          # the risk itself
         assert "Overreliance" in page                        # its VAIR typing
         assert page.count("<select") == 5                    # one per risk
-        assert "Map the risks to objectives" in page
+        assert "Map with AI" in page
 
     def test_nothing_asks_the_three_questions(self, _starter, platform_project, client, graph):
         """"Annex III" itself still occurs: it is in the objectives' own text.

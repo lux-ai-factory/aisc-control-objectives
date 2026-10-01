@@ -142,7 +142,8 @@ def _risk_views(record) -> list:
             _RiskView(
                 risk=risk,
                 rating=record.severity.of(risk.id),
-                mapped=[(item.objective_id, item.rationale) for item in (mapping.objectives if mapping else [])],
+                mapped=[(item.objective_id, item.rationale, item.source)
+                        for item in (mapping.objectives if mapping else [])],
                 findings=[f for f in (run.findings if run else []) if f.risk_id == risk.id],
             )
         )
@@ -174,15 +175,15 @@ def render_project_page(
     counts = _Counts()
     sections = {key: _TierView(key, title, subtitle) for key, title, subtitle in TIER_SECTIONS}
 
-    # Ordered by tier, then by score within a tier, then by requirement order:
-    # the page is a work list, and a work list reads top to bottom.
+    # Ordered by rank (score, worst risk, binding, catalogue order) within each
+    # tier: the page is a work list, and a work list reads top to bottom.
     rows = []
     for objective in catalogue:
         priority = priorities[objective.id]
         rows.append((objective, priority))
         setattr(counts, f"tier{priority.tier}", getattr(counts, f"tier{priority.tier}") + 1)
 
-    rows.sort(key=lambda row: (-row[1].score, row[0].sort_key))
+    rows.sort(key=lambda row: row[1].rank)
     for objective, priority in rows:
         sections[priority.tier].objectives.append((objective, priority))
     ordered = [section for section in sections.values() if section.objectives]
@@ -197,6 +198,7 @@ def render_project_page(
         here="projects",
         risks=_risk_views(record),
         objective_labels={o.id: o.sub_requirement_label for o in catalogue},
+        macros=catalogue.macro_requirements(),
         read_only=read_only,
         selected=set(record.selected or []),
         **_navigation(root_path, project),

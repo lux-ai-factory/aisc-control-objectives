@@ -41,7 +41,12 @@ class SwitchableMapper:
         )
 
 
-MAPPED = sorted({oid for oids in FakeMapper.BY_RISK.values() for oid in oids})
+def in_order(ids) -> list[str]:
+    """Catalogue order, as the selection is kept: O9 before O10."""
+    return sorted(ids, key=lambda oid: int(oid[1:]))
+
+
+MAPPED = in_order({oid for oids in FakeMapper.BY_RISK.values() for oid in oids})
 
 
 @pytest.fixture()
@@ -100,10 +105,10 @@ def test_saving_a_selection_replaces_it(client, start, platform_project):
     assessment = start()
     http.post(_api(platform_project, assessment, "/map"))
     response = http.post(_api(platform_project, assessment, "/selection"),
-                         json={"objective_ids": ["R1.1", "R6.1"]})
+                         json={"objective_ids": ["O1", "O24"]})
     assert response.status_code == 200, response.text
-    assert response.json()["selected"] == ["R1.1", "R6.1"]
-    assert _selected(http, platform_project, assessment) == ["R1.1", "R6.1"]
+    assert response.json()["selected"] == ["O1", "O24"]
+    assert _selected(http, platform_project, assessment) == ["O1", "O24"]
 
 
 def test_an_unticked_selection_stays_empty(client, start, platform_project, mapper):
@@ -120,7 +125,7 @@ def test_an_objective_the_catalogue_lacks_is_refused(client, start, platform_pro
     http, _ = client
     assessment = start()
     response = http.post(_api(platform_project, assessment, "/selection"),
-                         json={"objective_ids": ["R1.1", "R99.9"]})
+                         json={"objective_ids": ["O1", "R99.9"]})
     assert response.status_code == 422
     assert "R99.9" in response.json()["detail"]
     assert _selected(http, platform_project, assessment) == []
@@ -129,25 +134,25 @@ def test_an_objective_the_catalogue_lacks_is_refused(client, start, platform_pro
 def test_a_selection_can_be_saved_before_any_mapping(client, start, platform_project):
     http, _ = client
     assessment = start()
-    http.post(_api(platform_project, assessment, "/selection"), json={"objective_ids": ["R6.1"]})
-    assert _selected(http, platform_project, assessment) == ["R6.1"]
+    http.post(_api(platform_project, assessment, "/selection"), json={"objective_ids": ["O24"]})
+    assert _selected(http, platform_project, assessment) == ["O24"]
 
 
 def test_mapping_again_keeps_the_choices_and_follows_the_mapping(
     client, start, platform_project, mapper
 ):
-    """R1.1 unticked by hand stays unticked; R6.1 ticked by hand stays; R3.6, no
-    longer mapped, is unticked; R7.1, newly mapped, is ticked."""
+    """O1 unticked by hand stays unticked; O24 ticked by hand stays; O16, no
+    longer mapped, is unticked; O26, newly mapped, is ticked."""
     http, _ = client
     assessment = start()
     http.post(_api(platform_project, assessment, "/map"))
-    chosen = [oid for oid in MAPPED if oid != "R1.1"] + ["R6.1"]
+    chosen = [oid for oid in MAPPED if oid != "O1"] + ["O24"]
     http.post(_api(platform_project, assessment, "/selection"), json={"objective_ids": chosen})
 
-    mapper.by_risk["risk4"] = ["R2.3", "R3.1", "R7.1"]          # R3.6 out, R7.1 in
+    mapper.by_risk["risk4"] = ["O7", "O11", "O26"]          # O16 out, O26 in
     http.post(_api(platform_project, assessment, "/map"))
 
-    expected = sorted((set(chosen) - {"R3.6"}) | {"R7.1"})
+    expected = in_order((set(chosen) - {"O16"}) | {"O26"})
     assert _selected(http, platform_project, assessment) == expected
 
 
@@ -157,15 +162,15 @@ def test_d2_a_new_version_starts_from_the_previous_selection(
     http, _ = client
     first = start(1)
     http.post(_api(platform_project, first, "/map"))
-    chosen = [oid for oid in MAPPED if oid != "R1.1"] + ["R6.1"]
+    chosen = [oid for oid in MAPPED if oid != "O1"] + ["O24"]
     http.post(_api(platform_project, first, "/selection"), json={"objective_ids": chosen})
 
     second = start(2)
-    mapper.by_risk["risk4"] = ["R2.3", "R3.1", "R7.1"]
+    mapper.by_risk["risk4"] = ["O7", "O11", "O26"]
     http.post(_api(platform_project, second, "/map"))
 
-    assert _selected(http, platform_project, second) == sorted((set(chosen) - {"R3.6"}) | {"R7.1"})
-    assert _selected(http, platform_project, first) == sorted(chosen)
+    assert _selected(http, platform_project, second) == in_order((set(chosen) - {"O16"}) | {"O26"})
+    assert _selected(http, platform_project, first) == in_order(chosen)
 
 
 def test_an_older_versions_selection_is_read_only(client, start, platform_project):
@@ -181,11 +186,11 @@ class TestThePage:
         http, _ = client
         assessment = start()
         http.post(_api(platform_project, assessment, "/map"))
-        http.post(_api(platform_project, assessment, "/selection"), json={"objective_ids": ["R1.1"]})
+        http.post(_api(platform_project, assessment, "/selection"), json={"objective_ids": ["O1"]})
         page = http.get(f"/p/{platform_project}/projects/{assessment}").text
         assert f'action="/p/{platform_project}/projects/{assessment}/selection"' in page
-        assert 'name="objective" value="R1.1" checked' in page
-        assert 'name="objective" value="R1.4">' in page
+        assert 'name="objective" value="O1" checked' in page
+        assert 'name="objective" value="O4">' in page
         assert "Save selection" in page
 
     def test_the_form_saves_the_ticked_objectives(self, client, start, platform_project):
@@ -193,9 +198,9 @@ class TestThePage:
         assessment = start()
         http.post(_api(platform_project, assessment, "/map"))
         response = http.post(f"/p/{platform_project}/projects/{assessment}/selection",
-                             data={"objective": ["R1.4", "R6.1"]})
+                             data={"objective": ["O4", "O24"]})
         assert response.status_code == 303
-        assert _selected(http, platform_project, assessment) == ["R1.4", "R6.1"]
+        assert _selected(http, platform_project, assessment) == ["O4", "O24"]
 
     def test_an_older_version_shows_no_checkboxes(self, client, start, platform_project):
         http, _ = client

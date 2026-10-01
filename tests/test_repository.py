@@ -77,7 +77,7 @@ class TestSurvivingARestart:
                 mappings={
                     "risk2": Mapping(
                         risk_id="risk2",
-                        objectives=[MappedObjective(objective_id="R1.1", quote="q", rationale="why")],
+                        objectives=[MappedObjective(objective_id="O1", quote="q", rationale="why")],
                     )
                 },
                 stop="clean",
@@ -89,7 +89,7 @@ class TestSurvivingARestart:
 
         # a fresh repository, as a restart would give
         stored = repository.reopened().get(project.id)
-        assert stored.mapping_run.mappings["risk2"].objectives[0].objective_id == "R1.1"
+        assert stored.mapping_run.mappings["risk2"].objectives[0].objective_id == "O1"
         assert stored.mapping_run.model == "openai/gpt-4o"
         assert stored.severity.ratings == {"risk2": 5, "risk4": 1}
 
@@ -112,7 +112,7 @@ class TestSurvivingARestart:
         """Re-mapping buys a new answer; keeping both would leave the page
         showing objectives the latest run did not claim."""
         project = repository.create(project=platform_project, name="MCAS", ontology=ontology, jsonld=graph_json, system_id=system_version(platform_project, 1))
-        for objective_id in ("R1.1", "R2.3"):
+        for objective_id in ("O1", "O7"):
             repository.save_mapping_run(
                 project.id,
                 MappingRun(mappings={"risk2": Mapping(
@@ -122,7 +122,7 @@ class TestSurvivingARestart:
             )
         stored = repository.reopened().get(project.id)
         claimed = [o.objective_id for o in stored.mapping_run.mappings["risk2"].objectives]
-        assert claimed == ["R2.3"]
+        assert claimed == ["O7"]
 
 
 class TestListingAndReplacing:
