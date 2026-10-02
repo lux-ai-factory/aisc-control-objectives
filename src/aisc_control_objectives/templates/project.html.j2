@@ -112,7 +112,7 @@
   </details>
 
   {# ── 2. the matrix: one row per risk, its control objectives as chips ──
-     A chip's colour says whether the objective is key and who mapped it; a click
+     Blue is a key objective, a yellow ring an AI suggestion; a click
      opens its name, score, source and key tick. What is in the matrix goes
      forward to step 4. #}
   {%- set mapped_count = chips.values() | map("length") | sum %}
@@ -144,10 +144,8 @@
     <form id="keys" method="post" action="{{ project_base }}/projects/{{ record.id }}/key"></form>
     {%- endif %}
     <ul class="co-legend">
-      <li><span class="co-chip co-chip--key co-chip--ai">O1</span> Key objective</li>
-      <li><span class="co-chip co-chip--plain co-chip--ai">O2</span> Not key</li>
-      <li><span class="co-chip co-chip--plain co-chip--person">O3</span> Mapped by the assessor</li>
-      <li><span class="co-chip co-chip--plain co-chip--ai">O4</span> Suggested by AI</li>
+      <li><span class="co-chip co-chip--key co-chip--person">O1</span> Key objective</li>
+      <li><span class="co-chip co-chip--plain co-chip--ai">O2</span> Suggested by AI</li>
     </ul>
     <table class="co-matrix">
       <thead><tr><th>Risk</th><th>Rating</th><th>Control objectives</th><th></th></tr></thead>

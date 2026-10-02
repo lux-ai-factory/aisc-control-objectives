@@ -121,12 +121,26 @@ def test_a_chips_colour_says_key_and_who_mapped_it(client, start, platform_proje
     assert "co-chip--ai" in risk0["O11"]                              # kept from the AI
 
 
-def test_a_legend_explains_the_colours(client, start, platform_project):
+def test_the_legend_names_only_what_differs_from_the_default(client, start, platform_project):
+    """Blue is a key objective, a yellow ring an AI suggestion; grey without a ring is the default
+    and needs no entry (2026-10-02)."""
     http, _ = client
     page = page_of(http, platform_project, start())
     legend = re.search(r'<ul class="co-legend">(.*?)</ul>', page, re.S).group(1)
-    for words in ("Key objective", "Not key", "Mapped by the assessor", "Suggested by AI"):
-        assert words in legend, words
+    items = re.findall(r"<li>(.*?)</li>", legend, re.S)
+    assert len(items) == 2
+    assert 'co-chip co-chip--key' in items[0] and "Key objective" in items[0]
+    assert 'co-chip--ai' in items[1] and "Suggested by AI" in items[1]
+    assert "Not key" not in legend and "assessor" not in legend
+
+
+def test_the_ring_is_yellow_and_only_on_ai_suggestions():
+    from pathlib import Path
+    import aisc_control_objectives
+    base = (Path(aisc_control_objectives.__file__).parent / "templates/_base.html.j2").read_text()
+    ai = re.search(r"\.co-chip--ai \{([^}]*)\}", base).group(1)
+    assert "border-color: #f2c200" in ai
+    assert not re.search(r"\.co-chip--person \{", base)
 
 
 def test_clicking_a_chip_shows_its_name_score_source_and_key(client, start, platform_project):
