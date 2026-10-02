@@ -223,14 +223,14 @@ def test_s7_2_map_and_severity_on_a_non_latest_assessment_are_409(
     headers = {"Authorization": AUTH}
     mapped = client.post(f"/p/{platform_project}/projects/{a1}/map", headers=headers)
     rated = client.post(
-        f"/p/{platform_project}/projects/{a1}/severity", data={"risk0": "5"}, headers=headers
+        f"/p/{platform_project}/projects/{a1}/severity", data={"impact:risk0": "5"}, headers=headers
     )
 
     assert mapped.status_code == 409
     assert rated.status_code == 409
     record = repository.get(a1)
     assert record.mapping_run is None
-    assert record.severity.ratings == {}
+    assert record.severity.impact == {} and record.severity.likelihood == {}
 
 
 def test_s7_2_the_pages_say_which_version_and_whether_it_is_read_only(

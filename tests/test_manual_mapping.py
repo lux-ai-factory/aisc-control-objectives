@@ -3,7 +3,7 @@
 The mapping is made by the AI (the risk mapper, "Map with AI") or by a person, risk by risk. A
 person's save replaces that risk's mapping: an objective kept from the AI keeps its quote and stays
 the AI's; one the person adds is theirs, with no quote. It works with no AI run at all. The
-selection follows the change by the same rule as mapping again (D1, D2). Mapping with AI again
+scope (what goes forward to step 4) is what the matrix then holds. Mapping with AI again
 replaces the whole mapping, a person's edits included.
 """
 from __future__ import annotations
@@ -37,10 +37,10 @@ def test_a_person_maps_a_risk_with_no_ai_run(client, start, platform_project):
     body = response.json()
     assert body["mapped"] is True
     assert _rows(body, "risk0") == [("O5", "person", ""), ("O10", "person", "")]
-    # D1: nothing chosen before, so what is mapped starts ticked, in catalogue order
+    # what is in the matrix goes forward, in catalogue order
     assert body["selected"] == ["O5", "O10"]
     by_id = {p["objective_id"]: p for p in body["priorities"]}
-    assert by_id["O5"]["score"] == 3 and by_id["O5"]["risk_ids"] == ["risk0"]
+    assert by_id["O5"]["score"] == 9 and by_id["O5"]["risk_ids"] == ["risk0"]      # unrated: 3 x 3
 
 
 def test_editing_after_the_ai_keeps_its_rows_and_adds_the_persons(client, start, platform_project):
@@ -58,13 +58,12 @@ def test_editing_after_the_ai_keeps_its_rows_and_adds_the_persons(client, start,
     assert _rows(body, "risk0") == _rows(before, "risk0")
 
 
-def test_a_choice_made_by_hand_in_the_selection_is_kept(client, start, platform_project):
+def test_each_risk_adds_its_objectives_to_the_scope(client, start, platform_project):
     http, _ = client
     assessment = start()
     _map_by_hand(http, platform_project, assessment, "risk0", ["O5"])
-    http.post(_api(platform_project, assessment, "/selection"), json={"objective_ids": []})
     body = _map_by_hand(http, platform_project, assessment, "risk1", ["O6"]).json()
-    assert body["selected"] == ["O6"]        # O5 stays unticked, O6 is new
+    assert body["selected"] == ["O5", "O6"]
 
 
 def test_mapping_with_ai_again_replaces_the_persons_edits(client, start, platform_project):

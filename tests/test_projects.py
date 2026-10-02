@@ -12,6 +12,8 @@ assessment is started now is pinned in test_assessment_of_a_version.py.)
 
 from __future__ import annotations
 
+import re
+
 import json
 
 import pytest
@@ -91,12 +93,11 @@ class TestStartingAProject:
         assert [risk["id"] for risk in project["risks"]] == [f"risk{n}" for n in range(5)]
         assert project["mapping_run"] is None      # nothing agentic has run yet
 
-    def test_the_tiers_exist_before_anything_is_mapped(self, _starter, platform_project, client, graph):
-        """Every objective is owed from the first page load; they are simply not
-        ordered by anything yet."""
+    def test_nothing_is_key_before_anything_is_mapped(self, _starter, platform_project, client, graph):
+        """Every objective is owed from the first page load; none is key until a risk drives it."""
         project = _start(client, graph, platform_project, starter=_starter)
         assert len(project["priorities"]) == 50
-        assert all(p["tier"] == 3 for p in project["priorities"])
+        assert not any(p["key"] for p in project["priorities"])
 
     def test_a_project_survives_a_restart(self, _starter, platform_project, client, graph):
         project = _start(client, graph, platform_project, starter=_starter)
@@ -119,7 +120,8 @@ class TestRankingTheRisks:
             f"/p/{platform_project}/api/projects/{project['id']}/severity", json={"risk2": 5, "risk4": 1}
         )
         assert rated.status_code == 200
-        assert rated.json()["severity"]["ratings"] == {"risk2": 5, "risk4": 1}
+        # the route from before the matrix sets the impact
+        assert rated.json()["severity"]["impact"] == {"risk2": 5, "risk4": 1}
 
     def test_a_rating_for_a_risk_this_card_lacks_is_refused(self, _starter, platform_project, client, graph):
         project = _start(client, graph, platform_project, starter=_starter)
@@ -133,10 +135,10 @@ class TestRankingTheRisks:
         project = _start(client, graph, platform_project, starter=_starter)
         client.post(f"/p/{platform_project}/api/projects/{project['id']}/severity", json={"risk2": 5})
         again = client.get(f"/p/{platform_project}/api/projects/{project['id']}").json()
-        assert again["severity"]["ratings"]["risk2"] == 5
+        assert again["severity"]["impact"]["risk2"] == 5
 
 
-class TestMappingAndTiers:
+class TestMappingAndKeys:
     @pytest.fixture()
     def mapped(self, _starter, platform_project, client, graph):
         project = _start(client, graph, platform_project, starter=_starter)
@@ -146,7 +148,7 @@ class TestMappingAndTiers:
         assert set(mapped["mapping_run"]["mappings"]) == {f"risk{n}" for n in range(5)}
         assert mapped["mapping_run"]["model"] == "fake/model"
 
-    def test_rating_the_risks_moves_the_tiers(self, platform_project, client, mapped):
+    def test_rating_the_risks_moves_the_key_objectives(self, platform_project, client, mapped):
         oversight = client.post(
             f"/p/{platform_project}/api/projects/{mapped['id']}/severity",
             json={"risk2": 5, "risk1": 5, "risk4": 1, "risk0": 1, "risk3": 1},
@@ -155,17 +157,17 @@ class TestMappingAndTiers:
             f"/p/{platform_project}/api/projects/{mapped['id']}/severity",
             json={"risk2": 1, "risk1": 1, "risk4": 5, "risk3": 5, "risk0": 1},
         ).json()
-        first = {p["objective_id"] for p in oversight["priorities"] if p["tier"] == 1}
-        second = {p["objective_id"] for p in poisoning["priorities"] if p["tier"] == 1}
+        first = {p["objective_id"] for p in oversight["priorities"] if p["key"]}
+        second = {p["objective_id"] for p in poisoning["priorities"] if p["key"]}
         assert "O1" in first and "O1" not in second
         assert "O7" in second and "O7" not in first
 
-    def test_tier_one_never_exceeds_seven(self, platform_project, client, mapped):
+    def test_no_more_than_seven_are_key_by_default(self, platform_project, client, mapped):
         rated = client.post(
             f"/p/{platform_project}/api/projects/{mapped['id']}/severity",
             json={f"risk{n}": 5 for n in range(5)},
         ).json()
-        assert sum(p["tier"] == 1 for p in rated["priorities"]) <= 7
+        assert sum(p["key"] for p in rated["priorities"]) <= 7
 
 class TestTheHomepage:
     def test_the_root_leads_to_both_halves(self, platform_project, client):
@@ -221,11 +223,11 @@ class TestThePages:
         """No questions, no gate: the card's risks and a rating for each."""
         project = _start(client, graph, platform_project, starter=_starter)
         page = client.get(f"/p/{platform_project}/projects/{project['id']}").text
-        assert "Rank the risks on the card" in page
+        assert "Risk register" in page
         assert "Loan officers rubber-stamp" in page          # the risk itself
-        assert "Overreliance" in page                        # its VAIR typing
-        assert page.count("<select") == 6                    # one per risk, and the profile
-        assert "Map with AI" in page
+        assert "Overreliance" in page                        # its VAIR typing, folded in its row
+        assert page.count("<select") == 11                   # impact and likelihood per risk, and the profile
+        assert "Suggest with AI" in page
 
     def test_nothing_asks_the_three_questions(self, _starter, platform_project, client, graph):
         """"Annex III" itself still occurs: it is in the objectives' own text.
@@ -235,38 +237,38 @@ class TestThePages:
         for gone in ("the three questions", 'type="radio"', "/answer", "Confirm"):
             assert gone not in page, gone
 
-    def test_no_tiers_are_shown_before_the_mapping_is_run(self, _starter, platform_project, client, graph):
-        """Nothing is ordered until the risks have been read against the
-        objectives, and the unordered list of 50 is what /objectives is for."""
+    def test_the_matrix_is_empty_before_the_mapping(self, _starter, platform_project, client, graph):
+        """Nothing is in the matrix until a risk is mapped; the list of 50 is what /objectives is for."""
         project = _start(client, graph, platform_project, starter=_starter)
         page = client.get(f"/p/{platform_project}/projects/{project['id']}").text
-        for gone in ("Tier 1 · start here", 'id="tier-1"', 'id="tier-3"', 'class="co-obj-id"'):
+        assert page.count('class="co-mrow co-mrow--empty"') == 5
+        for gone in ("Tier 1", 'id="tier-1"', 'class="co-mrow co-mrow--first"'):
             assert gone not in page, gone
 
-    def test_the_tiers_appear_once_it_has(self, _starter, platform_project, client, graph):
+    def test_the_matrix_fills_once_it_has(self, _starter, platform_project, client, graph):
         project = _start(client, graph, platform_project, starter=_starter)
         client.post(f"/p/{platform_project}/projects/{project['id']}/map", follow_redirects=False)
         page = client.get(f"/p/{platform_project}/projects/{project['id']}").text
-        assert "Tier 1 · start here" in page
-        assert 'id="tier-1"' in page
+        assert "Risk and control matrix" in page and 'class="co-mrow co-mrow--first"' in page
 
-    def test_ranking_from_the_page_re_tiers_it(self, _starter, platform_project, client, graph):
+    def test_rating_from_the_page_reorders_the_matrix(self, _starter, platform_project, client, graph):
         project = _start(client, graph, platform_project, starter=_starter)
         client.post(f"/p/{platform_project}/projects/{project['id']}/map", follow_redirects=False)
-        client.post(
-            f"/projects/{project['id']}/severity",
-            data={f"risk{n}": "5" if n == 2 else "1" for n in range(5)},
-            follow_redirects=False,
-        )
+        data = {}
+        for n in range(5):
+            data[f"impact:risk{n}"] = "5" if n == 2 else "1"
+            data[f"likelihood:risk{n}"] = "5" if n == 2 else "1"
+        client.post(f"/p/{platform_project}/projects/{project['id']}/severity", data=data, follow_redirects=False)
         page = client.get(f"/p/{platform_project}/projects/{project['id']}").text
-        assert 'qf-tag--tier1">Tier 1</span>' in page
-        assert page.index("Start here") < page.index("Later")
+        rows = re.findall(r'<tr class="co-mrow[^"]*" data-risk="(\w+)"', page)
+        assert rows[0] == "risk2"
+        assert '<span class="co-rating co-rating--critical">25</span>' in page
 
     def test_a_rating_that_is_not_a_number_is_refused(self, _starter, platform_project, client, graph):
         project = _start(client, graph, platform_project, starter=_starter)
         response = client.post(
             f"/p/{platform_project}/projects/{project['id']}/severity",
-            data={"risk2": "high"},
+            data={"impact:risk2": "high"},
         )
         assert response.status_code == 400
 

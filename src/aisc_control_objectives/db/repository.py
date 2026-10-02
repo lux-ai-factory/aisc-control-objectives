@@ -62,6 +62,8 @@ class ProjectRecord:
     selected: list[str] | None = None
     #: The objective profile version it runs on; None is the built-in Full AI Act.
     profile_version_id: str | None = None
+    #: The assessor's key choices: objective id -> key. An objective not here takes the default.
+    keys: dict[str, bool] = field(default_factory=dict)
 
 
 #: A card version's number and the highest number of the project, read from
@@ -157,16 +159,29 @@ class ProjectRepository:
             session.flush()
             return self._to_record(session, row)
 
-    def rate(self, project_id: str, ratings: dict[str, int],
+    def rate(self, project_id: str, impact: dict[str, int], likelihood: dict[str, int],
              comments: dict[str, str] | None = None) -> None:
-        """Set the given ratings and, when given, the comments ("" clears one), in one transaction."""
+        """Set the given impacts, likelihoods and, when given, comments ("" clears one), in one
+        transaction. A risk not named keeps what it had."""
         with self._sessions.begin() as session:
             project = session.get(tables.Project, project_id)
             for row in project.risks:
-                if row.risk_id in ratings:
-                    row.severity = ratings[row.risk_id]
+                if row.risk_id in impact:
+                    row.rating_impact = impact[row.risk_id]
+                if row.risk_id in likelihood:
+                    row.rating_likelihood = likelihood[row.risk_id]
                 if comments is not None and row.risk_id in comments:
                     row.severity_comment = comments[row.risk_id]
+
+    def save_keys(self, project_id: str, keys: dict[str, bool]) -> None:
+        """Record the assessor's key choices (objective id -> key), replacing earlier ones for those ids."""
+        with self._sessions.begin() as session:
+            for objective_id, key in keys.items():
+                found = session.get(tables.ObjectiveKey, (project_id, objective_id))
+                if found is None:
+                    session.add(tables.ObjectiveKey(project_id=project_id, objective_id=objective_id, key=key))
+                else:
+                    found.key = key
 
     def save_selection(self, project_id: str, objective_ids: list[str]) -> None:
         """Replace the objectives this assessment takes forward."""
@@ -419,13 +434,13 @@ class ProjectRepository:
             selected=list(project.selection.objective_ids) if project.selection else None,
             profile_version_id=project.profile_version_id,
             severity=Severity(
-                ratings={
-                    row.risk_id: row.severity
-                    for row in project.risks
-                    if row.severity is not None
-                },
+                impact={row.risk_id: row.rating_impact for row in project.risks if row.rating_impact is not None},
+                likelihood={row.risk_id: row.rating_likelihood for row in project.risks
+                            if row.rating_likelihood is not None},
                 comments={row.risk_id: row.severity_comment for row in project.risks if row.severity_comment},
             ),
+            keys={row.objective_id: row.key for row in session.scalars(
+                select(tables.ObjectiveKey).where(tables.ObjectiveKey.project_id == project.id)).all()},
         )
         if project.mapping_run is not None:
             stops = project.mapping_run.stops or {}

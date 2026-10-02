@@ -434,12 +434,12 @@ def test_a_page_refuses_an_assessment_of_another_project(monkeypatch, fixtures_d
             assert client.get(f"/p/{ref}/projects/{aid}", headers=headers).status_code == 404
             assert client.post(f"/p/{ref}/projects/{aid}/map", headers=headers).status_code == 404
             assert client.post(
-                f"/p/{ref}/projects/{aid}/severity", headers=headers, data={"risk0": "3"}
+                f"/p/{ref}/projects/{aid}/severity", headers=headers, data={"impact:risk0": "3"}
             ).status_code == 404
         with cluster.connect(made.database(theirs)) as connection:
             rated = connection.execute(
                 "SELECT count(*) FROM control_objectives.risk WHERE project_id = %s"
-                " AND severity IS NOT NULL",
+                " AND rating_impact IS NOT NULL",
                 (aid,),
             ).fetchone()[0]
         assert rated == 0

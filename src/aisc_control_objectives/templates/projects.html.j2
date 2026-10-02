@@ -40,7 +40,7 @@
         {%- elif not view.mapped %}
         <span class="qf-tag qf-tag--in">Ready to map</span>
         {%- else %}
-        <span class="qf-tag qf-tag--tier1">{{ view.priorities | selectattr('tier', 'equalto', 1) | list | length }} to start with</span>
+        <span class="qf-tag qf-tag--tier1">{{ view.priorities | selectattr('key') | list | length }} key</span>
         {%- endif %}
       </div>
       <p class="co-reason">

@@ -21,17 +21,19 @@ def test_every_part_of_the_page_folds_and_starts_open(client, start, platform_pr
     http.post(_api(platform_project, assessment, "/map"))
     page = _page(http, platform_project, assessment)
     folds = re.findall(r'<details class="qf-section co-fold[^"]*"[^>]*>\s*<summary class="co-macro-head">', page)
-    # rank, map, select, and at least the three tiers
-    assert len(folds) >= 6, len(folds)
+    # the risk register and the matrix (the risk and control matrix, 2026-10-01)
+    assert len(folds) == 2, len(folds)
     assert all(" open" in f for f in folds)
     assert '<div class="qf-section">' not in page and '<section class="qf-section' not in page
 
 
-def test_a_tier_keeps_its_anchor(client, start, platform_project):
+def test_the_register_and_the_matrix_keep_their_anchors(client, start, platform_project):
     http, _ = client
     assessment = start()
     http.post(_api(platform_project, assessment, "/map"))
-    assert re.search(r'<details class="qf-section co-fold co-tier--1"[^>]*id="tier-1"', _page(http, platform_project, assessment))
+    page = _page(http, platform_project, assessment)
+    assert re.search(r'<details class="qf-section co-fold" open id="register">', page)
+    assert re.search(r'<details class="qf-section co-fold" open id="matrix">', page)
 
 
 # ── a comment on a severity ─────────────────────────────────────────────────
@@ -40,10 +42,10 @@ def test_the_ranking_form_saves_a_comment_with_the_severity(client, start, platf
     http, _ = client
     assessment = start()
     response = http.post(f"/p/{platform_project}/projects/{assessment}/severity",
-                         data={"risk2": "5", "comment:risk2": "Officers approve 98% unread.", "comment:risk0": ""})
+                         data={"impact:risk2": "5", "comment:risk2": "Officers approve 98% unread.", "comment:risk0": ""})
     assert response.status_code == 303
     body = http.get(_api(platform_project, assessment)).json()
-    assert body["severity"]["ratings"]["risk2"] == 5
+    assert body["severity"]["impact"]["risk2"] == 5
     assert body["severity"]["comments"] == {"risk2": "Officers approve 98% unread."}
     page = _page(http, platform_project, assessment)
     assert 'name="comment:risk2"' in page and "Officers approve 98% unread." in page
@@ -53,8 +55,8 @@ def test_a_comment_is_optional_and_clearing_it_removes_it(client, start, platfor
     http, _ = client
     assessment = start()
     url = f"/p/{platform_project}/projects/{assessment}/severity"
-    http.post(url, data={"risk2": "4", "comment:risk2": "first"})
-    http.post(url, data={"risk2": "4", "comment:risk2": "  "})
+    http.post(url, data={"impact:risk2": "4", "comment:risk2": "first"})
+    http.post(url, data={"impact:risk2": "4", "comment:risk2": "  "})
     assert http.get(_api(platform_project, assessment)).json()["severity"]["comments"] == {}
 
 
@@ -77,14 +79,14 @@ def test_a_comment_on_an_unknown_risk_or_too_long_is_refused(client, start, plat
     assert form.status_code == 400
 
 
-def test_the_mapping_shows_the_severitys_comment(client, start, platform_project):
+def test_the_register_row_carries_the_rationale(client, start, platform_project):
     http, _ = client
     assessment = start()
     http.post(f"/p/{platform_project}/projects/{assessment}/severity",
-              data={"risk4": "4", "comment:risk4": "Bureau feed has no signature check."})
+              data={"impact:risk4": "4", "comment:risk4": "Bureau feed has no signature check."})
     page = _page(http, platform_project, assessment)
-    block = re.search(r'<div class="co-map" id="map-risk4">(.*?)</details>', page, re.S).group(1)
-    assert "Bureau feed has no signature check." in block
+    row = re.search(r'<tr id="risk-risk4">(.*?)</tr>', page, re.S).group(1)
+    assert "Bureau feed has no signature check." in row
 
 
 def test_an_older_version_shows_the_comment_read_only(client, start, platform_project):
@@ -107,4 +109,4 @@ def test_the_ai_button_has_a_question_mark_pop_up_and_no_sentence(client, start,
     assert "co-map-warn" not in page
     assert re.search(r'<button type="button" class="co-help" popovertarget="ai-help"[^>]*>\?</button>', page)
     popup = re.search(r'<div id="ai-help" class="co-help-pop" popover>(.*?)</div>', page, re.S).group(1)
-    assert "replaces the whole mapping" in popup and "quote" in popup
+    assert "replaces the whole matrix" in popup and "quote" in popup

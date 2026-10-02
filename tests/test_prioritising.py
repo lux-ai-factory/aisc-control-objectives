@@ -1,9 +1,11 @@
-"""Tiering: every objective in the catalogue is owed, so which to do first.
+"""Which control objectives matter most (risk and control matrix, 2026-10-01).
 
-The register never changes; what orders it is the system's own risks. The
-assessor ranks each risk 1-5, the mapper says which objectives mitigate which
-risk, and an objective inherits the severity of the worst risk it answers.
-Tier 1 is the top of that, capped at what an assessor can actually start.
+Each risk is rated impact (1-5) x likelihood (1-5), 1 to 25, in the 5x5 bands risk teams know: Low
+1-4, Medium 5-9, High 10-16, Critical 17-25. An unrated impact or likelihood counts 3. An objective
+scores the sum of the ratings of the risks mapped to it; it is ranked by score, then its highest
+single rating, then a binding duty first, then catalogue order. The **key** objectives are, by
+default, the first seven driven by at least one High or Critical risk; the assessor can turn key on
+or off for any objective, and that choice wins.
 """
 
 from __future__ import annotations
@@ -11,247 +13,107 @@ from __future__ import annotations
 import pytest
 
 from aisc_control_objectives.models.ontology import OntologyRisk
-from aisc_control_objectives.prioritising import (
-    DEFAULT_SEVERITY,
-    TIER_ONE_BUDGET,
-    Severity,
-    prioritise,
-)
+from aisc_control_objectives.prioritising import KEY_BUDGET, Severity, band, prioritise
 from aisc_control_objectives.risk_mapping import MappedObjective, Mapping
 
-
-def _tiers(priorities):
-    return {p.objective_id: p.tier for p in priorities}
+RISKS = [OntologyRisk(id=f"r{n}", text=f"risk {n}") for n in range(1, 5)]
 
 
-class TestSeverity:
-    """How severe each of THIS system's own risks is, 1-5."""
-
-    def test_it_is_one_to_five_per_risk(self):
-        severity = Severity.model_validate({"ratings": {"risk2": 5, "risk0": 4}})
-        assert severity.of("risk2") == 5
-        assert severity.of("risk0") == 4
-
-    def test_an_unrated_risk_is_neutral(self):
-        assert Severity().of("risk9") == DEFAULT_SEVERITY == 3
-
-    def test_a_rating_outside_the_scale_is_rejected(self):
-        for bad in (0, 6, -1):
-            with pytest.raises(ValueError):
-                Severity.model_validate({"ratings": {"risk0": bad}})
-
-    def test_any_id_the_graph_uses_can_be_rated(self, objectives):
-        """Risk ids come from whatever the exporter names its nodes; a pattern
-        of our own would reject a valid graph and leave the assessor unable to
-        rate anything, with no message explaining why."""
-        odd = [
-            OntologyRisk(id="Risk_1", text="named another way"),
-            OntologyRisk(id="r-2", text="and another"),
-        ]
-        severity = Severity.model_validate({"ratings": {"Risk_1": 5, "r-2": 1}})
-        priorities = prioritise(objectives, severity, {}, odd)
-        assert priorities            # no raise: the graph's ids are the authority
+def maps(risk_id, *objective_ids):
+    return Mapping(risk_id=risk_id, objectives=[MappedObjective(objective_id=o, quote="q") for o in objective_ids])
 
 
-RISKS = [
-    OntologyRisk(id="risk2", text="Loan officers rubber-stamp the recommendation"),
-    OntologyRisk(id="risk4", text="Training data is poisoned through the bureau ingestion path"),
-]
-
-def _maps(risk_id, *objective_ids):
-    return Mapping(risk_id=risk_id, objectives=[
-        MappedObjective(objective_id=oid, quote="q", rationale="because") for oid in objective_ids
-    ])
+def rated(**pairs):
+    """r1=(5, 4) -> impact 5, likelihood 4."""
+    return Severity(impact={r: p[0] for r, p in pairs.items() if p[0]},
+                    likelihood={r: p[1] for r, p in pairs.items() if p[1]})
 
 
-#: What a clean run produces for those two risks. Deliberately more than the
-#: Tier 1 budget between them, so the budget actually has to choose.
-MAPPINGS = {
-    "risk2": _maps("risk2", "O1", "O2", "O3", "O4", "O17"),
-    "risk4": _maps("risk4", "O7", "O6", "O11", "O16", "O40"),
-}
+def by_id(objectives, severity, mappings, **kw):
+    return {p.objective_id: p for p in prioritise(objectives, severity, mappings, RISKS, **kw)}
 
 
-class TestTiering:
-    def test_every_objective_is_tiered(self, objectives):
-        """The whole catalogue is the register: nothing is ruled out, it is
-        only ordered."""
-        priorities = prioritise(objectives, Severity(), MAPPINGS, RISKS)
-        assert len(priorities) == 50
-        assert all(p.tier in (1, 2, 3) for p in priorities)
+# ── the rating ──────────────────────────────────────────────────────────────
 
-    def test_a_rating_for_a_risk_the_card_does_not_have_fails_loudly(self, objectives):
-        with pytest.raises(ValueError, match="risk9"):
-            prioritise(objectives, Severity(ratings={"risk9": 5}), MAPPINGS, RISKS)
-
-    def test_tier_one_never_exceeds_the_budget(self, objectives):
-        priorities = prioritise(objectives, Severity(), MAPPINGS, RISKS)
-        assert TIER_ONE_BUDGET == 7
-        assert sum(p.tier == 1 for p in priorities) <= 7
-
-    def test_an_objective_that_mitigates_the_worst_risk_is_tier_one(self, objectives):
-        severity = Severity.model_validate({"ratings": {"risk2": 5, "risk4": 1}})
-        by_id = {p.objective_id: p for p in prioritise(objectives, severity, MAPPINGS, RISKS)}
-        assert by_id["O1"].tier == 1
-        assert by_id["O4"].tier == 1
-        assert any("rubber-stamp" in r for r in by_id["O1"].reasons)
-        # and the objectives answering the risk rated 1 are pushed out of it
-        assert by_id["O7"].tier == 2
-
-    def test_a_marginal_risk_cannot_put_a_binding_duty_in_tier_one(self, objectives):
-        """The binding bonus is a tiebreak among work, and it was being added
-        before the threshold test, so +1 lifted a risk rated 2 over the line."""
-        binding = next(o for o in objectives if "Binding" in o.grounding_tier_flag)
-        mapped = {"risk2": _maps("risk2", binding.id, "O1")}
-        severity = Severity.model_validate({"ratings": {"risk2": 2}})
-        by_id = {p.objective_id: p for p in prioritise(objectives, severity, mapped, RISKS)}
-        assert by_id[binding.id].tier == 2
-        assert by_id["O1"].tier == 2
-
-    def test_tier_one_holds_only_risk_driven_work(self, objectives):
-        """Padding the budget with objectives nothing points at would make
-        "start here" mean "these seven, some for no reason"."""
-        priorities = prioritise(objectives, Severity(), MAPPINGS, RISKS)
-        assert all(p.risk_ids for p in priorities if p.tier == 1)
-
-    def test_tier_one_is_smaller_than_the_budget_when_little_is_driven(self, objectives):
-        few = {"risk2": _maps("risk2", "O1", "O4")}
-        priorities = prioritise(objectives, Severity(), few, RISKS)
-        assert sum(p.tier == 1 for p in priorities) == 2
-
-    def test_reordering_the_risks_reorders_the_work(self, objectives):
-        """The whole point: the same 50 duties, a different place to start."""
-        oversight_first = Severity.model_validate({"ratings": {"risk2": 5, "risk4": 1}})
-        poisoning_first = Severity.model_validate({"ratings": {"risk2": 1, "risk4": 5}})
-        a = _tiers(prioritise(objectives, oversight_first, MAPPINGS, RISKS))
-        b = _tiers(prioritise(objectives, poisoning_first, MAPPINGS, RISKS))
-        assert a["O1"] == 1 and b["O7"] == 1
-        assert b["O1"] > a["O1"]      # oversight drops out of Tier 1
-        assert a["O7"] > b["O7"]      # and poisoning takes its place
-
-    def test_an_objective_mitigating_two_risks_sums_their_severities(self, objectives):
-        both = dict(MAPPINGS)
-        both["risk4"] = _maps("risk4", "O1")
-        severity = Severity.model_validate({"ratings": {"risk2": 1, "risk4": 5}})
-        by_id = {p.objective_id: p for p in prioritise(objectives, severity, both, RISKS)}
-        assert by_id["O1"].score == 6
-        assert by_id["O1"].driving_severity == 5
-
-    def test_an_objective_no_risk_maps_to_is_not_tier_one(self, objectives):
-        """It is still owed, but nothing the assessor identified drives it."""
-        severity = Severity.model_validate({"ratings": {"risk2": 5, "risk4": 5}})
-        by_id = {p.objective_id: p for p in prioritise(objectives, severity, MAPPINGS, RISKS)}
-        assert by_id["O29"].tier != 1
-        assert any("no identified risk" in r for r in by_id["O29"].reasons)
-
-    def test_an_unmapped_objective_sorts_below_every_mapped_one(self, objectives):
-        """Owed, but not where this system's danger is: that is Later, not
-        Next. Sharing a score with a mapped objective would put "nothing points
-        at this" alongside "a risk you rated 4 points at this"."""
-        severity = Severity.model_validate({"ratings": {"risk2": 1, "risk4": 1}})
-        by_id = {p.objective_id: p for p in prioritise(objectives, severity, MAPPINGS, RISKS)}
-        mapped = by_id["O1"]          # driven by risk2, rated 1 (the lowest)
-        unmapped = by_id["O29"]        # driven by nothing
-        assert mapped.score > unmapped.score
-        assert unmapped.tier == 3
-
-    def test_the_tiers_read_as_driven_then_undriven(self, objectives):
-        severity = Severity.model_validate({"ratings": {"risk2": 5, "risk4": 4}})
-        priorities = prioritise(objectives, severity, MAPPINGS, RISKS)
-        driven = {p.objective_id for p in priorities if p.risk_ids and not p.non_binding}
-        tier3 = {p.objective_id for p in priorities if p.tier == 3}
-        # nothing a risk drives is relegated to Later
-        assert not (driven & tier3)
-
-    def test_with_no_mappings_at_all_nothing_is_tier_one(self, objectives):
-        """A card with no risks, or a mapping run that failed: everything is
-        owed and nothing is urgent, which is the honest answer. The page still
-        renders rather than going blank."""
-        priorities = prioritise(objectives, Severity(), {}, [])
-        assert sum(p.tier == 1 for p in priorities) == 0
-        assert sum(p.tier == 3 for p in priorities) == 50
-
-    def test_a_binding_duty_breaks_a_tie_without_changing_the_score(self, objectives):
-        binding = next(o for o in objectives if "Binding" in o.grounding_tier_flag)
-        plain = next(o for o in objectives if "Binding" not in o.grounding_tier_flag
-                     and o.note_tag != "VOLUNTARY" and o.sort_key < binding.sort_key)
-        mapped = {"risk2": _maps("risk2", plain.id, binding.id)}
-        priorities = {p.objective_id: p for p in prioritise(objectives, Severity(), mapped, RISKS)}
-        assert priorities[binding.id].score == priorities[plain.id].score == 3
-        assert priorities[binding.id].rank < priorities[plain.id].rank
-
-    def test_voluntary_objectives_never_reach_the_top_tiers(self, objectives):
-        """The CSV's own note, not a judgement made here: a voluntary objective
-        binds nobody, so it cannot displace a legal duty however it is rated."""
-        mapped = {"risk2": Mapping(risk_id="risk2", objectives=[
-            MappedObjective(objective_id="O24", quote="q", rationale="claimed")])}
-        severity = Severity.model_validate({"ratings": {"risk2": 5}})
-        tiers = _tiers(prioritise(objectives, severity, mapped, RISKS))
-        assert tiers["O24"] == 3
-
-    def test_the_order_is_stable_for_equal_scores(self, objectives):
-        first = _tiers(prioritise(objectives, Severity(), MAPPINGS, RISKS))
-        second = _tiers(prioritise(objectives, Severity(), MAPPINGS, RISKS))
-        assert first == second
-
-    def test_the_budget_can_be_narrowed(self, objectives):
-        priorities = prioritise(objectives, Severity(), MAPPINGS, RISKS, budget=3)
-        assert sum(p.tier == 1 for p in priorities) == 3
+def test_a_rating_is_impact_times_likelihood():
+    assert rated(r1=(5, 4)).of("r1") == 20
 
 
-class TestTheMcasCase:
-    """Where to start is decided by the system's own risks, and nothing else."""
-
-    def test_the_worst_risk_drives_tier_one(self, objectives):
-        severity = Severity.model_validate({"ratings": {"risk2": 5, "risk4": 4}})
-        priorities = prioritise(objectives, severity, MAPPINGS, RISKS)
-        tier_one = {p.objective_id for p in priorities if p.tier == 1}
-        assert {"O1", "O4", "O7"} <= tier_one
-        assert len(tier_one) <= 7
+def test_an_unrated_impact_or_likelihood_counts_three():
+    assert Severity().of("r1") == 9
+    assert rated(r1=(5, None)).of("r1") == 15
 
 
-class TestTheScore:
-    """S(o) = the sum of the severities of the risks mapping to o (2026-10-01): how many times it
-    appears across the risks, times how severe they are on average."""
+@pytest.mark.parametrize("field", ["impact", "likelihood"])
+@pytest.mark.parametrize("value", [0, 6])
+def test_each_is_one_to_five(field, value):
+    with pytest.raises(ValueError, match="1-5"):
+        Severity(**{field: {"r1": value}})
 
-    THREE = [OntologyRisk(id=f"r{n}", text=f"risk {n}") for n in range(1, 4)]
 
-    def _by_id(self, objectives, ratings, mappings, risks=None):
-        severity = Severity.model_validate({"ratings": ratings})
-        return {p.objective_id: p for p in prioritise(objectives, severity, mappings, risks or self.THREE)}
+@pytest.mark.parametrize("rating, name", [(1, "Low"), (4, "Low"), (5, "Medium"), (9, "Medium"),
+                                          (10, "High"), (16, "High"), (20, "Critical"), (25, "Critical")])
+def test_the_bands(rating, name):
+    assert band(rating) == name
 
-    def test_the_score_is_the_sum_of_the_severities(self, objectives):
-        by_id = self._by_id(objectives, {"r1": 5, "r2": 4, "r3": 3},
-                            {"r1": _maps("r1", "O5"), "r2": _maps("r2", "O5"), "r3": _maps("r3", "O5")})
-        assert by_id["O5"].score == 12
-        assert by_id["O6"].score == 0
 
-    def test_an_unrated_risk_counts_three(self, objectives):
-        by_id = self._by_id(objectives, {}, {"r1": _maps("r1", "O5"), "r2": _maps("r2", "O5")})
-        assert by_id["O5"].score == 6
+# ── the score and the rank ──────────────────────────────────────────────────
 
-    def test_breadth_can_outrank_one_severe_risk(self, objectives):
-        by_id = self._by_id(objectives, {"r1": 3, "r2": 3, "r3": 5},
-                            {"r1": _maps("r1", "O6"), "r2": _maps("r2", "O6"),
-                             "r3": _maps("r3", "O5", "O6")})
-        assert by_id["O6"].score == 11 and by_id["O5"].score == 5
-        assert by_id["O6"].rank < by_id["O5"].rank
+def test_an_objective_scores_the_sum_of_its_risks_ratings(objectives):
+    got = by_id(objectives, rated(r1=(5, 4), r2=(2, 2)), {"r1": maps("r1", "O5"), "r2": maps("r2", "O5")})
+    assert got["O5"].score == 24 and got["O5"].top_rating == 20
+    assert got["O6"].score == 0 and got["O6"].top_rating == 0
 
-    def test_an_equal_score_goes_to_the_worse_single_risk(self, objectives):
-        # O11: 4 + 2 = 6; O5: 3 + 3 = 6, earlier in the catalogue but no risk as bad as 4
-        four = [OntologyRisk(id=f"r{n}", text=f"risk {n}") for n in range(1, 5)]
-        by_id = self._by_id(objectives, {"r1": 4, "r2": 2, "r3": 3, "r4": 3},
-                            {"r1": _maps("r1", "O11"), "r2": _maps("r2", "O11"),
-                             "r3": _maps("r3", "O5"), "r4": _maps("r4", "O5")}, risks=four)
-        assert by_id["O11"].score == by_id["O5"].score == 6
-        assert by_id["O11"].rank < by_id["O5"].rank
 
-    def test_the_ranks_are_one_to_fifty(self, objectives):
-        by_id = self._by_id(objectives, {"r1": 5}, {"r1": _maps("r1", "O5")})
-        assert sorted(p.rank for p in by_id.values()) == list(range(1, 51))
-        assert by_id["O5"].rank == 1
+def test_rank_is_score_then_top_rating_then_binding_then_catalogue_order(objectives):
+    # O11: 12 + 4 = 16, top 12; O5: 8 + 8 = 16, top 8 -> O11 first
+    got = by_id(objectives, rated(r1=(4, 3), r2=(2, 2), r3=(4, 2), r4=(2, 4)),
+                {"r1": maps("r1", "O11"), "r2": maps("r2", "O11"), "r3": maps("r3", "O5"), "r4": maps("r4", "O5")})
+    assert got["O11"].score == got["O5"].score == 16
+    assert got["O11"].rank < got["O5"].rank
+    assert sorted(p.rank for p in got.values()) == list(range(1, 51))
 
-    def test_the_reason_gives_the_count_the_severities_and_the_score(self, objectives):
-        by_id = self._by_id(objectives, {"r1": 5, "r2": 4},
-                            {"r1": _maps("r1", "O5"), "r2": _maps("r2", "O5")})
-        assert by_id["O5"].reasons[0].startswith("mitigates 2 risks rated 5 and 4: score 9")
+
+def test_the_reason_gives_the_ratings_and_the_score(objectives):
+    got = by_id(objectives, rated(r1=(5, 4), r2=(2, 3)), {"r1": maps("r1", "O5"), "r2": maps("r2", "O5")})
+    assert got["O5"].reasons[0].startswith("mitigates 2 risks rated 20 (Critical) and 6 (Medium): score 26")
+
+
+# ── key objectives ──────────────────────────────────────────────────────────
+
+def test_by_default_the_first_seven_driven_by_a_high_risk_are_key(objectives):
+    many = ["O1", "O2", "O3", "O4", "O5", "O6", "O7", "O8", "O9"]
+    got = by_id(objectives, rated(r1=(5, 4), r2=(2, 2)), {"r1": maps("r1", *many), "r2": maps("r2", "O10")})
+    keys = [o for o, p in got.items() if p.key]
+    assert len(keys) == KEY_BUDGET == 7
+    assert set(keys) <= set(many)
+    assert not got["O10"].key                 # only a Low risk drives it
+    assert all(p.key == p.key_default for p in got.values())
+
+
+def test_an_objective_no_high_risk_drives_is_not_key_by_default(objectives):
+    got = by_id(objectives, rated(r1=(3, 3)), {"r1": maps("r1", "O1")})
+    assert got["O1"].score == 9 and not got["O1"].key
+
+
+def test_the_assessors_choice_wins(objectives):
+    got = by_id(objectives, rated(r1=(5, 5), r2=(1, 1)), {"r1": maps("r1", "O1"), "r2": maps("r2", "O2")},
+                keys={"O1": False, "O2": True})
+    assert (got["O1"].key, got["O1"].key_default) == (False, True)
+    assert (got["O2"].key, got["O2"].key_default) == (True, False)
+
+
+def test_a_voluntary_objective_is_never_key_by_default(objectives):
+    voluntary = next(o.id for o in objectives if o.note_tag == "VOLUNTARY")
+    got = by_id(objectives, rated(r1=(5, 5)), {"r1": maps("r1", voluntary)})
+    assert got[voluntary].score == 25 and not got[voluntary].key
+
+
+def test_nothing_mapped_means_nothing_key(objectives):
+    got = by_id(objectives, Severity(), {})
+    assert not any(p.key for p in got.values())
+
+
+def test_a_rating_for_a_risk_the_card_lacks_fails(objectives):
+    with pytest.raises(ValueError, match="not in this system"):
+        prioritise(objectives, rated(nope=(3, 3)), {}, RISKS)

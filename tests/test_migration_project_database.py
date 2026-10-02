@@ -33,10 +33,12 @@ SOURCE = "20261001110000_mapping_source"
 #: An optional comment on a risk's severity (2026-10-01), on top of the source.
 COMMENT = "20261001120000_severity_comment"
 #: Objective sets and profiles (2026-10-01), on top of the comment.
-HEAD = "20261002000000_objective_sets"
+SETS = "20261002000000_objective_sets"
+#: The risk and control matrix (2026-10-01): impact x likelihood, key objectives, scope = the matrix.
+HEAD = "20261002100000_rcm"
 TABLES = ("project", "graph", "risk", "mapped_objective", "mapping_run", "objective_selection",
           "objective_set", "objective_draft", "objective_set_version", "objective_set_version_item",
-          "objective_profile", "objective_profile_version", "objective_profile_version_item")
+          "objective_profile", "objective_profile_version", "objective_profile_version_item", "objective_key")
 
 
 def _scratch(database_url: str, suffix: str):
@@ -134,7 +136,8 @@ def test_the_chain_is_baseline_selection_rename_source():
     config.set_main_option("script_location", str(projectdb.ALEMBIC_DIR))
     script = ScriptDirectory.from_config(config)
     assert script.get_heads() == [HEAD]
-    assert script.get_revision(HEAD).down_revision == COMMENT
+    assert script.get_revision(HEAD).down_revision == SETS
+    assert script.get_revision(SETS).down_revision == COMMENT
     assert script.get_revision(COMMENT).down_revision == SOURCE
     assert script.get_revision(SOURCE).down_revision == RENAME
     assert script.get_revision(RENAME).down_revision == SELECTION
@@ -304,7 +307,10 @@ def test_the_stored_ids_become_o_ids_in_catalogue_order(database_url):
             connection.execute(text(
                 "INSERT INTO control_objectives.objective_selection (project_id, objective_ids, updated_at)"
                 " VALUES ('a', ARRAY['R6.1', 'R11.4', 'R2.3'], now())"))
-        projectdb.migrate(engine)
+        # up to the rename only: from 20261002100000_rcm on, the selection is the matrix
+        with engine.begin() as connection:
+            config.attributes["connection"] = connection
+            command.upgrade(config, RENAME)
         with engine.connect() as connection:
             mapped = connection.execute(text(
                 "SELECT objective_id FROM control_objectives.mapped_objective ORDER BY id")).scalars().all()
@@ -338,9 +344,53 @@ def test_the_readers_read_the_sets_and_profiles(migrated):
     """The report and the platform's step 4 page name a user's objectives from these (as report_ro)."""
     with migrated.connect() as connection:
         for table in ("objective_set", "objective_set_version", "objective_set_version_item",
-                      "objective_profile", "objective_profile_version", "objective_profile_version_item"):
+                      "objective_profile", "objective_profile_version", "objective_profile_version_item", "objective_key"):
             for role in ("report_ro", "dashboard_ro"):
                 if connection.execute(text("SELECT 1 FROM pg_roles WHERE rolname = :r"), {"r": role}).first():
                     assert connection.execute(text(
                         "SELECT has_table_privilege(:r, :t, 'SELECT')"),
                         {"r": role, "t": f"control_objectives.{table}"}).scalar(), (role, table)
+
+
+def test_severity_becomes_impact_and_the_scope_is_the_matrix(database_url):
+    """2026-10-01: a risk's severity is its impact, its likelihood starts unrated; what an assessment
+    takes forward becomes what its matrix holds, in catalogue order."""
+    from alembic import command
+    from alembic.config import Config
+
+    from aisc_control_objectives import projectdb
+
+    engine, drop = _scratch(database_url, "alembic_matrix")
+    try:
+        config = Config(str(projectdb.ALEMBIC_INI))
+        config.set_main_option("script_location", str(projectdb.ALEMBIC_DIR))
+        with engine.begin() as connection:
+            config.attributes["connection"] = connection
+            command.upgrade(config, SETS)
+        v1 = str(uuid.uuid4())
+        with engine.begin() as connection:
+            connection.execute(text("INSERT INTO project.system (pid, number, name) VALUES (:a, 1, 'S')"), {"a": v1})
+            connection.execute(text(
+                "INSERT INTO control_objectives.project (id, name, objectives_digest, created_at, updated_at, system_id)"
+                " VALUES ('a', 'S', '', now(), now(), :a)"), {"a": v1})
+            connection.execute(text(
+                "INSERT INTO control_objectives.risk (project_id, risk_id, position, text, short_label, source,"
+                " vulnerability, consequence, impact, stakeholder, control, follow_up_control, areas, vair_terms,"
+                " provenance, severity) VALUES ('a', 'risk0', 0, 't', '', '', '', '', '', '', '', '', '{}', '{}',"
+                " 'form', 4)"))
+            connection.execute(text(
+                "INSERT INTO control_objectives.mapped_objective (risk_row_id, objective_id, quote, rationale)"
+                " SELECT r.id, o, '', '' FROM control_objectives.risk r, unnest(ARRAY['O10', 'O2']) o"))
+            connection.execute(text(
+                "INSERT INTO control_objectives.objective_selection (project_id, objective_ids, updated_at)"
+                " VALUES ('a', ARRAY['O2', 'O24'], now())"))
+        projectdb.migrate(engine)
+        with engine.connect() as connection:
+            rating = connection.execute(text(
+                "SELECT rating_impact, rating_likelihood FROM control_objectives.risk")).one()
+            selected = connection.execute(text(
+                "SELECT objective_ids FROM control_objectives.objective_selection")).scalar_one()
+        assert tuple(rating) == (4, None)
+        assert selected == ["O2", "O10"]
+    finally:
+        drop()

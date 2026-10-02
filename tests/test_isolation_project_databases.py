@@ -158,9 +158,9 @@ def test_I5_4_the_database_is_at_the_baseline_and_readers_get_their_reads(cluste
 
     a, _, _, _ = two
     database = projects.database(a)
-    # the head: objective sets and profiles (2026-10-01), on the earlier revisions and the baseline
+    # the head: the risk and control matrix (2026-10-01), on the earlier revisions and the baseline
     baseline = (Path(__file__).resolve().parents[1] / "alembic" / "versions"
-                / "20261002000000_objective_sets.py").read_text()
+                / "20261002100000_rcm.py").read_text()
     revision = re.search(r"^revision\s*=\s*['\"]([^'\"]+)", baseline, re.M).group(1)
     assert _rows(cluster, database, "SELECT version_num FROM control_objectives.alembic_version") == [
         (revision,)
@@ -184,16 +184,17 @@ def test_I5_4_the_database_is_at_the_baseline_and_readers_get_their_reads(cluste
 
 def _id_routes(pid, aid, risk="r1"):
     """Every route that addresses an assessment by id (route inventory,
-    02-tests.md): the three pages/forms and the four JSON API calls."""
+    02-tests.md; the risk and control matrix, 2026-10-01): the pages and forms and the JSON API."""
     return [
         ("GET", f"/p/{pid}/projects/{aid}", {}),
         ("POST", f"/p/{pid}/projects/{aid}/map", {}),
-        ("POST", f"/p/{pid}/projects/{aid}/severity", {"data": {risk: "3"}}),
+        ("POST", f"/p/{pid}/projects/{aid}/severity", {"data": {f"impact:{risk}": "3"}}),
+        ("POST", f"/p/{pid}/projects/{aid}/key", {"data": {"key": "O1"}}),
         ("GET", _api(pid, aid), {}),
         ("POST", _api(pid, aid, "/map"), {}),
         ("POST", _api(pid, aid, "/severity"), {"json": {risk: 3}}),
-        ("POST", f"/p/{pid}/projects/{aid}/selection", {"data": {"objective": "O1"}}),
-        ("POST", _api(pid, aid, "/selection"), {"json": {"objective_ids": ["O1"]}}),
+        ("POST", _api(pid, aid, "/ratings"), {"json": {risk: {"impact": 3, "likelihood": 2}}}),
+        ("POST", _api(pid, aid, "/key"), {"json": {"O1": True}}),
         ("DELETE", _api(pid, aid), {}),
     ]
 
@@ -210,14 +211,14 @@ def test_I16_5_I5_2_an_assessment_of_A_under_Bs_pid_is_404_on_every_route(
     a, b, aid, _ = two
     risk = _risk_of(client, token, a, aid)
     before = _rows(cluster, projects.database(a),
-                   "SELECT id, severity FROM control_objectives.risk ORDER BY id")
+                   "SELECT id, rating_impact, rating_likelihood FROM control_objectives.risk ORDER BY id")
     for method, path, kwargs in _id_routes(b, aid, risk):
         response = client.request(method, path, headers=token(BOTH), **kwargs)
         assert response.status_code == 404, (method, path, response.status_code)
         assert "MCAS" not in response.text, path
     # nothing of A changed, and it is still there
     assert _rows(cluster, projects.database(a),
-                 "SELECT id, severity FROM control_objectives.risk ORDER BY id") == before
+                 "SELECT id, rating_impact, rating_likelihood FROM control_objectives.risk ORDER BY id") == before
     assert _count(cluster, projects.database(a), "control_objectives.mapping_run") == 0
     assert _count(cluster, projects.database(a), "control_objectives.objective_selection") == 0
     assert client.get(_api(a, aid), headers=token(BOTH)).status_code == 200

@@ -58,8 +58,9 @@ class ProjectView:
 
     @property
     def rated(self) -> int:
-        """How many of its risks the assessor has rated."""
-        return len(self.record.severity.ratings)
+        """How many of its risks the assessor has rated (impact, likelihood or both)."""
+        severity = self.record.severity
+        return len(set(severity.impact) | set(severity.likelihood))
 
 
 class Projects:
@@ -155,17 +156,28 @@ class Projects:
     def is_latest(self, view: ProjectView) -> bool:
         return self._repository.is_latest(view.record)
 
-    def rate(self, project_id: str, ratings: dict[str, int],
+    def rate(self, project_id: str, impact: dict[str, int], likelihood: dict[str, int] | None = None,
              comments: dict[str, str] | None = None) -> ProjectView:
-        """Ratings and, optionally, comments on them ("" or blank clears one). Everything is
-        checked before anything is written."""
+        """Impacts, likelihoods and, optionally, comments on the rating ("" or blank clears one).
+        Everything is checked before anything is written."""
+        likelihood = likelihood or {}
         known = {risk.id for risk in self._repository.get(project_id).ontology.risks}
-        unknown = sorted((set(ratings) | set(comments or {})) - known)
+        unknown = sorted((set(impact) | set(likelihood) | set(comments or {})) - known)
         if unknown:
             raise ValueError(f"risk(s) not on this card: {', '.join(unknown)}")
         cleaned = None if comments is None else {rid: (text or "").strip() for rid, text in comments.items()}
-        Severity(ratings=ratings, comments={rid: t for rid, t in (cleaned or {}).items() if t})  # the checks
-        self._repository.rate(project_id, ratings, cleaned)
+        # the checks: each part 1-5, each comment short enough
+        Severity(impact=impact, likelihood=likelihood, comments={rid: t for rid, t in (cleaned or {}).items() if t})
+        self._repository.rate(project_id, impact, likelihood, cleaned)
+        return self.view(project_id)
+
+    def set_keys(self, project_id: str, keys: dict[str, bool]) -> ProjectView:
+        """The assessor's key choices: objective id -> key. An id outside the profile is refused."""
+        catalogue = self._catalogue_for(self._repository.get(project_id))
+        unknown = sorted(oid for oid in keys if catalogue.by_id(oid) is None)
+        if unknown:
+            raise ValueError(f"not in this assessment's objective profile: {', '.join(unknown)}")
+        self._repository.save_keys(project_id, {oid: bool(v) for oid, v in keys.items()})
         return self.view(project_id)
 
     def map_risks_of(self, project_id: str) -> ProjectView:
@@ -182,7 +194,7 @@ class Projects:
                 raise ModelUnavailable(str(exc)) from exc
         run = map_risks(record.ontology.risks, mapper, self._catalogue_for(record))
         self._repository.save_mapping_run(
-            project_id, run, model=model, selected=self._carried_selection(record, run)
+            project_id, run, model=model, selected=self._scope(record, run)
         )
         return self.view(project_id)
 
@@ -204,16 +216,7 @@ class Projects:
                  for oid in self._in_order(catalogue, set(objective_ids))]
         after = MappingRun(mappings={**before, risk_id: Mapping(risk_id=risk_id, objectives=items)})
         self._repository.save_risk_mapping(
-            project_id, risk_id, items, selected=self._carried_selection(record, after))
-        return self.view(project_id)
-
-    def select(self, project_id: str, objective_ids: list[str]) -> ProjectView:
-        """Tick the objectives the project takes forward (replaces the selection)."""
-        catalogue = self._catalogue_for(self._repository.get(project_id))
-        unknown = sorted({oid for oid in objective_ids if catalogue.by_id(oid) is None})
-        if unknown:
-            raise ValueError(f"not in this assessment's objective profile: {', '.join(unknown)}")
-        self._repository.save_selection(project_id, self._in_order(catalogue, set(objective_ids)))
+            project_id, risk_id, items, selected=self._scope(record, after))
         return self.view(project_id)
 
     @staticmethod
@@ -224,21 +227,10 @@ class Projects:
             return (0, found.sort_key, oid) if found else (1, (), oid)
         return sorted(objective_ids, key=key)
 
-    def _carried_selection(self, record: ProjectRecord, run: MappingRun) -> list[str]:
-        """The selection after a mapping (D1, D2).
-
-        It starts from this assessment's own selection, else the previous card
-        version's; with neither, every mapped objective is ticked. From that
-        start, what the earlier mapping had and this one lost is unticked, what
-        this one adds is ticked, and every other choice is kept.
-        """
-        base = record if record.selected is not None else self._repository.previous_of(record)
-        now = _mapped_ids(run)
-        catalogue = self._catalogue_for(record)
-        if base is None or base.selected is None:
-            return self._in_order(catalogue, now)
-        before = _mapped_ids(base.mapping_run)
-        return self._in_order(catalogue, (set(base.selected) - (before - now)) | (now - before))
+    def _scope(self, record: ProjectRecord, run: MappingRun) -> list[str]:
+        """What the assessment takes forward to step 4: what its matrix holds, in catalogue order
+        (the matrix is the selection, 2026-10-01)."""
+        return self._in_order(self._catalogue_for(record), _mapped_ids(run))
 
     def delete(self, project_id: str) -> None:
         self._repository.delete(project_id)
@@ -262,6 +254,7 @@ class Projects:
             record.severity,
             record.mapping_run.mappings if record.mapping_run else {},
             record.ontology.risks,
+            keys=record.keys,
         )
         return ProjectView(record=record, priorities=priorities, catalogue=catalogue,
                            profile=self.library.version_info(record.profile_version_id))

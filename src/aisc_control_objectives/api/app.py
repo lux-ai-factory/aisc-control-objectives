@@ -8,7 +8,7 @@ Two things to look at, and one project at a time:
     /p/{project}/projects           its assessments, one per AI card version
     /p/{project}/projects/{id}      the AI Card · rank its risks · map · tiers
 
-    /p/{project}/api/projects[/{id}[/map|/severity]]   the JSON API, inside the project too
+    /p/{project}/api/projects[/{id}[/map|/ratings|/key]]  the JSON API, inside the project too
 
 Each project's assessments are in that project's own database (isolation
 2026-09-25): the gate opens the database of the project in the path, after
@@ -386,17 +386,16 @@ def _register_pages(app, objectives, projects_of, view_in, source_name, root_pat
             return PlainTextResponse(why, status_code=409)
         form = await request.form()
         try:
-            ratings = {
-                risk.id: int(form[risk.id])
-                for risk in view.record.ontology.risks
-                if form.get(risk.id)
-            }
-            # an optional comment per risk, `comment:<risk id>`; a blank one clears it
+            # per risk: `impact:<risk id>`, `likelihood:<risk id>` (1-5, blank leaves it as it is) and
+            # an optional `comment:<risk id>` (a blank one clears it)
+            def part(prefix):
+                return {key.split(":", 1)[1]: int(value) for key, value in form.items()
+                        if key.startswith(prefix) and str(value).strip()}
             comments = {
                 key.split(":", 1)[1]: str(value)
                 for key, value in form.items() if key.startswith("comment:")
             }
-            projects.rate(project_id, ratings, comments)
+            projects.rate(project_id, part("impact:"), part("likelihood:"), comments)
         except ValueError as exc:
             return PlainTextResponse(f"Invalid rating: {exc}", status_code=400)
         return RedirectResponse(
@@ -404,20 +403,23 @@ def _register_pages(app, objectives, projects_of, view_in, source_name, root_pat
         )
 
 
-    @app.post("/p/{project}/projects/{project_id}/selection", include_in_schema=False)
-    async def select_form(project: str, project_id: str, request: Request):
-        """"Save selection": the ticked objectives, and only those, go forward."""
+    @app.post("/p/{project}/projects/{project_id}/key", include_in_schema=False)
+    async def key_form(project: str, project_id: str, request: Request):
+        """The key ticks of the matrix: the ticked objectives are key, every other one in the
+        matrix is not."""
         projects = projects_of(request)
         view = view_in(request, project_id)
         if (why := _read_only(projects, view)) is not None:
             return PlainTextResponse(why, status_code=409)
         form = await request.form()
+        ticked = {str(v) for v in form.getlist("key")}
+        in_matrix = {p.objective_id for p in view.priorities if p.risk_ids} | ticked
         try:
-            projects.select(project_id, [str(v) for v in form.getlist("objective")])
+            projects.set_keys(project_id, {oid: oid in ticked for oid in in_matrix})
         except ValueError as exc:
-            return PlainTextResponse(f"Invalid selection: {exc}", status_code=400)
+            return PlainTextResponse(f"Invalid key objectives: {exc}", status_code=400)
         return RedirectResponse(
-            url=_assessment_url(root_path, project, project_id), status_code=303
+            url=_assessment_url(root_path, project, project_id) + "#matrix", status_code=303
         )
 
 
@@ -521,14 +523,42 @@ def _register_project_api(app, projects_of, view_in):
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    @app.post("/p/{project}/api/projects/{project_id}/severity")
+    @app.post("/p/{project}/api/projects/{project_id}/ratings")
     def rate(
+        project: str, project_id: str, request: Request, ratings: dict[str, dict[str, int]] = Body(...)
+    ) -> dict:
+        """{risk id: {"impact": 1-5, "likelihood": 1-5}}; a part left out keeps what it had."""
+        projects = projects_of(request)
+        _latest_or_409(projects, view_in(request, project_id))
+        impact = {rid: r["impact"] for rid, r in ratings.items() if "impact" in r}
+        likelihood = {rid: r["likelihood"] for rid, r in ratings.items() if "likelihood" in r}
+        try:
+            return payload(projects.rate(project_id, impact, likelihood))
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.post("/p/{project}/api/projects/{project_id}/severity")
+    def rate_impact(
         project: str, project_id: str, request: Request, ratings: dict[str, int] = Body(...)
     ) -> dict:
+        """The route from before the matrix, kept for its callers: {risk id: 1-5} sets the impact
+        (what a risk's severity was) and leaves the likelihood as it is."""
         projects = projects_of(request)
         _latest_or_409(projects, view_in(request, project_id))
         try:
-            return payload(projects.rate(project_id, ratings))
+            return payload(projects.rate(project_id, ratings, {}))
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.post("/p/{project}/api/projects/{project_id}/key")
+    def set_keys(
+        project: str, project_id: str, request: Request, keys: dict[str, bool] = Body(...)
+    ) -> dict:
+        """{objective id: key}: the assessor's choice wins over the default."""
+        projects = projects_of(request)
+        _latest_or_409(projects, view_in(request, project_id))
+        try:
+            return payload(projects.set_keys(project_id, keys))
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -552,20 +582,7 @@ def _register_project_api(app, projects_of, view_in):
         projects = projects_of(request)
         _latest_or_409(projects, view_in(request, project_id))
         try:
-            return payload(projects.rate(project_id, {}, comments))
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-    @app.post("/p/{project}/api/projects/{project_id}/selection")
-    def select(
-        project: str, project_id: str, request: Request,
-        objective_ids: list[str] = Body(..., embed=True),
-    ) -> dict:
-        """Which objectives the project takes forward to step 4 (replaces)."""
-        projects = projects_of(request)
-        _latest_or_409(projects, view_in(request, project_id))
-        try:
-            return payload(projects.select(project_id, objective_ids))
+            return payload(projects.rate(project_id, {}, {}, comments))
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 

@@ -19,6 +19,7 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from aisc_control_objectives.control_objectives import ControlObjectiveCatalogue
+from aisc_control_objectives.prioritising import band
 
 TEMPLATES = Path(__file__).resolve().parent / "templates"
 STATIC = Path(__file__).resolve().parent / "static"
@@ -104,60 +105,78 @@ def render_objectives_page(
     )
 
 
-#: A project's objective sections, in the order an assessor works through them.
-TIER_SECTIONS = (
-    (1, "Tier 1", "Start here"),
-    (2, "Tier 2", "Next"),
-    (3, "Tier 3", "Later"),
-)
-
-
-@dataclass
-class _TierView:
-    key: object
-    title: str
-    subtitle: str
-    objectives: list[tuple] = field(default_factory=list)  # (objective, priority)
-
-
 @dataclass
 class _RiskView:
-    """One risk, its rating, and the objectives it drives."""
+    """One row of the risk register: a risk, its rating, and the objectives it drives."""
 
     risk: object
     rating: int
+    impact: int | None = None
+    likelihood: int | None = None
     mapped: list = field(default_factory=list)   # (objective_id, rationale, source)
     findings: list = field(default_factory=list)
     #: Why the assessor rated it so; "" when they said nothing.
     comment: str = ""
 
+    @property
+    def band(self) -> str:
+        return band(self.rating)
+
+    @property
+    def rated(self) -> bool:
+        return self.impact is not None or self.likelihood is not None
+
 
 def _risk_views(record) -> list:
-    """The risks worst-first, so the page reads as the assessor's ranking."""
+    """The risks by rating, highest first: the register reads as the assessor's ranking."""
     if not record.ontology.risks:
         return []
     run = record.mapping_run
+    severity = record.severity
     views = []
     for risk in record.ontology.risks:
         mapping = run.mappings.get(risk.id) if run else None
         views.append(
             _RiskView(
                 risk=risk,
-                rating=record.severity.of(risk.id),
+                rating=severity.of(risk.id),
+                impact=severity.impact.get(risk.id),
+                likelihood=severity.likelihood.get(risk.id),
                 mapped=[(item.objective_id, item.rationale, item.source)
                         for item in (mapping.objectives if mapping else [])],
                 findings=[f for f in (run.findings if run else []) if f.risk_id == risk.id],
-                comment=record.severity.comments.get(risk.id, ""),
+                comment=severity.comments.get(risk.id, ""),
             )
         )
     return sorted(views, key=lambda view: (-view.rating, view.risk.position))
 
 
 @dataclass
-class _Counts:
-    tier1: int = 0
-    tier2: int = 0
-    tier3: int = 0
+class _MatrixRow:
+    """One row of the matrix: a risk and one objective it maps to."""
+
+    risk: _RiskView
+    objective: object
+    priority: object
+    source: str
+    rationale: str
+    #: The objective's first row (its highest rated risk): where its key tick is.
+    first: bool
+
+
+def _matrix(risks: list, catalogue: ControlObjectiveCatalogue, priorities: dict) -> list:
+    """Risk by rating, then each risk's objectives by rank; an objective outside the profile
+    (left from an older mapping) is not shown."""
+    rows, seen = [], set()
+    for view in risks:
+        mapped = [(catalogue.by_id(oid), rationale, source) for oid, rationale, source in view.mapped]
+        mapped = [m for m in mapped if m[0] is not None]
+        mapped.sort(key=lambda m: priorities[m[0].id].rank)
+        for objective, rationale, source in mapped:
+            rows.append(_MatrixRow(risk=view, objective=objective, priority=priorities[objective.id],
+                                   source=source, rationale=rationale, first=objective.id not in seen))
+            seen.add(objective.id)
+    return rows
 
 
 def render_projects_page(views: list, root_path: str = "", project: str = "") -> str:
@@ -171,42 +190,26 @@ def render_project_page(
     view, catalogue: ControlObjectiveCatalogue, root_path: str = "", project: str = "",
     read_only: str | None = None, profiles: list | None = None,
 ) -> str:
-    """One project: its risks, and the tiers they produce. `read_only` says why
-    an older version's assessment can no longer be ranked or mapped. The objectives
-    are the assessment's profile's (`view.catalogue`); `profiles` are the ones it may
+    """One assessment as a risk and control matrix: the profile line, the risk register and the
+    matrix. `read_only` says why an older version's assessment can no longer be changed. The
+    objectives are the assessment's profile's (`view.catalogue`); `profiles` are the ones it may
     switch to."""
     catalogue = view.catalogue or catalogue
     record = view.record
     priorities = {p.objective_id: p for p in view.priorities}
-    counts = _Counts()
-    sections = {key: _TierView(key, title, subtitle) for key, title, subtitle in TIER_SECTIONS}
-
-    # Ordered by rank (score, worst risk, binding, catalogue order) within each
-    # tier: the page is a work list, and a work list reads top to bottom.
-    rows = []
-    for objective in catalogue:
-        priority = priorities[objective.id]
-        rows.append((objective, priority))
-        setattr(counts, f"tier{priority.tier}", getattr(counts, f"tier{priority.tier}") + 1)
-
-    rows.sort(key=lambda row: row[1].rank)
-    for objective, priority in rows:
-        sections[priority.tier].objectives.append((objective, priority))
-    ordered = [section for section in sections.values() if section.objectives]
-
+    risks = _risk_views(record)
     template = _environment().get_template("project.html.j2")
     return template.render(
         view=view,
         record=record,
-        sections=ordered,
-        counts=counts,
         flag_tags=FLAG_TAGS,
         here="projects",
-        risks=_risk_views(record),
+        risks=risks,
+        matrix=_matrix(risks, catalogue, priorities),
+        keys=[p for p in sorted(view.priorities, key=lambda p: p.rank) if p.key],
         objective_labels={o.id: o.sub_requirement_label for o in catalogue},
         macros=catalogue.macro_requirements(),
         read_only=read_only,
-        selected=set(record.selected or []),
         profile=view.profile or {},
         profiles=profiles or [],
         **_navigation(root_path, project),

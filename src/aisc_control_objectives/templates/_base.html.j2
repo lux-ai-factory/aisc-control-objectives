@@ -171,6 +171,30 @@
   .co-tier--1 { border-left: 4px solid var(--primary); }
   .co-tier--2 { border-left: 4px solid var(--info-soft); }
   .co-tier--no .co-obj, .co-tier--undetermined .co-obj { opacity: 0.75; }
+  /* Step 2: the risk register and the risk and control matrix */
+  .co-register, .co-matrix { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  .co-register th, .co-matrix th { text-align: left; font-size: 11px; font-weight: 700; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--muted); padding: 8px 10px; border-bottom: 2px solid var(--border); }
+  .co-register th span { text-transform: none; font-weight: 400; }
+  .co-register td, .co-matrix td { padding: 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .co-register select { font: inherit; padding: 4px 6px; }
+  .co-register textarea { width: 100%; min-width: 180px; box-sizing: border-box; font: inherit; font-size: 13px; resize: vertical; }
+  .co-reg-risk { width: 44%; }
+  .co-chain summary { cursor: pointer; font-size: 12px; color: var(--primary); margin-top: 4px; }
+  .co-chain p { margin: 6px 0; color: var(--muted); }
+  .co-rating { display: inline-block; min-width: 28px; padding: 3px 6px; border-radius: 4px; text-align: center;
+               font-weight: 800; font-size: 13px; }
+  .co-rating--low { background: #e8f5e9; color: #256b29; }
+  .co-rating--medium { background: #fff7d6; color: #6b5300; }
+  .co-rating--high { background: #ffe5cc; color: #8a3c00; }
+  .co-rating--critical { background: #c62828; color: #ffffff; }
+  .co-band { display: block; margin-top: 3px; font-size: 11px; color: var(--muted); }
+  .co-matrix tr.co-mrow--first td { border-top: 2px solid var(--border); }
+  .co-m-risk { width: 26%; font-weight: 600; }
+  .co-m-obj .co-dim { margin-left: 6px; }
+  .co-medit td { border-bottom: 1px solid var(--border); padding-top: 0; }
+  .co-mrow--empty em { color: var(--muted); }
+  .co-key-again { font-size: 11px; color: var(--muted); }
   /* Objective sets and profiles */
   .co-code { display: inline-block; padding: 2px 8px; border-radius: 4px; background: var(--text); color: var(--panel);
              font-size: 12px; font-weight: 800; letter-spacing: .06em; }
@@ -274,15 +298,6 @@
   .co-risk .field { margin-bottom: 0; }
   .co-risk .qf-tag { margin: 0 4px 4px 0; text-transform: none; letter-spacing: 0; font-weight: 600; }
   @media (max-width: 720px) { .co-risk { grid-template-columns: 1fr; } }
-
-  /* Severity ratings: one row per macro requirement */
-  .co-ratings { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 8px 24px; }
-  .co-rating { display: flex; align-items: center; justify-content: space-between; gap: 12px;
-               padding: 7px 0; border-bottom: 1px solid var(--border); }
-  .co-rating label { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px;
-                     text-transform: none; letter-spacing: 0; color: var(--text); }
-  .co-rating select { padding: 5px 8px; font-family: inherit; font-size: 13px;
-                      border: 1px solid var(--border); background: #fff; color: var(--text); }
 
   .qf-dl {
     display: grid; grid-template-columns: 150px 1fr; gap: 6px 18px;

@@ -166,8 +166,10 @@ class Risk(Base):
     areas: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
     vair_terms: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
     provenance: Mapped[str] = mapped_column(Text, default="form")
-    #: The assessor's 1-5. The irreplaceable part: a model did not produce it.
-    severity: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: The assessor's rating, impact x likelihood, each 1-5 (2026-10-01; impact was "severity"). The
+    #: irreplaceable part: a model did not produce it. Not the AIRO chain's `impact` text above.
+    rating_impact: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    rating_likelihood: Mapped[int | None] = mapped_column(Integer, nullable=True)
     #: Why the assessor rated it so, optional (2026-10-01); "" when there is none.
     severity_comment: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
 
@@ -356,3 +358,16 @@ class ObjectiveProfileVersionItem(Base):
     set_code: Mapped[str] = mapped_column(Text, nullable=False)
     #: The set version it was taken from; None for the built-in set.
     set_version_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
+
+class ObjectiveKey(Base):
+    """The assessor's choice that an objective is, or is not, key (2026-10-01). No row: the default
+    (the first seven driven by a High or Critical risk)."""
+
+    __tablename__ = "objective_key"
+    __table_args__ = (PrimaryKeyConstraint("project_id", "objective_id", name="pk_objective_key"),)
+
+    project_id: Mapped[str] = mapped_column(ForeignKey("project.id", ondelete="CASCADE"))
+    objective_id: Mapped[str] = mapped_column(Text)
+    key: Mapped[bool] = mapped_column(Boolean, nullable=False)

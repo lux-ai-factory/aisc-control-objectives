@@ -85,13 +85,14 @@ class TestSurvivingARestart:
             ),
             model="openai/gpt-4o",
         )
-        repository.rate(project.id, {"risk2": 5, "risk4": 1})
+        repository.rate(project.id, {"risk2": 5, "risk4": 1}, {"risk2": 4})
 
         # a fresh repository, as a restart would give
         stored = repository.reopened().get(project.id)
         assert stored.mapping_run.mappings["risk2"].objectives[0].objective_id == "O1"
         assert stored.mapping_run.model == "openai/gpt-4o"
-        assert stored.severity.ratings == {"risk2": 5, "risk4": 1}
+        assert stored.severity.impact == {"risk2": 5, "risk4": 1}
+        assert stored.severity.likelihood == {"risk2": 4}
 
     def test_a_run_that_struggled_keeps_its_findings(self, system_version, repository, platform_project, ontology, graph_json):
         project = repository.create(project=platform_project, name="MCAS", ontology=ontology, jsonld=graph_json, system_id=system_version(platform_project, 1))
@@ -134,7 +135,7 @@ class TestListingAndReplacing:
 
     def test_deleting_a_project_takes_its_rows_with_it(self, system_version, repository, platform_project, ontology, graph_json):
         project = repository.create(project=platform_project, name="MCAS", ontology=ontology, jsonld=graph_json, system_id=system_version(platform_project, 1))
-        repository.rate(project.id, {"risk2": 5})
+        repository.rate(project.id, {"risk2": 5}, {})
         repository.delete(project.id)
         assert repository.get(project.id) is None
         assert repository.orphan_rows() == 0      # the cascade actually cascades

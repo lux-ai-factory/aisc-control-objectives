@@ -1,14 +1,9 @@
-"""Which control objectives the project takes forward (evidence links plan 2026-09-30, step A).
+"""Which control objectives the project takes forward to step 4.
 
-The assessor ticks objectives on the assessment page; only the ticked ones reach
-step 4, where tests and controls are linked to them. Decisions D1 and D2:
-
-- D1: once the risks are mapped, every objective the mapping linked to a risk
-  starts ticked; the assessor can untick them and tick any other one.
-- D2: a new card version starts from the previous version's selection. An
-  objective the previous mapping had and this one lost is unticked; one this
-  mapping adds is ticked; everything else (ticked or not) is kept as it was.
-  Mapping the same assessment again follows the same rule.
+Until 2026-10-01 the assessor ticked them (evidence links plan 2026-09-30, step A, D1 and D2).
+Since the risk and control matrix, what goes forward is what the matrix holds: every objective
+mapped to at least one risk, in catalogue order, whoever mapped it. The fixtures here are shared
+by the other step 2 tests.
 """
 
 from __future__ import annotations
@@ -88,149 +83,69 @@ def _selected(http, platform_project, assessment) -> list[str]:
     return response.json()["selected"]
 
 
-def test_nothing_is_selected_before_the_mapping(client, start, platform_project):
+def test_nothing_is_taken_forward_before_the_mapping(client, start, platform_project):
     http, _ = client
     assert _selected(http, platform_project, start()) == []
 
 
-def test_d1_the_mapping_ticks_every_mapped_objective(client, start, platform_project):
+def test_the_mapped_objectives_are_taken_forward(client, start, platform_project):
     http, _ = client
     assessment = start()
     http.post(_api(platform_project, assessment, "/map"))
     assert _selected(http, platform_project, assessment) == MAPPED
 
 
-def test_saving_a_selection_replaces_it(client, start, platform_project):
+def test_mapping_again_takes_forward_what_the_new_matrix_holds(client, start, platform_project, mapper):
+    """O16 leaves the matrix, O26 enters: the scope follows."""
     http, _ = client
     assessment = start()
     http.post(_api(platform_project, assessment, "/map"))
-    response = http.post(_api(platform_project, assessment, "/selection"),
-                         json={"objective_ids": ["O1", "O24"]})
-    assert response.status_code == 200, response.text
-    assert response.json()["selected"] == ["O1", "O24"]
-    assert _selected(http, platform_project, assessment) == ["O1", "O24"]
-
-
-def test_an_unticked_selection_stays_empty(client, start, platform_project, mapper):
-    """Saving nothing is a choice: mapping again does not tick the old ones back."""
-    http, _ = client
-    assessment = start()
-    http.post(_api(platform_project, assessment, "/map"))
-    http.post(_api(platform_project, assessment, "/selection"), json={"objective_ids": []})
-    http.post(_api(platform_project, assessment, "/map"))
-    assert _selected(http, platform_project, assessment) == []
-
-
-def test_an_objective_the_catalogue_lacks_is_refused(client, start, platform_project):
-    http, _ = client
-    assessment = start()
-    response = http.post(_api(platform_project, assessment, "/selection"),
-                         json={"objective_ids": ["O1", "R99.9"]})
-    assert response.status_code == 422
-    assert "R99.9" in response.json()["detail"]
-    assert _selected(http, platform_project, assessment) == []
-
-
-def test_a_selection_can_be_saved_before_any_mapping(client, start, platform_project):
-    http, _ = client
-    assessment = start()
-    http.post(_api(platform_project, assessment, "/selection"), json={"objective_ids": ["O24"]})
-    assert _selected(http, platform_project, assessment) == ["O24"]
-
-
-def test_mapping_again_keeps_the_choices_and_follows_the_mapping(
-    client, start, platform_project, mapper
-):
-    """O1 unticked by hand stays unticked; O24 ticked by hand stays; O16, no
-    longer mapped, is unticked; O26, newly mapped, is ticked."""
-    http, _ = client
-    assessment = start()
-    http.post(_api(platform_project, assessment, "/map"))
-    chosen = [oid for oid in MAPPED if oid != "O1"] + ["O24"]
-    http.post(_api(platform_project, assessment, "/selection"), json={"objective_ids": chosen})
-
     mapper.by_risk["risk4"] = ["O7", "O11", "O26"]          # O16 out, O26 in
     http.post(_api(platform_project, assessment, "/map"))
-
-    expected = in_order((set(chosen) - {"O16"}) | {"O26"})
-    assert _selected(http, platform_project, assessment) == expected
+    assert _selected(http, platform_project, assessment) == in_order((set(MAPPED) - {"O16"}) | {"O26"})
 
 
-def test_d2_a_new_version_starts_from_the_previous_selection(
-    client, start, platform_project, mapper
-):
+def test_a_new_version_takes_forward_its_own_matrix(client, start, platform_project, mapper):
     http, _ = client
     first = start(1)
     http.post(_api(platform_project, first, "/map"))
-    chosen = [oid for oid in MAPPED if oid != "O1"] + ["O24"]
-    http.post(_api(platform_project, first, "/selection"), json={"objective_ids": chosen})
-
     second = start(2)
-    mapper.by_risk["risk4"] = ["O7", "O11", "O26"]
+    assert _selected(http, platform_project, second) == []
+    mapper.by_risk = {"risk0": ["O3"]}
     http.post(_api(platform_project, second, "/map"))
+    assert _selected(http, platform_project, second) == ["O3"]
+    assert _selected(http, platform_project, first) == MAPPED
 
-    assert _selected(http, platform_project, second) == in_order((set(chosen) - {"O16"}) | {"O26"})
-    assert _selected(http, platform_project, first) == in_order(chosen)
+
+def test_there_is_no_selection_to_save_any_more(client, start, platform_project):
+    http, _ = client
+    assessment = start()
+    assert http.post(_api(platform_project, assessment, "/selection"), json={"objective_ids": []}).status_code == 404
+    assert http.post(f"/p/{platform_project}/projects/{assessment}/selection").status_code in (404, 405)
 
 
-def test_an_older_versions_selection_is_read_only(client, start, platform_project):
+def test_an_older_version_shows_its_matrix_without_ticks(client, start, platform_project):
     http, _ = client
     first = start(1)
+    http.post(_api(platform_project, first, "/map"))
     start(2)
-    response = http.post(_api(platform_project, first, "/selection"), json={"objective_ids": []})
-    assert response.status_code == 409
-
-
-class TestThePage:
-    def test_each_objective_has_a_checkbox_ticked_as_selected(self, client, start, platform_project):
-        http, _ = client
-        assessment = start()
-        http.post(_api(platform_project, assessment, "/map"))
-        http.post(_api(platform_project, assessment, "/selection"), json={"objective_ids": ["O1"]})
-        page = http.get(f"/p/{platform_project}/projects/{assessment}").text
-        assert f'action="/p/{platform_project}/projects/{assessment}/selection"' in page
-        assert 'name="objective" value="O1" checked' in page
-        assert 'name="objective" value="O4">' in page
-        assert "Save selection" in page
-
-    def test_the_form_saves_the_ticked_objectives(self, client, start, platform_project):
-        http, _ = client
-        assessment = start()
-        http.post(_api(platform_project, assessment, "/map"))
-        response = http.post(f"/p/{platform_project}/projects/{assessment}/selection",
-                             data={"objective": ["O4", "O24"]})
-        assert response.status_code == 303
-        assert _selected(http, platform_project, assessment) == ["O4", "O24"]
-
-    def test_an_older_version_shows_no_checkboxes(self, client, start, platform_project):
-        http, _ = client
-        first = start(1)
-        http.post(_api(platform_project, first, "/map"))
-        start(2)
-        page = http.get(f"/p/{platform_project}/projects/{first}").text
-        assert 'name="objective"' not in page
-        assert "Save selection" not in page
+    page = http.get(f"/p/{platform_project}/projects/{first}").text
+    assert 'name="key"' not in page and "co-mrow" in page
 
 
 # ── each objective carries its trustworthiness dimension as a tag (2026-10-01) ──
 
-def test_each_objective_shows_its_dimension_as_a_tag(client, start, platform_project, objectives):
+def test_each_objective_in_the_matrix_shows_its_dimension(client, start, platform_project, objectives):
     import re
     http, _ = client
     assessment = start()
     http.post(_api(platform_project, assessment, "/map"))
-    page = http.get(f"/p/{platform_project}/projects/{assessment}")
-    assert page.status_code == 200, page.text
-    articles = re.findall(r'<article class="co-obj">(.*?)</article>', page.text, re.S)
-    assert articles
+    page = http.get(f"/p/{platform_project}/projects/{assessment}").text
+    cells = re.findall(r'<td class="co-m-obj"><b>(\w+)</b>.*?<span class="co-dim co-dim--r(\d+)">(R\d+)</span>', page, re.S)
+    assert cells
     by_id = {o.id: o for o in objectives}
-    for article in articles:
-        oid = re.search(r'<span class="co-obj-id">([^<]+)</span>', article).group(1)
-        o = by_id[oid]
-        n = o.macro_id.lstrip("R")
-        assert (f'<span class="co-dim co-dim--r{n}" title="Trustworthiness dimension">'
-                f'{o.macro_id} · {o.macro_title}</span>') in article, oid
-        assert 'class="co-family"' not in article
+    for oid, n, macro in cells:
+        assert by_id[oid].macro_id == macro == f"R{n}", oid
 
 
 def test_every_dimension_has_its_colour():

@@ -6,15 +6,15 @@
   <p><b>A catalogue of 50 EU AI Act control objectives, and where a given system should start.</b></p>
 </div>
 
-This is the AI Safety and Compliance (AISC) module that turns an assessed system's **AI Card** into a place to begin: it takes the risks the card carries, lets the assessor rank them, asks a model which control objectives mitigate each one, and orders the catalogue into three tiers.
+This is the AI Safety and Compliance (AISC) module that turns an assessed system's **AI Card** into a place to begin: it takes the risks the card carries into a risk register the assessor rates (impact x likelihood), builds a risk and control matrix of the control objectives that mitigate each one (by hand, or suggested by a model), and marks the key objectives to start with.
 
-Every objective in the catalogue stays owed. Nothing here rules anything out. What it produces is a **Tier 1 of no more than seven**, so an assessor has a week of work to open rather than another list of fifty.
+Every objective in the catalogue stays owed. Nothing here rules anything out. What it produces is **no more than seven key objectives** by default, so an assessor has a week of work to open rather than another list of fifty; the assessor can change which are key.
 
 ```mermaid
 flowchart LR
     A["AI Card<br/>(the filled AIRO graph)"] --> B["Rank the risks<br/>1 to 5, by a person"]
     B --> C["Map risks to objectives<br/>(one model call per risk)"]
-    C --> D["Tier 1 · Tier 2 · Tier 3<br/>(computed, never stored)"]
+    C --> D["Scores and key objectives<br/>(computed, never stored)"]
 ```
 
 ## Features
@@ -22,7 +22,7 @@ flowchart LR
 - **A catalogue, served.** 50 sub-requirements under 11 macro requirements (R1 Human Agency and Oversight through R11 Record-keeping and Documentation Retention), each with its legal basis, assessment mode, standards grounding and caveats.
 - **One agentic step, guarded.** The model's every claim rests on a literal span of the risk it read. Quotes are verified deterministically; failures go back to the model with the findings, and the rounds are bounded.
 - **Ranking is the person's job.** Which risk matters for this system is the one judgement no model makes here.
-- **Nothing derived is stored.** Tiers are recomputed from the card, the ranking and the mapping on every read, so a changed rating can never leave a stale tier behind.
+- **Nothing derived is stored.** Scores and default key objectives are recomputed from the card, the ratings and the matrix on every read, so a changed rating can never leave a stale score behind. Only the assessor's own key choices are stored.
 - **Server-rendered pages** in the qualification app's own design tokens, so the modules read as one platform.
 - **Persisted in Postgres**, on the qualification app's schema blueprint, with the uploaded card kept as the bytes that were uploaded.
 
@@ -72,7 +72,7 @@ A project is one system, and it starts with that system's **AI Card** exported f
 
 ### 1. Rank the risks
 
-Each AIRO chain on the card (the risk, its source, the vulnerability that source exploits, the consequence, the impact and who bears it, the declared control and its follow-up) is shown in full and gets a severity from the assessor: 1 marginal for this system, 5 decisive. Unrated risks count as 3.
+Each AIRO chain on the card (the risk, its source, the vulnerability that source exploits, the consequence, the impact and who bears it, the declared control and its follow-up) is a row of the risk register and gets a rating from the assessor: impact and likelihood, 1 to 5 each, whose product (1 to 25) falls in the 5x5 bands Low 1-4, Medium 5-9, High 10-16, Critical 17-25. An unrated part counts 3; an optional rationale goes with it.
 
 ### 2. Map the risks to objectives
 
@@ -93,22 +93,21 @@ an editor listing all fifty objectives by dimension. An objective kept from the 
 model's, with its quote; one the person adds is theirs (`mapped_objective.source`, `ai` or `person`).
 Mapping with AI again replaces the whole mapping, edits by hand included.
 
-### 3. Read the tiers
+### 3. Score the objectives, mark the key ones
 
-`prioritising.prioritise`, no model involved. An objective scores the sum of the severities of the
-risks mapped to it (an unrated risk counts 3):
+`prioritising.prioritise`, no model involved. An objective scores the sum of the ratings of the
+risks mapped to it:
 
-    S(o) = sum of s_r over the risks r mapped to o  =  how many risks x their average severity
+    S(o) = sum of (impact x likelihood) over the risks r mapped to o
 
-They are ranked by S, then by the worst single risk, then a directly binding duty before one only
-grounded in standards, then catalogue order.
-
-- **Tier 1, start here.** The top of the driven work, capped at seven, and holding only objectives a risk rated 3 or more points at. A short Tier 1 is an honest answer; a padded one is not.
-- **Tier 2, next.** The rest of the work the identified risks drive.
-- **Tier 3, later.** Owed, but not where this system's danger lies, plus the two voluntary objectives, which bind nobody and so cannot displace a legal duty.
+They are ranked by S, then by the highest single rating, then a directly binding duty before one
+only grounded in standards, then catalogue order. By default the **key** objectives are the first
+seven driven by at least one High or Critical risk (never a voluntary one); the assessor turns key on
+or off for any objective, and that choice is stored. What the matrix holds is what goes forward to
+step 4, Collect evidence.
 
 > [!IMPORTANT]
-> Re-rank a risk and the tiers move, with no model call and no cost. That is the point: the same 50 duties, a different place to start.
+> Re-rate a risk and the scores move, with no model call and no cost.
 
 ## The data
 
@@ -132,7 +131,7 @@ Two conventions the code relies on:
 - **A paired objective needs both.** `Control + Test` means an organisational control *and* a technical test, so the two partitions overlap: 41 objectives need a control, 14 need a test, 5 are in both.
 - **`VOLUNTARY:` is the author's own judgement**, not one made here, and it is what flags an objective non-binding.
 
-Swapping in a newer export is a file swap: replace the CSV, or point `CONTROL_OBJECTIVES_FILE` at another one. A renamed or missing column fails at load time rather than silently yielding empty objectives. Every project records the sha256 of the catalogue it was assessed against, so a re-export cannot quietly change an old assessment's tiers.
+Swapping in a newer export is a file swap: replace the CSV, or point `CONTROL_OBJECTIVES_FILE` at another one. A renamed or missing column fails at load time rather than silently yielding empty objectives. Every project records the sha256 of the catalogue it was assessed against, so a re-export cannot quietly change an old assessment's scores.
 
 ## HTTP API
 
@@ -147,13 +146,14 @@ FastAPI, port `8090`, interactive docs at `/docs`. The pages are `/`, `/objectiv
 | `GET /api/control-objectives/{id}` | one objective, 404 if unknown |
 | `GET /api/macro-requirements` | R1 through R11 with their objectives nested |
 | `GET /p/{project}/api/projects`, `GET /p/{project}/api/projects/{id}` | the project's assessments (`{project}` is its pid or slug) |
-| `POST /p/{project}/api/projects/{id}/severity` | rank the risks, body `{"risk2": 5, ...}` |
+| `POST /p/{project}/api/projects/{id}/ratings` | rate the risks, body `{"risk2": {"impact": 5, "likelihood": 4}, ...}` |
+| `POST /p/{project}/api/projects/{id}/severity` | the route from before the matrix: `{"risk2": 5}` sets the impact |
+| `POST /p/{project}/api/projects/{id}/key` | the assessor's key choices, body `{"O1": true, "O7": false}` |
 | `POST /p/{project}/api/projects/{id}/map` | run the mapping (one model call per risk) |
-| `POST /p/{project}/api/projects/{id}/selection` | the objectives to take forward to step 4, body `{"objective_ids": ["O1", ...]}` (replaces; unknown ids 422) |
 | `POST /p/{project}/api/projects/{id}/risks/{risk}/mapping` | a person maps one risk, body `{"objective_ids": ["O1", ...]}` (replaces that risk's mapping; kept rows stay the AI's, added ones are the person's; unknown ids 422) |
 | `DELETE /p/{project}/api/projects/{id}` | delete an assessment and everything under it |
 
-**Selection.** Only the selected objectives reach step 4 (Collect evidence), where tests and controls are linked to them. The payload's `selected` lists them. The mapping ticks every mapped objective the first time; after that each mapping keeps the assessor's choices, unticks what the previous mapping had and this one lost, and ticks what it adds. A new card version starts from the previous version's selection by the same rule.
+**Scope.** What the matrix holds goes forward to step 4 (Collect evidence), where tests and controls are linked to it: every objective mapped to at least one risk, in catalogue order, whoever mapped it. The payload's `selected` lists them. There is no separate selection since the risk and control matrix (2026-10-01).
 
 An assessment is started from the page (`POST /p/{project}/projects`), of the project's latest AI card version. Everything under `/p/{project}` needs a signed-in member of that project (an editor to change anything), and is answered from that project's own database: an id of another project is a 404.
 
@@ -167,11 +167,11 @@ Postgres, one database per project (`project_<pid without hyphens>`, schema `con
 |---|---|
 | `project` | one assessment of one AI card version (`system_id`, a row of `project.system` in the same database), with the catalogue digest it was assessed against |
 | `graph` | the uploaded card, **as the bytes that were uploaded**, with their sha256 |
-| `risk` | one AIRO chain flattened, with the assessor's severity on it |
+| `risk` | one AIRO chain flattened, with the assessor's rating (impact, likelihood) and rationale on it |
 | `mapped_objective` | one objective a risk was mapped to, with the quote behind it |
 | `mapping_run` | how the run went: findings, per-risk stops, attempts, the model that bought it |
 
-Verdicts, scores and tiers are deliberately **not** stored: they are a pure function of the catalogue, the ranking and the mapping, so writing them down would only let them go stale.
+Verdicts, scores and default key objectives are deliberately **not** stored: they are a pure function of the catalogue, the ranking and the mapping, so writing them down would only let them go stale.
 
 ## Configuration
 
@@ -202,7 +202,7 @@ src/aisc_control_objectives/
   control_objectives.py                loading and validating the catalogue
   risk_mapping.py                      the agentic step, and its controls
   rounds.py                            the review loop policy, shared and stated once
-  prioritising.py                      severity in, tiers out (no model)
+  prioritising.py                      ratings in, scores and key objectives out (no model)
   projects.py                          the flow the routes call
   db/                                  tables.py · repository.py
   api/app.py                           routes, pages and JSON
