@@ -135,8 +135,11 @@ def test_the_key_form_ticks_exactly_the_key_objectives(client, start, platform_p
     http.post(_api(platform_project, a, "/map"))
     page = page_of(http, platform_project, a)
     assert f'<form id="keys" method="post" action="/p/{platform_project}/projects/{a}/key">' in page
-    # the key tick sits on an objective's first row only
-    assert page.count('form="keys" name="key" value="O1"') == 1
+    # every row of an objective has its key tick, and the ticks of one objective move together
+    o21_rows = page.count('data-objective="O21"')
+    assert o21_rows == 2 and page.count('form="keys" name="key" value="O21"') == o21_rows
+    assert "co-key-again" not in page
+    assert '<script src="' in page and "keys.js" in page
     r = http.post(f"/p/{platform_project}/projects/{a}/key", data={"key": ["O2", "O11"]})
     assert r.status_code == 303
     keys = {p["objective_id"]: p["key"] for p in body_of(http, platform_project, a)["priorities"]}
@@ -154,3 +157,42 @@ def test_what_is_in_the_matrix_is_in_scope_in_catalogue_order(client, start, pla
     http.post(_api(platform_project, a, "/risks/risk0/mapping"), json={"objective_ids": ["O30"]})
     selected = body_of(http, platform_project, a)["selected"]
     assert "O30" in selected and "O9" not in selected          # O9 was only risk0's
+
+
+
+# ── the register's dropdowns, and who mapped a row (2026-10-02) ─────────────
+
+def test_an_unrated_part_shows_three_preselected(client, start, platform_project):
+    http, _ = client
+    a = start()
+    rate_form(http, platform_project, a, risk2=(5, 4))
+    page = page_of(http, platform_project, a)
+    row = re.search(r'<tr id="risk-risk0">(.*?)</tr>', page, re.S).group(1)
+    for part in ("impact", "likelihood"):
+        select = re.search(rf'<select class="co-select" name="{part}:risk0"[^>]*>(.*?)</select>', row, re.S).group(1)
+        assert re.search(r'<option value="3" selected>3</option>', select), part
+        assert 'value=""' not in select
+    rated = re.search(r'<tr id="risk-risk2">(.*?)</tr>', page, re.S).group(1)
+    assert re.search(r'<option value="4" selected>4</option>', rated)
+
+
+def test_the_register_counts_risks_with_both_parts_saved(client, start, platform_project):
+    http, _ = client
+    a = start()
+    http.post(_api(platform_project, a, "/ratings"), json={"risk2": {"impact": 5, "likelihood": 4}, "risk0": {"impact": 2}})
+    assert "1 of 5 rated" in page_of(http, platform_project, a)
+
+
+def test_a_row_mapped_by_a_person_says_assessor(client, start, platform_project):
+    http, _ = client
+    a = start()
+    http.post(_api(platform_project, a, "/risks/risk0/mapping"), json={"objective_ids": ["O5"]})
+    page = page_of(http, platform_project, a)
+    assert re.search(r'<span class="co-map-source co-map-source--person"[^>]*>Assessor</span>', page)
+    assert "by hand" not in page.lower()
+
+
+def test_the_key_script_is_served(client):
+    http, _ = client
+    r = http.get("/static/keys.js")
+    assert r.status_code == 200 and "name=\"key\"" in r.text.replace("'", '"')

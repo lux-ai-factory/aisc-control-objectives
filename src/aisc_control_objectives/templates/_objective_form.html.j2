@@ -3,7 +3,7 @@
 <div class="co-form-grid">
   <div class="field">
     <label>Dimension</label>
-    <select name="dimension" required>
+    <select class="co-select" name="dimension" required>
       {%- for rid, title in dimensions.items() %}
       <option value="{{ rid }}"{% if v.macro_id == rid %} selected{% endif %}>{{ rid }} · {{ title }}</option>
       {%- endfor %}
@@ -11,7 +11,7 @@
   </div>
   <div class="field">
     <label>Assessment mode</label>
-    <select name="assessment_mode" required>
+    <select class="co-select" name="assessment_mode" required>
       {%- for mode in modes %}
       <option value="{{ mode }}"{% if v.assessment_mode == mode %} selected{% endif %}>{{ mode }}</option>
       {%- endfor %}

@@ -194,7 +194,16 @@
   .co-m-obj .co-dim { margin-left: 6px; }
   .co-medit td { border-bottom: 1px solid var(--border); padding-top: 0; }
   .co-mrow--empty em { color: var(--muted); }
-  .co-key-again { font-size: 11px; color: var(--muted); }
+  /* A dropdown in the page's own style: thin border, the folds' chevron, the value in bold */
+  .co-select { appearance: none; -webkit-appearance: none; font: inherit; font-size: 14px; font-weight: 700;
+    color: var(--text); background-color: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 30px 6px 12px; cursor: pointer; line-height: 1.2;
+    background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+                      linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+    background-position: calc(100% - 15px) 52%, calc(100% - 10px) 52%;
+    background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; }
+  .co-select:hover { border-color: var(--border-strong, #a9b0c6); }
+  .co-select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(0, 15, 223, .12); }
   /* Objective sets and profiles */
   .co-code { display: inline-block; padding: 2px 8px; border-radius: 4px; background: var(--text); color: var(--panel);
              font-size: 12px; font-weight: 800; letter-spacing: .06em; }
@@ -223,7 +232,6 @@
   .co-profile-change { margin-left: auto; }
   .co-profile-change summary { cursor: pointer; font-size: 13px; color: var(--primary); }
   .co-profile-change form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
-  .co-profile-change select { font: inherit; font-size: 13px; padding: 4px 6px; }
   .co-profile-change .qf-help { flex-basis: 100%; margin: 0; }
   .btn--small { padding: 6px 12px; font-size: 13px; }
   /* Step 2: every part folds; the head is the handle */
@@ -249,7 +257,7 @@
   .co-help-pop { max-width: 420px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 6px;
                  background: var(--panel); color: var(--text); font-size: 13px; line-height: 1.5;
                  box-shadow: 0 8px 24px rgba(20, 24, 60, .18); }
-  /* Step 2: each risk's mapping, by the AI or by hand */
+  /* Step 2: each risk's mapping, by the AI or the assessor */
   .co-map { padding: 14px 0; border-top: 1px solid var(--border); }
   .co-map-head { display: flex; align-items: baseline; gap: 10px; }
   .co-map-head h3 { font-size: 15px; margin: 0; }

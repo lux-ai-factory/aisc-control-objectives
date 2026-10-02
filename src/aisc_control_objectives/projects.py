@@ -62,6 +62,12 @@ class ProjectView:
         severity = self.record.severity
         return len(set(severity.impact) | set(severity.likelihood))
 
+    @property
+    def fully_rated(self) -> int:
+        """How many of its risks have both impact and likelihood saved."""
+        severity = self.record.severity
+        return len(set(severity.impact) & set(severity.likelihood))
+
 
 class Projects:
     """The service the routes call. Owns the order of the flow, nothing else."""

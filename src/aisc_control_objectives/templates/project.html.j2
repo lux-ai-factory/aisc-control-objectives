@@ -31,7 +31,7 @@
     <details class="co-profile-change">
       <summary>Change profile</summary>
       <form method="post" action="{{ project_base }}/projects/{{ record.id }}/profile">
-        <select name="profile" aria-label="Objective profile">
+        <select class="co-select" name="profile" aria-label="Objective profile">
           {%- for p in profiles %}
           <option value="{{ p.id }}"{% if p.id == profile['id'] %} selected{% endif %}>{{ p.name }}{% if p.number %} (version {{ p.number }}){% endif %} · {{ p.objectives }} objectives</option>
           {%- endfor %}
@@ -54,7 +54,7 @@
     <summary class="co-macro-head">
       <span class="co-macro-id">1</span>
       <h2>Risk register</h2>
-      <span class="n">{{ view.rated }} of {{ record.ontology.risks | length }} rated</span>
+      <span class="n">{{ view.fully_rated }} of {{ record.ontology.risks | length }} rated</span>
     </summary>
     <p class="qf-help">Rate each risk's impact and likelihood, 1 to 5. The rating is their product:
        Low 1-4, Medium 5-9, High 10-16, Critical 17-25. An unrated part counts 3.</p>
@@ -84,15 +84,16 @@
         <td>
           {%- if read_only %}{{ value or "not rated" }}
           {%- else %}
-          <select name="{{ part }}:{{ risk.risk.id }}" aria-label="{{ part | capitalize }} of {{ risk.risk.short_label or risk.risk.id }}">
-            <option value=""{% if value is none %} selected{% endif %}>-</option>
-            {%- for n in [5, 4, 3, 2, 1] %}<option value="{{ n }}"{% if value == n %} selected{% endif %}>{{ n }}</option>{% endfor %}
+          {#- an unrated part shows 3, what it counts as; saving the ratings stores it -#}
+          {%- set shown = 3 if value is none else value %}
+          <select class="co-select" name="{{ part }}:{{ risk.risk.id }}" aria-label="{{ part | capitalize }} of {{ risk.risk.short_label or risk.risk.id }}">
+            {%- for n in [5, 4, 3, 2, 1] %}<option value="{{ n }}"{% if shown == n %} selected{% endif %}>{{ n }}</option>{% endfor %}
           </select>
           {%- endif %}
         </td>
         {%- endfor %}
         <td><span class="co-rating co-rating--{{ risk.band | lower }}">{{ risk.rating }}</span>
-          <span class="co-band">{{ risk.band }}{% if not risk.rated %}, not rated{% endif %}</span></td>
+          <span class="co-band">{{ risk.band }}</span></td>
         <td>
           {%- if read_only %}{% if risk.comment %}<p class="co-sev-comment">{{ risk.comment }}</p>{% endif %}
           {%- else %}
@@ -133,8 +134,8 @@
         <b>Suggest with AI.</b> The AI reads each risk against the catalogue and proposes the
         objectives that would mitigate it, each resting on a quote from that risk's own chain;
         a proposal with no such quote is sent back. It costs one model call per risk, with the
-        model chosen in Manage, Keys. It replaces the whole matrix, edits by hand included:
-        correct a risk's rows by hand afterwards.
+        model chosen in Manage, Keys. It replaces the whole matrix, the assessor's own rows
+        included: correct a risk's rows afterwards.
       </div>
     </form>
     <form id="keys" method="post" action="{{ project_base }}/projects/{{ record.id }}/key"></form>
@@ -150,13 +151,12 @@
         <td>{% if loop.first %}<span class="co-rating co-rating--{{ risk.band | lower }}">{{ risk.rating }}</span>{% endif %}</td>
         <td class="co-m-obj"><b>{{ row.objective.id }}</b> {{ row.objective.sub_requirement_label }}
           <span class="co-dim co-dim--r{{ row.objective.macro_id[1:] }}">{{ row.objective.macro_id }}</span></td>
-        <td><span class="co-map-source co-map-source--{{ row.source }}" title="{{ row.rationale or '' }}">{% if row.source == 'person' %}by hand{% else %}AI{% endif %}</span></td>
+        <td><span class="co-map-source co-map-source--{{ row.source }}" title="{{ row.rationale or '' }}">{% if row.source == 'person' %}Assessor{% else %}AI{% endif %}</span></td>
         <td>{{ row.priority.score | int }}</td>
         <td>
-          {%- if row.first %}
+          {#- one choice per objective: its ticks in every row move together (static/keys.js) -#}
           {%- if read_only %}{% if row.priority.key %}<span class="qf-tag qf-tag--tier1">Key</span>{% endif %}
           {%- else %}<input type="checkbox" form="keys" name="key" value="{{ row.objective.id }}"{% if row.priority.key %} checked{% endif %} aria-label="{{ row.objective.id }} is key">{% endif %}
-          {%- else %}<span class="co-key-again">{{ "key" if row.priority.key else "" }}</span>{% endif %}
         </td>
       </tr>
       {%- else %}
@@ -196,6 +196,7 @@
     </table>
     {%- if not read_only and matrix %}
     <div class="qf-actions"><button class="btn" type="submit" form="keys">Save the key objectives</button></div>
+    <script src="{{ root_path }}/static/keys.js" defer></script>
     {%- endif %}
   </details>
   {%- endif %}
