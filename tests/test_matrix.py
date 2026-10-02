@@ -69,31 +69,98 @@ def test_the_register_lists_risks_by_rating_with_their_band(client, start, platf
     assert re.search(r'<details class="co-chain">', register)
 
 
-# ── the matrix ──────────────────────────────────────────────────────────────
+# ── the matrix: one row per risk, its objectives as chips (2026-10-02) ──────
 
-def test_the_matrix_has_a_row_per_risk_and_objective_by_rating(client, start, platform_project):
+def matrix_of(page: str) -> str:
+    return re.search(r'<table class="co-matrix">(.*?)</table>', page, re.S).group(1)
+
+
+def rows_of(matrix: str) -> list[str]:
+    return re.findall(r'<tr class="co-mrow" data-risk="(\w+)"', matrix)
+
+
+def chips_of(matrix: str, risk: str) -> list[tuple[str, str]]:
+    """(objective id, classes) of a risk's chips, in order."""
+    row = re.search(rf'<tr class="co-mrow" data-risk="{risk}">(.*?)</tr>', matrix, re.S).group(1)
+    return [(oid, cls) for cls, oid in re.findall(
+        r'<button type="button" class="co-chip ([^"]*)" popovertarget="[^"]+" data-objective="(\w+)"', row)]
+
+
+def test_one_row_per_risk_by_rating(client, start, platform_project):
     http, _ = client
     a = start()
-    rate_form(http, platform_project, a, risk2=(5, 4), risk4=(4, 3))
+    rate_form(http, platform_project, a, risk2=(5, 4), risk4=(4, 3), risk0=(1, 1))
+    http.post(_api(platform_project, a, "/map"))
+    rows = rows_of(matrix_of(page_of(http, platform_project, a)))
+    assert len(rows) == 5 and rows[:2] == ["risk2", "risk4"] and rows[-1] == "risk0"
+
+
+def test_a_risks_objectives_are_chips_in_rank_order(client, start, platform_project):
+    http, _ = client
+    a = start()
+    rate_form(http, platform_project, a, risk2=(5, 4))
+    http.post(_api(platform_project, a, "/map"))
+    body = body_of(http, platform_project, a)
+    rank = {p["objective_id"]: p["rank"] for p in body["priorities"]}
+    chips = chips_of(matrix_of(page_of(http, platform_project, a)), "risk2")
+    assert sorted(o for o, _ in chips) == sorted(FakeMapper.BY_RISK["risk2"])
+    assert [o for o, _ in chips] == sorted((o for o, _ in chips), key=rank.get)
+
+
+def test_a_chips_colour_says_key_and_who_mapped_it(client, start, platform_project):
+    http, _ = client
+    a = start()
+    rate_form(http, platform_project, a, risk2=(5, 4))
+    http.post(_api(platform_project, a, "/map"))                     # risk2 -> O1, O4, O2: all key
+    http.post(_api(platform_project, a, "/risks/risk0/mapping"), json={"objective_ids": ["O11", "O30"]})
+    matrix = matrix_of(page_of(http, platform_project, a))
+    risk2 = dict(chips_of(matrix, "risk2"))
+    assert all("co-chip--key" in cls and "co-chip--ai" in cls for cls in risk2.values())
+    risk0 = dict(chips_of(matrix, "risk0"))
+    assert "co-chip--person" in risk0["O30"] and "co-chip--plain" in risk0["O30"]
+    assert "co-chip--ai" in risk0["O11"]                              # kept from the AI
+
+
+def test_a_legend_explains_the_colours(client, start, platform_project):
+    http, _ = client
+    page = page_of(http, platform_project, start())
+    legend = re.search(r'<ul class="co-legend">(.*?)</ul>', page, re.S).group(1)
+    for words in ("Key objective", "Not key", "Mapped by the assessor", "Suggested by AI"):
+        assert words in legend, words
+
+
+def test_clicking_a_chip_shows_its_name_score_source_and_key(client, start, platform_project):
+    http, _ = client
+    a = start()
+    rate_form(http, platform_project, a, risk2=(5, 4))
     http.post(_api(platform_project, a, "/map"))
     page = page_of(http, platform_project, a)
-    matrix = re.search(r'<table class="co-matrix">(.*?)</table>', page, re.S).group(1)
-    pairs = re.findall(r'<tr class="co-mrow[^"]*" data-risk="(\w+)" data-objective="(\w+)"', matrix)
-    expected = sum(len(v) for v in FakeMapper.BY_RISK.values())
-    assert len(pairs) == expected
-    assert [r for r, _ in pairs[:3]] == ["risk2"] * 3       # the Critical risk first
-    assert pairs[3][0] == "risk4"
-    assert "co-map-source--ai" in matrix
+    pop = re.search(r'<div id="pop-risk2-O1" class="co-chip-pop" popover>(.*?)</div>\s*</span>', page, re.S).group(1)
+    assert "Operator oversight capability" in pop
+    assert "Score" in pop and "Suggested by AI" in pop
+    assert re.search(r'<input type="checkbox" form="keys" name="key" value="O1" checked', pop)
 
 
-def test_a_risk_with_nothing_mapped_has_an_empty_row_to_fill(client, start, platform_project):
+def test_an_objective_under_several_risks_has_one_key_choice(client, start, platform_project):
+    http, _ = client
+    a = start()
+    http.post(_api(platform_project, a, "/map"))
+    page = page_of(http, platform_project, a)
+    chips = len(re.findall(r'data-objective="O21"', matrix_of(page)))
+    assert chips == 2 and page.count('form="keys" name="key" value="O21"') == chips
+    assert "keys.js" in page
+
+
+def test_a_risk_with_nothing_mapped_says_so_and_can_be_edited(client, start, platform_project):
     http, _ = client
     a = start()
     page = page_of(http, platform_project, a)
-    matrix = re.search(r'<table class="co-matrix">(.*?)</table>', page, re.S).group(1)
-    assert len(re.findall(r'<tr class="co-mrow co-mrow--empty" data-risk="(\w+)"', matrix)) == 5
-    assert "No objective yet" in matrix
-    assert f'action="/p/{platform_project}/projects/{a}/risks/risk0/mapping"' in page
+    matrix = matrix_of(page)
+    assert matrix.count("No objective yet.") == 5
+    assert re.search(r'<button type="button" class="co-edit" popovertarget="edit-risk0"', matrix)
+    assert re.search(rf'<div id="edit-risk0" class="co-edit-pop" popover>\s*<form method="post" '
+                     rf'action="/p/{platform_project}/projects/{a}/risks/risk0/mapping"', page)
+    assert "Edit this risk's objectives" not in page
 
 
 def test_suggest_with_ai_keeps_its_question_mark(client, start, platform_project):
@@ -128,18 +195,13 @@ def test_key_is_set_by_default_and_the_assessor_can_change_it(client, start, pla
     assert http.post(_api(platform_project, a, "/key"), json={"O99": True}).status_code == 422
 
 
-def test_the_key_form_ticks_exactly_the_key_objectives(client, start, platform_project):
+def test_the_key_form_saves_exactly_the_ticked_objectives(client, start, platform_project):
     http, _ = client
     a = start()
     rate_form(http, platform_project, a, risk2=(5, 4))
     http.post(_api(platform_project, a, "/map"))
     page = page_of(http, platform_project, a)
     assert f'<form id="keys" method="post" action="/p/{platform_project}/projects/{a}/key">' in page
-    # every row of an objective has its key tick, and the ticks of one objective move together
-    o21_rows = page.count('data-objective="O21"')
-    assert o21_rows == 2 and page.count('form="keys" name="key" value="O21"') == o21_rows
-    assert "co-key-again" not in page
-    assert '<script src="' in page and "keys.js" in page
     r = http.post(f"/p/{platform_project}/projects/{a}/key", data={"key": ["O2", "O11"]})
     assert r.status_code == 303
     keys = {p["objective_id"]: p["key"] for p in body_of(http, platform_project, a)["priorities"]}
@@ -183,12 +245,13 @@ def test_the_register_counts_risks_with_both_parts_saved(client, start, platform
     assert "1 of 5 rated" in page_of(http, platform_project, a)
 
 
-def test_a_row_mapped_by_a_person_says_assessor(client, start, platform_project):
+def test_a_chip_mapped_by_a_person_says_assessor(client, start, platform_project):
     http, _ = client
     a = start()
     http.post(_api(platform_project, a, "/risks/risk0/mapping"), json={"objective_ids": ["O5"]})
     page = page_of(http, platform_project, a)
-    assert re.search(r'<span class="co-map-source co-map-source--person"[^>]*>Assessor</span>', page)
+    pop = re.search(r'<div id="pop-risk0-O5" class="co-chip-pop" popover>(.*?)</div>\s*</span>', page, re.S).group(1)
+    assert "Mapped by the assessor" in pop
     assert "by hand" not in page.lower()
 
 

@@ -241,15 +241,15 @@ class TestThePages:
         """Nothing is in the matrix until a risk is mapped; the list of 50 is what /objectives is for."""
         project = _start(client, graph, platform_project, starter=_starter)
         page = client.get(f"/p/{platform_project}/projects/{project['id']}").text
-        assert page.count('class="co-mrow co-mrow--empty"') == 5
-        for gone in ("Tier 1", 'id="tier-1"', 'class="co-mrow co-mrow--first"'):
+        assert page.count("No objective yet.") == 5
+        for gone in ("Tier 1", 'id="tier-1"', 'data-objective="'):
             assert gone not in page, gone
 
     def test_the_matrix_fills_once_it_has(self, _starter, platform_project, client, graph):
         project = _start(client, graph, platform_project, starter=_starter)
         client.post(f"/p/{platform_project}/projects/{project['id']}/map", follow_redirects=False)
         page = client.get(f"/p/{platform_project}/projects/{project['id']}").text
-        assert "Risk and control matrix" in page and 'class="co-mrow co-mrow--first"' in page
+        assert "Risk and control matrix" in page and 'class="co-chip ' in page
 
     def test_rating_from_the_page_reorders_the_matrix(self, _starter, platform_project, client, graph):
         project = _start(client, graph, platform_project, starter=_starter)

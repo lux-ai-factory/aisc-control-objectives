@@ -116,8 +116,8 @@ def test_the_page_offers_both_ways_to_map(client, start, platform_project):
     assessment = start()
     _map_by_hand(http, platform_project, assessment, "risk0", ["O5"])
     page = http.get(f"/p/{platform_project}/projects/{assessment}").text
-    assert "Map with AI" in page
+    assert "Suggest with AI" in page
     assert f'action="/p/{platform_project}/projects/{assessment}/risks/risk0/mapping"' in page
     # every objective can be ticked for a risk, grouped by dimension
     assert page.count('name="objective" value="O50"') >= 1
-    assert 'class="co-map-source co-map-source--person"' in page
+    assert "co-chip--person" in page

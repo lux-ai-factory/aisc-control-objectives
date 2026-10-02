@@ -152,31 +152,33 @@ def _risk_views(record) -> list:
 
 
 @dataclass
-class _MatrixRow:
-    """One row of the matrix: a risk and one objective it maps to."""
+class _Chip:
+    """One objective in a risk's row of the matrix."""
 
-    risk: _RiskView
     objective: object
     priority: object
+    #: "ai" or "person"
     source: str
     rationale: str
-    #: The objective's first row (its highest rated risk): where its key tick is.
-    first: bool
+    quote: str
 
 
-def _matrix(risks: list, catalogue: ControlObjectiveCatalogue, priorities: dict) -> list:
-    """Risk by rating, then each risk's objectives by rank; an objective outside the profile
-    (left from an older mapping) is not shown."""
-    rows, seen = [], set()
+def _chips(record, risks: list, catalogue: ControlObjectiveCatalogue, priorities: dict) -> dict:
+    """risk id -> its objectives as chips, by rank; one outside the profile (left from an older
+    mapping) is not shown."""
+    run = record.mapping_run
+    out = {}
     for view in risks:
-        mapped = [(catalogue.by_id(oid), rationale, source) for oid, rationale, source in view.mapped]
-        mapped = [m for m in mapped if m[0] is not None]
-        mapped.sort(key=lambda m: priorities[m[0].id].rank)
-        for objective, rationale, source in mapped:
-            rows.append(_MatrixRow(risk=view, objective=objective, priority=priorities[objective.id],
-                                   source=source, rationale=rationale, first=objective.id not in seen))
-            seen.add(objective.id)
-    return rows
+        mapping = run.mappings.get(view.risk.id) if run else None
+        chips = []
+        for item in (mapping.objectives if mapping else []):
+            objective = catalogue.by_id(item.objective_id)
+            if objective is not None:
+                chips.append(_Chip(objective=objective, priority=priorities[objective.id], source=item.source,
+                                   rationale=item.rationale, quote=item.quote))
+        chips.sort(key=lambda chip: chip.priority.rank)
+        out[view.risk.id] = chips
+    return out
 
 
 def render_projects_page(views: list, root_path: str = "", project: str = "") -> str:
@@ -205,7 +207,7 @@ def render_project_page(
         flag_tags=FLAG_TAGS,
         here="projects",
         risks=risks,
-        matrix=_matrix(risks, catalogue, priorities),
+        chips=_chips(record, risks, catalogue, priorities),
         keys=[p for p in sorted(view.priorities, key=lambda p: p.rank) if p.key],
         objective_labels={o.id: o.sub_requirement_label for o in catalogue},
         macros=catalogue.macro_requirements(),

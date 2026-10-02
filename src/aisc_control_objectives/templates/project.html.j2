@@ -111,21 +111,24 @@
     {%- endif %}
   </details>
 
-  {# ── 2. the matrix: one row per risk -> objective ───────────────────────
-     The mapping is the matrix: what is in it goes forward to step 4. #}
+  {# ── 2. the matrix: one row per risk, its control objectives as chips ──
+     A chip's colour says whether the objective is key and who mapped it; a click
+     opens its name, score, source and key tick. What is in the matrix goes
+     forward to step 4. #}
+  {%- set mapped_count = chips.values() | map("length") | sum %}
   <details class="qf-section co-fold" open id="matrix">
     <summary class="co-macro-head">
       <span class="co-macro-id">2</span>
       <h2>Risk and control matrix</h2>
-      <span class="n">{{ matrix | length }} row{{ 's' if matrix | length != 1 }} · {{ keys | length }} key</span>
+      <span class="n">{{ keys | length }} key</span>
     </summary>
     {%- if view.mapped and record.mapping_run.attempts and record.mapping_run.stop != "clean" %}
     <div class="error">The AI's suggestions stopped on <code>{{ record.mapping_run.stop }}</code>{% if record.mapping_run.error %}: {{ record.mapping_run.error }}{% endif %}.
        What survived its checks is below; what did not is listed with each risk.</div>
     {%- endif %}
-    <p class="qf-help">Each row is a risk and a control objective that mitigates it. An objective scores
-       the sum of the ratings of its risks; the key ones are where to start. What is in the matrix
-       goes forward to <b>Collect evidence</b>.</p>
+    <p class="qf-help">Each risk with the control objectives that mitigate it. Click an objective for its
+       name, its score (the sum of the ratings of its risks) and whether it is key. What is in the
+       matrix goes forward to <b>Collect evidence</b>.</p>
     {%- if not read_only %}
     <form class="co-ai" method="post" action="{{ project_base }}/projects/{{ record.id }}/map">
       <button class="btn" type="submit">Suggest with AI</button>
@@ -135,66 +138,75 @@
         objectives that would mitigate it, each resting on a quote from that risk's own chain;
         a proposal with no such quote is sent back. It costs one model call per risk, with the
         model chosen in Manage, Keys. It replaces the whole matrix, the assessor's own rows
-        included: correct a risk's rows afterwards.
+        included: correct a risk's objectives afterwards.
       </div>
     </form>
     <form id="keys" method="post" action="{{ project_base }}/projects/{{ record.id }}/key"></form>
     {%- endif %}
+    <ul class="co-legend">
+      <li><span class="co-chip co-chip--key co-chip--ai">O1</span> Key objective</li>
+      <li><span class="co-chip co-chip--plain co-chip--ai">O2</span> Not key</li>
+      <li><span class="co-chip co-chip--plain co-chip--person">O3</span> Mapped by the assessor</li>
+      <li><span class="co-chip co-chip--plain co-chip--ai">O4</span> Suggested by AI</li>
+    </ul>
     <table class="co-matrix">
-      <thead><tr><th>Risk</th><th>Rating</th><th>Control objective</th><th>Mapped</th><th>Score</th><th>Key</th></tr></thead>
+      <thead><tr><th>Risk</th><th>Rating</th><th>Control objectives</th><th></th></tr></thead>
       <tbody>
       {%- for risk in risks %}
-      {%- set rows = matrix | selectattr("risk", "equalto", risk) | list %}
-      {%- for row in rows %}
-      <tr class="co-mrow{% if loop.first %} co-mrow--first{% endif %}" data-risk="{{ risk.risk.id }}" data-objective="{{ row.objective.id }}">
-        <td class="co-m-risk">{% if loop.first %}{{ risk.risk.short_label or risk.risk.text }}{% endif %}</td>
-        <td>{% if loop.first %}<span class="co-rating co-rating--{{ risk.band | lower }}">{{ risk.rating }}</span>{% endif %}</td>
-        <td class="co-m-obj"><b>{{ row.objective.id }}</b> {{ row.objective.sub_requirement_label }}
-          <span class="co-dim co-dim--r{{ row.objective.macro_id[1:] }}">{{ row.objective.macro_id }}</span></td>
-        <td><span class="co-map-source co-map-source--{{ row.source }}" title="{{ row.rationale or '' }}">{% if row.source == 'person' %}Assessor{% else %}AI{% endif %}</span></td>
-        <td>{{ row.priority.score | int }}</td>
-        <td>
-          {#- one choice per objective: its ticks in every row move together (static/keys.js) -#}
-          {%- if read_only %}{% if row.priority.key %}<span class="qf-tag qf-tag--tier1">Key</span>{% endif %}
-          {%- else %}<input type="checkbox" form="keys" name="key" value="{{ row.objective.id }}"{% if row.priority.key %} checked{% endif %} aria-label="{{ row.objective.id }} is key">{% endif %}
+      <tr class="co-mrow" data-risk="{{ risk.risk.id }}">
+        <td class="co-m-risk">{{ risk.risk.short_label or risk.risk.text }}
+          {%- for finding in risk.findings %}<p class="co-note co-note--flag"><b>{{ finding.flag }}:</b> {{ finding.detail }}</p>{% endfor %}</td>
+        <td><span class="co-rating co-rating--{{ risk.band | lower }}">{{ risk.rating }}</span></td>
+        <td class="co-chips">
+          {%- for chip in chips[risk.risk.id] %}
+          {%- set o = chip.objective %}
+          {%- set pop = "pop-" ~ risk.risk.id ~ "-" ~ o.id %}
+          <span class="co-chip-wrap">
+          <button type="button" class="co-chip {{ 'co-chip--key' if chip.priority.key else 'co-chip--plain' }} co-chip--{{ chip.source }}" popovertarget="{{ pop }}" data-objective="{{ o.id }}">{{ o.id }}</button>
+          <div id="{{ pop }}" class="co-chip-pop" popover>
+            <p class="co-pop-head"><b>{{ o.id }}</b> {{ o.sub_requirement_label }}</p>
+            <p><span class="co-dim co-dim--r{{ o.macro_id[1:] }}">{{ o.macro_id }} · {{ o.macro_title }}</span></p>
+            <p class="co-pop-text">{{ o.text }}</p>
+            <dl class="co-pop-dl">
+              <dt>Score</dt><dd>{{ chip.priority.score | int }} (the sum of the ratings of its {{ chip.priority.risk_ids | length }} risk{{ 's' if chip.priority.risk_ids | length != 1 }})</dd>
+              <dt>Here</dt><dd>{% if chip.source == 'person' %}Mapped by the assessor{% else %}Suggested by AI{% endif %}{% if chip.quote %}, on "{{ chip.quote }}"{% endif %}</dd>
+            </dl>
+            {%- if read_only %}{% if chip.priority.key %}<p><b>Key objective</b></p>{% endif %}
+            {%- else %}
+            <label class="co-pop-key"><input type="checkbox" form="keys" name="key" value="{{ o.id }}"{% if chip.priority.key %} checked{% endif %}> Key objective</label>
+            <p class="qf-help">Then save the key objectives below the matrix.</p>
+            {%- endif %}
+          </div>
+          </span>
+          {%- else %}<em>No objective yet.</em>
+          {%- endfor %}
+        </td>
+        <td class="co-m-edit">
+          {%- if not read_only %}
+          {%- set chosen = risk.mapped | map(attribute=0) | list %}
+          <button type="button" class="co-edit" popovertarget="edit-{{ risk.risk.id }}">Edit</button>
+          <div id="edit-{{ risk.risk.id }}" class="co-edit-pop" popover>
+            <form method="post" action="{{ project_base }}/projects/{{ record.id }}/risks/{{ risk.risk.id }}/mapping">
+              <p class="co-pop-head"><b>{{ risk.risk.short_label or risk.risk.text }}</b>: its control objectives</p>
+              {%- for macro in macros %}
+              <fieldset class="co-map-dim">
+                <legend><span class="co-dim co-dim--r{{ macro.id[1:] }}">{{ macro.id }} · {{ macro.title }}</span></legend>
+                {%- for objective in macro.objectives %}
+                <label class="co-map-pick"><input type="checkbox" name="objective" value="{{ objective.id }}"{% if objective.id in chosen %} checked{% endif %}>
+                  <b>{{ objective.id }}</b> {{ objective.sub_requirement_label }}</label>
+                {%- endfor %}
+              </fieldset>
+              {%- endfor %}
+              <div class="qf-actions"><button class="btn" type="submit">Save this risk's objectives</button></div>
+            </form>
+          </div>
+          {%- endif %}
         </td>
       </tr>
-      {%- else %}
-      <tr class="co-mrow co-mrow--empty" data-risk="{{ risk.risk.id }}">
-        <td class="co-m-risk">{{ risk.risk.short_label or risk.risk.text }}</td>
-        <td><span class="co-rating co-rating--{{ risk.band | lower }}">{{ risk.rating }}</span></td>
-        <td colspan="4"><em>No objective yet.</em></td>
-      </tr>
-      {%- endfor %}
-      {%- if risk.findings or not read_only %}
-      <tr class="co-medit"><td colspan="6">
-        {%- for finding in risk.findings %}
-        <p class="co-note co-note--flag"><b>{{ finding.flag }}:</b> {{ finding.detail }}</p>
-        {%- endfor %}
-        {%- if not read_only %}
-        {%- set chosen = risk.mapped | map(attribute=0) | list %}
-        <details class="co-map-edit" id="map-{{ risk.risk.id }}">
-          <summary>Edit this risk's objectives</summary>
-          <form method="post" action="{{ project_base }}/projects/{{ record.id }}/risks/{{ risk.risk.id }}/mapping">
-            {%- for macro in macros %}
-            <fieldset class="co-map-dim">
-              <legend><span class="co-dim co-dim--r{{ macro.id[1:] }}">{{ macro.id }} · {{ macro.title }}</span></legend>
-              {%- for objective in macro.objectives %}
-              <label class="co-map-pick"><input type="checkbox" name="objective" value="{{ objective.id }}"{% if objective.id in chosen %} checked{% endif %}>
-                <b>{{ objective.id }}</b> {{ objective.sub_requirement_label }}</label>
-              {%- endfor %}
-            </fieldset>
-            {%- endfor %}
-            <div class="qf-actions"><button class="btn" type="submit">Save this risk's objectives</button></div>
-          </form>
-        </details>
-        {%- endif %}
-      </td></tr>
-      {%- endif %}
       {%- endfor %}
       </tbody>
     </table>
-    {%- if not read_only and matrix %}
+    {%- if not read_only and mapped_count %}
     <div class="qf-actions"><button class="btn" type="submit" form="keys">Save the key objectives</button></div>
     <script src="{{ root_path }}/static/keys.js" defer></script>
     {%- endif %}

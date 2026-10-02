@@ -130,7 +130,7 @@ def test_an_older_version_shows_its_matrix_without_ticks(client, start, platform
     http.post(_api(platform_project, first, "/map"))
     start(2)
     page = http.get(f"/p/{platform_project}/projects/{first}").text
-    assert 'name="key"' not in page and "co-mrow" in page
+    assert 'name="key"' not in page and "co-chip--" in page
 
 
 # ── each objective carries its trustworthiness dimension as a tag (2026-10-01) ──
@@ -141,7 +141,8 @@ def test_each_objective_in_the_matrix_shows_its_dimension(client, start, platfor
     assessment = start()
     http.post(_api(platform_project, assessment, "/map"))
     page = http.get(f"/p/{platform_project}/projects/{assessment}").text
-    cells = re.findall(r'<td class="co-m-obj"><b>(\w+)</b>.*?<span class="co-dim co-dim--r(\d+)">(R\d+)</span>', page, re.S)
+    # each chip's pop-up names the objective's dimension
+    cells = re.findall(r'<div id="pop-\w+-(\w+)" class="co-chip-pop" popover>.*?<span class="co-dim co-dim--r(\d+)">(R\d+) ·', page, re.S)
     assert cells
     by_id = {o.id: o for o in objectives}
     for oid, n, macro in cells:
