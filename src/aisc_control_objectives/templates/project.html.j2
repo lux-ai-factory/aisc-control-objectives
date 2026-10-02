@@ -64,22 +64,7 @@
       <tbody>
       {%- for risk in risks %}
       <tr id="risk-{{ risk.risk.id }}">
-        <td class="co-reg-risk">
-          <b>{{ risk.risk.short_label or risk.risk.text }}</b>
-          <details class="co-chain">
-            <summary>The AIRO chain</summary>
-            {%- if risk.risk.short_label %}<p>{{ risk.risk.text }}</p>{% endif %}
-            <dl class="qf-dl">
-              {%- if risk.risk.source %}<dt>Source</dt><dd>{{ risk.risk.source }}</dd>{% endif %}
-              {%- if risk.risk.vulnerability %}<dt>Vulnerability</dt><dd>{{ risk.risk.vulnerability }}</dd>{% endif %}
-              {%- if risk.risk.consequence %}<dt>Consequence</dt><dd>{{ risk.risk.consequence }}</dd>{% endif %}
-              {%- if risk.risk.control %}<dt>Declared control</dt><dd>{{ risk.risk.control }}</dd>{% endif %}
-              {%- if risk.risk.areas %}<dt>Impact on</dt><dd>{{ risk.risk.areas | join(', ') }}</dd>{% endif %}
-              {%- if risk.risk.stakeholder %}<dt>Borne by</dt><dd>{{ risk.risk.stakeholder }}</dd>{% endif %}
-              {%- if risk.risk.vair_terms %}<dt>Typed in VAIR</dt><dd>{{ risk.risk.vair_terms | join(', ') }}</dd>{% endif %}
-            </dl>
-          </details>
-        </td>
+        <td class="co-reg-risk"><b>{{ risk.risk.text }}</b></td>
         {%- for part, value in (("impact", risk.impact), ("likelihood", risk.likelihood)) %}
         <td>
           {%- if read_only %}{{ value or "not rated" }}
@@ -100,6 +85,23 @@
           <textarea name="comment:{{ risk.risk.id }}" maxlength="1000" rows="2" aria-label="Rationale"
                     placeholder="Why this rating">{{ risk.comment }}</textarea>
           {%- endif %}
+        </td>
+      </tr>
+      <tr class="co-reg-info" data-risk="{{ risk.risk.id }}">
+        <td colspan="5">
+          <details class="co-chain">
+            <summary>Full information</summary>
+            <dl class="qf-dl">
+              {%- if risk.risk.short_label and risk.risk.short_label != risk.risk.text %}<dt>Short label</dt><dd>{{ risk.risk.short_label }}</dd>{% endif %}
+              {%- if risk.risk.source %}<dt>Source</dt><dd>{{ risk.risk.source }}</dd>{% endif %}
+              {%- if risk.risk.vulnerability %}<dt>Vulnerability</dt><dd>{{ risk.risk.vulnerability }}</dd>{% endif %}
+              {%- if risk.risk.consequence %}<dt>Consequence</dt><dd>{{ risk.risk.consequence }}</dd>{% endif %}
+              {%- if risk.risk.control %}<dt>Declared control</dt><dd>{{ risk.risk.control }}</dd>{% endif %}
+              {%- if risk.risk.areas %}<dt>Impact on</dt><dd>{{ risk.risk.areas | join(', ') }}</dd>{% endif %}
+              {%- if risk.risk.stakeholder %}<dt>Borne by</dt><dd>{{ risk.risk.stakeholder }}</dd>{% endif %}
+              {%- if risk.risk.vair_terms %}<dt>Typed in VAIR</dt><dd>{{ risk.risk.vair_terms | join(', ') }}</dd>{% endif %}
+            </dl>
+          </details>
         </td>
       </tr>
       {%- endfor %}
@@ -152,7 +154,7 @@
       <tbody>
       {%- for risk in risks %}
       <tr class="co-mrow" data-risk="{{ risk.risk.id }}">
-        <td class="co-m-risk">{{ risk.risk.short_label or risk.risk.text }}
+        <td class="co-m-risk">{{ risk.risk.text }}
           {%- for finding in risk.findings %}<p class="co-note co-note--flag"><b>{{ finding.flag }}:</b> {{ finding.detail }}</p>{% endfor %}</td>
         <td><span class="co-rating co-rating--{{ risk.band | lower }}">{{ risk.rating }}</span></td>
         <td class="co-chips">
@@ -185,7 +187,7 @@
           <button type="button" class="co-edit" popovertarget="edit-{{ risk.risk.id }}">Edit</button>
           <div id="edit-{{ risk.risk.id }}" class="co-edit-pop" popover>
             <form method="post" action="{{ project_base }}/projects/{{ record.id }}/risks/{{ risk.risk.id }}/mapping">
-              <p class="co-pop-head"><b>{{ risk.risk.short_label or risk.risk.text }}</b>: its control objectives</p>
+              <p class="co-pop-head"><b>{{ risk.risk.text }}</b>: its control objectives</p>
               {%- for macro in macros %}
               <fieldset class="co-map-dim">
                 <legend><span class="co-dim co-dim--r{{ macro.id[1:] }}">{{ macro.id }} · {{ macro.title }}</span></legend>

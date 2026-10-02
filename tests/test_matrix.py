@@ -273,3 +273,26 @@ def test_the_key_script_is_served(client):
     http, _ = client
     r = http.get("/static/keys.js")
     assert r.status_code == 200 and "name=\"key\"" in r.text.replace("'", '"')
+
+
+
+# ── the risk in full (2026-10-02) ───────────────────────────────────────────
+
+def test_the_register_and_the_matrix_write_the_risk_in_full(client, start, platform_project, graph):
+    http, _ = client
+    a = start()
+    full = next(r for r in body_of(http, platform_project, a)["risks"] if r["id"] == "risk2")["text"]
+    page = page_of(http, platform_project, a)
+    row = re.search(r'<tr id="risk-risk2">(.*?)</tr>', page, re.S).group(1)
+    assert f"<b>{full}</b>" in row
+    mrow = re.search(r'<tr class="co-mrow" data-risk="risk2">(.*?)</tr>', page, re.S).group(1)
+    assert full in mrow
+
+
+def test_full_information_folds_under_the_risk_across_the_whole_table(client, start, platform_project):
+    http, _ = client
+    page = page_of(http, platform_project, start())
+    info = re.search(r'<tr class="co-reg-info" data-risk="risk2">\s*<td colspan="5">\s*'
+                     r'<details class="co-chain">\s*<summary>Full information</summary>(.*?)</details>', page, re.S)
+    assert info and "Source" in info.group(1)
+    assert "AIRO chain" not in page

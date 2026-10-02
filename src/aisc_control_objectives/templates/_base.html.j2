@@ -179,8 +179,11 @@
   .co-register td, .co-matrix td { padding: 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
   .co-register textarea { width: 100%; min-width: 180px; box-sizing: border-box; font: inherit; font-size: 13px; resize: vertical; }
   .co-reg-risk { width: 44%; }
+  /* a risk's full information folds open under its row, across the whole table */
+  .co-register tr:has(+ .co-reg-info) td { border-bottom: 0; padding-bottom: 2px; }
+  .co-reg-info td { padding-top: 0; }
+  .co-reg-info .qf-dl { margin: 8px 0 4px; }
   .co-chain summary { cursor: pointer; font-size: 12px; color: var(--primary); margin-top: 4px; }
-  .co-chain p { margin: 6px 0; color: var(--muted); }
   .co-rating { display: inline-block; min-width: 28px; padding: 3px 6px; border-radius: 4px; text-align: center;
                font-weight: 800; font-size: 13px; }
   .co-rating--low { background: #e8f5e9; color: #256b29; }
