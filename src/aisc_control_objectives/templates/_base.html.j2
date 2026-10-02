@@ -177,7 +177,6 @@
     text-transform: uppercase; color: var(--muted); padding: 8px 10px; border-bottom: 2px solid var(--border); }
   .co-register th span { text-transform: none; font-weight: 400; }
   .co-register td, .co-matrix td { padding: 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
-  .co-register select { font: inherit; padding: 4px 6px; }
   .co-register textarea { width: 100%; min-width: 180px; box-sizing: border-box; font: inherit; font-size: 13px; resize: vertical; }
   .co-reg-risk { width: 44%; }
   .co-chain summary { cursor: pointer; font-size: 12px; color: var(--primary); margin-top: 4px; }
@@ -195,15 +194,15 @@
   .co-medit td { border-bottom: 1px solid var(--border); padding-top: 0; }
   .co-mrow--empty em { color: var(--muted); }
   /* A dropdown in the page's own style: thin border, the folds' chevron, the value in bold */
-  .co-select { appearance: none; -webkit-appearance: none; font: inherit; font-size: 14px; font-weight: 700;
+  select.co-select { min-width: 64px; appearance: none; -webkit-appearance: none; font: inherit; font-size: 14px; font-weight: 700;
     color: var(--text); background-color: var(--panel); border: 1px solid var(--border); border-radius: 6px;
     padding: 6px 30px 6px 12px; cursor: pointer; line-height: 1.2;
     background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%),
                       linear-gradient(135deg, var(--muted) 50%, transparent 50%);
     background-position: calc(100% - 15px) 52%, calc(100% - 10px) 52%;
     background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; }
-  .co-select:hover { border-color: var(--border-strong, #a9b0c6); }
-  .co-select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(0, 15, 223, .12); }
+  select.co-select:hover { border-color: var(--border-strong, #a9b0c6); }
+  select.co-select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(0, 15, 223, .12); }
   /* Objective sets and profiles */
   .co-code { display: inline-block; padding: 2px 8px; border-radius: 4px; background: var(--text); color: var(--panel);
              font-size: 12px; font-weight: 800; letter-spacing: .06em; }
