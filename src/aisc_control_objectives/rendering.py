@@ -2,7 +2,7 @@
 
 Server-rendered on purpose: each page ships with everything already in it, so
 the browser needs no API round-trip and the service stays the single source of
-truth. Autoescaping is on — objective text and card text are data, never markup.
+truth. Autoescaping is on: objective text and card text are data, never markup.
 
 The pages carry the qualification app's design tokens verbatim (the Luxembourg
 AI Factory palette in apps/qualification/src/app/globals.css) so the modules
@@ -218,7 +218,7 @@ def render_project_page(
     )
 
 
-# ── objective sets and profiles (2026-10-01) ───────────────────────────────────
+# Objective sets and profiles
 
 
 def _library_context(library) -> dict:

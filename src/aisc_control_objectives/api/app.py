@@ -1,4 +1,4 @@
-"""The service — app factory.
+"""The app factory: pages, the JSON API and the access gate.
 
 Two things to look at, and one project at a time:
 
@@ -6,12 +6,12 @@ Two things to look at, and one project at a time:
     /objectives                     the control objectives, as a reference
     /p/{project}                    the way in, inside one platform project
     /p/{project}/projects           its assessments, one per AI card version
-    /p/{project}/projects/{id}      the AI Card · rank its risks · map · tiers
+    /p/{project}/projects/{id}      one assessment: risk register, matrix, key objectives
+    /p/{project}/sets, /profiles    the project's own objective sets and profiles
 
-    /p/{project}/api/projects[/{id}[/map|/ratings|/key]]  the JSON API, inside the project too
+    /p/{project}/api/...            the JSON API, inside the project too
 
-Each project's assessments are in that project's own database (isolation
-2026-09-25): the gate opens the database of the project in the path, after
+Each project's assessments are in that project's own database: the gate opens the database of the project in the path, after
 deciding the caller may be there, and every handler works in that database
 only. An assessment of another project is not there, so it is a 404.
 Everything is persisted, so a restart loses nothing.
@@ -154,12 +154,12 @@ def create_app(
     # before CORS so that CORS stays the outermost middleware and a refusal
     # still carries its headers. Without an engine there is nothing to read
     # the membership from, and the service runs open: that is how the domain
-    # tests build it, and why server.build_app always passes one (pinned in
-    # tests/test_api_auth.py).
+    # tests build it, and why server.build_app always passes one
+    # (tests/test_api_auth.py checks this).
     if engine is not None:
         app.add_middleware(ProjectAccess, engine=engine, databases=databases)
 
-    # The witnessed request (X-AISC-Request-Id) this request's ledger events cite (phase 6).
+    # The witnessed request (X-AISC-Request-Id) this request's ledger events cite.
     app.add_middleware(ledger.RequestId)
 
     app.add_middleware(
@@ -170,7 +170,7 @@ def create_app(
     )
     # A route rather than a StaticFiles mount: Caddy strips /control-objectives,
     # and a mount under a root_path only finds files when the prefix is still
-    # on the path, so behind the proxy the logo 404'd and its alt text showed.
+    # on the path, so behind the proxy a mount would answer 404.
     @app.get("/static/{name}", include_in_schema=False)
     def static(name: str) -> FileResponse:
         path = STATIC / name
@@ -181,7 +181,7 @@ def create_app(
     if databases is not None:
         @app.exception_handler(DBAPIError)
         async def database_error(request: Request, exc: DBAPIError):
-            """A project database dropped under a running service (I2.5): forget
+            """A project database dropped under a running service: forget
             its engine, and the project is gone, 404. Anything else is a 500."""
             opened = getattr(request.state, "opened", None)
             if opened is not None and projectdb.is_missing_database(exc):
@@ -482,9 +482,9 @@ def _register_objective_api(app, objectives, config):
 
 
 def _register_project_api(app, projects_of, view_in):
-    """One assessed system: its graph, its ranking, its mapping, its tiers.
+    """One assessed system: its graph, its ratings, its mapping, its priorities.
 
-    Under the project, as the pages are (I5.2): the gate has decided on
+    Under the project, as the pages are: the gate has decided on
     `{project}` and opened its database, and an id is looked for there only.
     """
 
@@ -572,8 +572,8 @@ def _register_project_api(app, projects_of, view_in):
     def rate_impact(
         project: str, project_id: str, request: Request, ratings: dict[str, int] = Body(...)
     ) -> dict:
-        """The route from before the matrix, kept for its callers: {risk id: 1-5} sets the impact
-        (what a risk's severity was) and leaves the likelihood as it is."""
+        """{risk id: 1-5} sets the impact and leaves the likelihood as it is. Kept for clients
+        that rate a single severity per risk."""
         projects = projects_of(request)
         _latest_or_409(projects, view_in(request, project_id))
         try:

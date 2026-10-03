@@ -14,8 +14,8 @@
   <div class="error">{{ read_only }}. This assessment is kept as it was: open the latest version's assessment from the projects page to rank and map.</div>
   {%- endif %}
 
-  {# ── the objective profile it runs on ──────────────────────────────────
-     Everything below sees only this profile's objectives. #}
+  {# The objective profile it runs on. Everything below sees only this
+     profile's objectives. #}
   <div class="co-profile">
     <span class="co-profile-k">Objective profile</span>
     <b class="co-profile-name">{{ profile['label'] }}</b>
@@ -49,7 +49,7 @@
      the matrix. Save a card version whose AIRO graph has them, then start its assessment.</div>
   {%- else %}
 
-  {# ── 1. the risk register: one row per risk, rated impact x likelihood ── #}
+  {# 1. The risk register: one row per risk, rated impact x likelihood. #}
   <details class="qf-section co-fold" open id="register">
     <summary class="co-macro-head">
       <span class="co-macro-id">1</span>
@@ -113,7 +113,7 @@
     {%- endif %}
   </details>
 
-  {# ── 2. the matrix: one row per risk, its control objectives as chips ──
+  {# 2. The matrix: one row per risk, its control objectives as chips.
      Blue is a key objective, a yellow ring an AI suggestion; a click
      opens its name, score, source and key tick. What is in the matrix goes
      forward to step 4. #}

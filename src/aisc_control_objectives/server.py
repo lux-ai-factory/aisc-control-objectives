@@ -1,4 +1,4 @@
-"""Composition root + runnable entrypoint.
+"""Composition root and entry point (`python -m aisc_control_objectives.server`).
 
 Loads the control objectives (bundled CSV, no network and no database) and
 serves them, and the projects assessed against them. The model maps a system's
@@ -14,7 +14,7 @@ Env:
   CONTROL_OBJECTIVES_FILE   override the bundled objectives CSV
   BAF_LLM_PROVIDER / BAF_LLM_MODEL        which model, BAF's names
   BAF_LLM_BASE_URL         endpoint for the ollama / compatible providers
-  MISTRAL_API_KEY / OPENAI_API_KEY / …    the provider's own key
+  MISTRAL_API_KEY / OPENAI_API_KEY / ...  the provider's own key
   PLATFORM_URL / PLATFORM_INTERNAL_TOKEN  where to ask for a project's own model choice
                                           (both set: each map uses the model its project
                                           chose; no choice: the model above)
@@ -60,9 +60,9 @@ def _load_dotenv() -> None:
     """Minimal .env loader (no dependency). Existing env vars win.
 
     Accepts `KEY=value`, an optional `export ` prefix, quoted values, and a
-    trailing `# comment` on an unquoted value. Anything else is not supported:
-    a key that looks set and is not surfaces only as an opaque provider error
-    on a card page, so the accepted shapes are pinned by tests.
+    trailing `# comment` on an unquoted value. Nothing else is parsed: a key
+    that looks set but is not shows up only as an opaque provider error later,
+    so tests pin the accepted shapes.
     """
     env_path = _repo_root() / ".env"
     if not env_path.is_file():
@@ -86,9 +86,8 @@ def _load_dotenv() -> None:
 def _build_completer(config: RunConfig):
     """The one way to a model: a BAF wrapper, per aisc_control_objectives.llm.
 
-    A provider that is missing its key raises here, at startup, where the
-    message says which variable; the alternative is every upload failing with
-    a provider error on the card page.
+    A provider that is missing its key raises here, at startup, with a message
+    that names the variable, rather than on every mapping run later.
     """
     from aisc_control_objectives.llm import build_llm, completer
 

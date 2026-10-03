@@ -1,9 +1,8 @@
 """which control objectives the project takes forward from an assessment
 
-Evidence links plan 2026-09-30, step A: one row per assessment, the ticked
-objective ids. The readers (report_ro, dashboard_ro) read it as they read the
-other tables. The platform's step 4 page reads it as report_ro too (D4), so
-nothing else is granted. A reader that does not exist (a scratch database) is
+One row per assessment, the objective ids it takes forward to step 4. The
+readers (report_ro, dashboard_ro) read it as they read the other tables. The
+platform's step 4 page reads it as report_ro too, so nothing else is granted. A reader that does not exist (a scratch database) is
 skipped.
 
 Revision ID: 20261001000000_selection

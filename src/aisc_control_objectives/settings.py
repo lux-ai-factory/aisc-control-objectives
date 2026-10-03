@@ -1,6 +1,6 @@
 """Where the databases are.
 
-Two variables (isolation 2026-09-25, 01-specs.md I5.1, S-D6):
+Two variables:
 
 - `DATABASE_URL` is the `platform` database, read for membership only
   (`core.project`, `core.project_member`).

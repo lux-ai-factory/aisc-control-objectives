@@ -1,8 +1,8 @@
 """the risk and control matrix: impact x likelihood, key objectives, scope is the matrix
 
-2026-10-01: a risk is rated impact x likelihood, each 1-5; its severity becomes its impact and its
-likelihood starts unrated. The tiers give way to key objectives, which the assessor can set
-(objective_key; no row is the default). The separate selection gives way to the matrix: what an
+A risk is rated impact x likelihood, each 1-5; its severity becomes its impact and its
+likelihood starts unrated. Key objectives replace the tiers, and the assessor can set them
+(objective_key; no row is the default). The matrix replaces the separate selection: what an
 assessment takes forward to step 4 is what its matrix holds, so every selection is rewritten to its
 mapped objectives in catalogue order (the built-in set by number, then the project's sets by code
 and number). The readers read objective_key as they read the rest; a reader that does not exist

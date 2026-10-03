@@ -1,4 +1,4 @@
-"""Which control objectives matter most (risk and control matrix, 2026-10-01).
+"""Which control objectives matter most: the scores behind the risk and control matrix.
 
 What orders the objectives is the system's **own risks**, the AIRO chains its AI Card carries,
 rated by the assessor the way risk teams rate risks:

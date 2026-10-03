@@ -1,6 +1,6 @@
 """an optional comment on a risk's severity
 
-2026-10-01: the assessor can say why a risk is rated as it is. Empty for every risk there is.
+The assessor can say why a risk is rated as it is. Empty for every existing risk.
 
 Revision ID: 20261001120000_severity_comment
 Revises: 20261001110000_mapping_source

@@ -3,8 +3,8 @@
 Signing in happens at the gateway and has already happened by the time a
 request arrives. This answers the other question. A project belongs to the
 people in it, the platform writes that down in `core.project_member`, and this
-service reads it straight from the `platform` database (the one shared read it
-keeps, I1.4), so there is no second copy to disagree and no HTTP call to fail.
+service reads it straight from the `platform` database (the only read it makes
+there), so there is no second copy to disagree and no HTTP call to fail.
 Each project's assessments are in that project's own database, which is opened
 only after this has said yes (projectdb.ProjectDatabases.open).
 
@@ -168,9 +168,9 @@ class ProjectAccess(BaseHTTPMiddleware):
 
     It reads the path the router will match (`get_route_path`: the server's
     decoded path with the app's root path taken off, exactly as Starlette's
-    router does), not the raw URL. Reading the raw URL is what let
-    `/control-objectives/p/...` reach the /p/ pages ungated: the router took
-    the root path off and the gate did not. And the default is closed: a
+    router does), not the raw URL. Gating on the raw URL would let
+    `/control-objectives/p/...` reach the /p/ pages ungated, because the router
+    takes the root path off and the gate would not. The default is closed: a
     path that is not public needs a verified caller whatever it looks like,
     so a spelling the gate does not recognise is refused rather than let by.
 
@@ -180,7 +180,7 @@ class ProjectAccess(BaseHTTPMiddleware):
     it opened is left on `request.state.opened` for the handlers, so an
     assessment is looked for only in the database of the project in the path.
     Without it (the single-database domain tests) the gate decides membership
-    only, as before.
+    only.
     """
 
     def __init__(self, app, engine, databases=None):

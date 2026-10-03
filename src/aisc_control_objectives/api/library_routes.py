@@ -1,4 +1,4 @@
-"""The Sets and Profiles pages and their API (2026-10-01).
+"""The Sets and Profiles pages and their API.
 
 Pages post forms and redirect (a refusal is a 400 naming what is wrong); the API speaks JSON (422
 for a refusal, 404 for a set or profile the project does not have). Writing needs an editor, as
@@ -29,7 +29,7 @@ def _who(request: Request) -> str:
 
 
 def _who_sub(request: Request) -> str:
-    """The author's Keycloak subject, kept beside the name shown (ledger phase 6: authors by subject)."""
+    """The author's Keycloak subject, kept beside the name shown."""
     caller = getattr(request.state, "caller", None)
     return (getattr(caller, "subject", None) or "") if caller else ""
 
@@ -64,7 +64,7 @@ def register_library(app, projects_of, root_path: str) -> None:
         form = await request.form()
         return {name: str(form.get(name) or "") for name in FIELDS}
 
-    # ── pages ──────────────────────────────────────────────────────────────
+    # Pages
 
     @app.get("/p/{project}/sets", include_in_schema=False, response_class=HTMLResponse)
     def sets_page(project: str, request: Request) -> HTMLResponse:
@@ -195,7 +195,7 @@ def register_library(app, projects_of, root_path: str) -> None:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return page(project, f"/profiles/{profile_id}")
 
-    # ── API ────────────────────────────────────────────────────────────────
+    # API
 
     def refused(exc: Exception) -> HTTPException:
         if isinstance(exc, LookupError):

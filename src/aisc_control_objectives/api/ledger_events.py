@@ -1,7 +1,7 @@
-"""What step 2's ledger events say, worked out from what a write changed (ledger phase 6).
+"""What step 2's ledger events say, worked out from what a write changed.
 
 The handlers call `ledger.emit` themselves, in the write's transaction (api/app.py, library_routes.py);
-these helpers only shape the details, and write the AI run's own events (`_mapping_outcome`).
+these helpers only shape the details, and write the AI run's own events (`mapping_outcome`).
 """
 from __future__ import annotations
 
@@ -10,13 +10,13 @@ from aisc_control_objectives import ledger
 
 def risk_item(assessment: str, risk: str) -> str:
     """A risk's item in the ledger: risk ids repeat across a project's card versions, so the assessment's id
-    goes first (phase 6 review M3). The rating, the comment and the mapping are three items of their own."""
+    goes first. The rating, the comment and the mapping are three items of their own."""
     return f"{assessment}/risks/{risk}"
 
 
 def objective_item(set_id: str, objective_id: str) -> str:
     """An objective's item: a set made again with a deleted one's code numbers its objectives again, so the
-    set's id goes first (phase 6 review m9)."""
+    set's id goes first."""
     return f"{set_id}/objectives/{objective_id}"
 
 
@@ -61,12 +61,12 @@ def mapping_outcome(session, project_id: str, outcome: dict) -> None:
     run = outcome.get("run")
     if run is None or outcome.get("error"):
         # a code, never the error's text: it can quote a key in a URL or a card's personal data, and
-        # immudb keeps what it is given for ever (phase 5 review M5)
+        # immudb keeps what it is given for ever
         code = outcome.get("error") if run is None and outcome.get("error") in FAILURES else "mapping_error"
         ledger.emit(session, "ai.mapping.failed", item_type="assessment", item_id=project_id, run_id=run_id,
                     model=model, details={"error": code, "attempts": run.attempts if run is not None else 0})
     else:
-        # {"risks": ...}: never empty, so a card with no mapped risk is still content (review m1)
+        # {"risks": ...}: never empty, so a card with no mapped risk is still content
         ledger.emit(session, "ai.mapping.completed", item_type="assessment", item_id=project_id, run_id=run_id,
                     model=model, details={"attempts": run.attempts},
                     content={"risks": {rid: [o.objective_id for o in m.objectives] for rid, m in run.mappings.items()}})

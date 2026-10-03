@@ -1,6 +1,6 @@
 """objective sets and objective profiles
 
-2026-10-01: a project writes its own objective sets (a code it chooses, objectives numbered in it,
+A project writes its own objective sets (a code it chooses, objectives numbered in it,
 published as versions that never change) and assembles objective profiles from the built-in set and
 those versions; an assessment pins a profile version. An assessment with none is on the built-in
 Full AI Act profile, so every existing one keeps working as it is. The readers (report_ro,

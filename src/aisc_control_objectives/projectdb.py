@@ -1,7 +1,7 @@
 """One database per project, and the only way into one.
 
 Every project's assessments live in that project's own Postgres database,
-`project_<pid without hyphens>` (isolation 2026-09-25, 01-specs.md I1.1, I5.1).
+`project_<pid without hyphens>`.
 The `platform` database is read for one thing only: who is in which project
 (`core.project`, `core.project_member`).
 
@@ -13,8 +13,7 @@ that calls `create_engine(`:
   `MAX_OPEN_PROJECTS` of them held open, the least recently used closed first.
 
 `ProjectDatabases.open(project, caller, write)` is the door. It decides
-membership first, exactly as the gate always has (`access.decide`, an admin as
-owner), resolves a slug to its pid, and only then builds a database name and
+membership first (`access.decide`, an admin counting as owner), resolves a slug to its pid, and only then builds a database name and
 connects. A stranger, a viewer's write, a project that does not exist or a
 membership that cannot be read never reaches a project database. The first
 open of a database in this process migrates it (one migration however many
@@ -39,14 +38,14 @@ from sqlalchemy.exc import SQLAlchemyError
 if TYPE_CHECKING:  # access imports aisc_identity, which the migrate one-shot does not have
     from aisc_control_objectives.access import Access, Verdict
 
-#: A platform project's pid, the only thing that may become part of a database name (I1.8).
+#: A platform project's pid, the only thing that may become part of a database name.
 PID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
 
 #: /app in the image, apps/control-objectives in a checkout: where alembic lives.
 APP_ROOT = Path(__file__).resolve().parents[2]
 ALEMBIC_INI, ALEMBIC_DIR = APP_ROOT / "alembic.ini", APP_ROOT / "alembic"
 
-#: Project databases held open at once (I17.1).
+#: Project databases held open at once.
 MAX_OPEN_PROJECTS = 20
 
 
@@ -63,7 +62,7 @@ def make_engine(url: str, **kwargs) -> Engine:
 
 
 def pooled_engine(url: str) -> Engine:
-    """An engine that holds at most two connections (I17.1)."""
+    """An engine that holds at most two connections."""
     return make_engine(url, pool_size=2, max_overflow=0, pool_pre_ping=True, pool_timeout=30)
 
 
@@ -93,7 +92,7 @@ def _orig(exc: BaseException) -> BaseException:
 
 
 def is_missing_database(exc: BaseException) -> bool:
-    """Whether an error says the database does not exist (it was dropped, I2.5)."""
+    """Whether an error says the database does not exist (for example, it was dropped)."""
     orig = _orig(exc)
     if getattr(orig, "sqlstate", None) == "3D000":
         return True
@@ -109,7 +108,7 @@ def may_not_connect(exc: BaseException) -> bool:
 
 
 #: One platform pool per URL in a process, whichever ProjectDatabases asks: the
-#: budget is two connections to `platform` per process (I17.1), not per app built.
+#: budget is two connections to `platform` per process, not per app built.
 _PLATFORM_ENGINES: dict[str, Engine] = {}
 _PLATFORM_LOCK = threading.Lock()
 

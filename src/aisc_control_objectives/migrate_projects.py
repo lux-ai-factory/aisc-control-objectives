@@ -1,4 +1,4 @@
-"""Migrate every project database this service may enter (01-specs.md I5.5).
+"""Migrate every project database this service may enter.
 
 `python -m aisc_control_objectives.migrate_projects` (the
 control-objectives-migrate one-shot): reads the projects from `platform`
@@ -13,7 +13,7 @@ and brings it to the head revision.
 Exit status: 0 when every database it could enter is at head, 2 when any
 failed permanently, 1 when the platform could not be read (the compose loop
 retries 1 and stops on 2). It prints database names and error codes only,
-never a URL or a statement (I18.7). It does not import the access module: the
+never a URL or a statement. It does not import the access module: the
 one-shot has no identity package on its path.
 """
 

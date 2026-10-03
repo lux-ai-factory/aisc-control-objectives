@@ -27,7 +27,7 @@ AssessmentMode = Literal["Control", "Test", "Control + Test"]
 Regime = Literal["ai_act", "gdpr", "conditional", "voluntary", "other"]
 
 #: The built-in AI Act set's code: its objectives are O1 ... O50. A set a user makes has a code of
-#: 2 to 6 capital letters (2026-10-01), so no id of theirs can be read as a built-in one.
+#: 2 to 6 capital letters, so no id of theirs can be read as a built-in one.
 BUILTIN_CODE = "O"
 
 #: A CONDITIONAL note must name its condition in words this list knows. A note
@@ -42,8 +42,8 @@ class ControlObjective(BaseModel):
     #: are called out on the pages; "Paired" only explains a Control + Test row.
     NOTE_TAGS: ClassVar[tuple[str, ...]] = ("GAP", "CONDITIONAL", "VOLUNTARY", "Paired")
 
-    #: The set's code and the objective's number in it: "O1" ... "O50" in the built-in set (2026-10-01;
-    #: the R1.1 ids are in objective_id_renames.csv), "BNK3" in a set a user made.
+    #: The set's code and the objective's number in it: "O1" ... "O50" in the built-in set, "BNK3" in
+    #: a set a user made. The earlier ids (R1.1 ...) map to these in data/objective_id_renames.csv.
     id: str = Field(pattern=r"^(O|[A-Z]{2,6})[1-9]\d*$")
     macro_requirement: str = Field(pattern=r"^R\d+\s+\S")
     legal_basis: str = Field(min_length=1)

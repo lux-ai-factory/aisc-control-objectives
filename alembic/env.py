@@ -11,7 +11,7 @@ else:
   `python -m aisc_control_objectives.migrate_projects` for every one);
 - by hand, `alembic -x url=postgresql+psycopg://.../project_<hex> upgrade head`.
   There is no default URL, and the `platform` database is refused: nothing of
-  this service lives there any more.
+  this service lives there.
 
 The version table lives in the schema, and the search path is the schema alone,
 so an unqualified name never resolves anywhere else. A transaction-scoped

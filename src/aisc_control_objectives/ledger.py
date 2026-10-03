@@ -1,11 +1,12 @@
-"""This service's ledger events (docs/superpowers/ledger-2026-10-02/02-spec.md 6.4, 6.5; phase 6).
+"""This service's ledger events.
 
-An event is written with the project database's `ledger.emit(jsonb)` inside the SAME transaction as the
+An event is written with the project database's `ledger.emit(jsonb)` inside the same transaction as the
 change it describes (the repository's or the library's `sessionmaker.begin()` block), so a rollback
-leaves no event and a committed change always has one (R2.4). The service never names who acted: it
+leaves no event and a committed change always has one. The service never names who acted: it
 cites the request the gateway witnessed (`X-AISC-Request-Id`, kept per request by `RequestId`), and the
 platform's relay takes the person from that record. It sends plain content; the platform computes the
-keyed digests (N4). Nothing is written while LEDGER_MODE is off (the default).
+keyed digests. Nothing is written while LEDGER_MODE is off (the default); `record` and `enforce` turn
+it on.
 
 An AI mapping happens inside the request that asks for it. Its request (`ai.mapping.requested`) is written
 first, in a transaction of its own, before the first model call; the run's own events (each `ai.llm_call`,
@@ -89,7 +90,7 @@ def emit(session, action: str, **fields) -> str | None:
 
 class Calls:
     """The model calls of one AI mapping, for `ai.llm_call` events (written later, in the save's transaction).
-    Each call names the risk it was for and its round on that risk (phase 6 review m8)."""
+    Each call names the risk it was for and its round on that risk."""
 
     def __init__(self):
         self.calls: list[dict] = []

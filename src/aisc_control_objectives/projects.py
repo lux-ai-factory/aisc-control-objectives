@@ -1,20 +1,20 @@
-"""A project: one system, from its AI Card to its tiers.
+"""An assessment: one AI card version, from its card to its scores and key objectives.
 
-    start the assessment ────► create()          the latest version's card, stored as served
+    start the assessment ────► create()          the latest version's card, stored as served;
              │                                   its risks become rows
              ▼
-    the assessor rates ─────► rate()             1-5 per risk
+    the assessor rates ─────► rate()             impact and likelihood, 1-5 each, per risk
              │
              ▼
     AGENTIC  map_risks() ───► map_risks_of()     which objectives mitigate each risk
-             │
+             │                map_by_hand()      or a person's mapping of one risk
              ▼
-    view()                                       tiers, computed, never stored
+    view()                                       scores and default key objectives, computed, never stored
 
-The whole catalogue is the register; the risks decide the order. Everything
-derivable is computed in `view()` rather than written down, so a changed rating
-cannot leave a stale tier behind. What is written down is what cannot be
-recomputed: the uploaded bytes, the ratings, and what the mapping cost.
+The risks decide the order of the catalogue. Everything derivable is computed in
+`view()` rather than written down, so a changed rating cannot leave a stale score
+behind. What is written down is what cannot be recomputed: the uploaded bytes, the
+ratings, the mapping, the assessor's key choices, and what the mapping cost.
 """
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ class ModelUnavailable(RuntimeError):
 
 @dataclass
 class ProjectView:
-    """A project with its tiers, for a page or an API."""
+    """An assessment with its priorities, for a page or an API."""
 
     record: ProjectRecord
     priorities: list[Priority]
@@ -103,8 +103,6 @@ class Projects:
         bound._repository = repository
         return bound
 
-    # ── the flow ──────────────────────────────────────────────────────────
-
     def create(
         self, project: str, name: str, jsonld: str, raw: object, system_id: str, record=None
     ) -> ProjectView:
@@ -120,11 +118,11 @@ class Projects:
             project=project, name=name or ontology.system_name,
             ontology=ontology, jsonld=jsonld, system_id=system_id, record=record,
         )
-        # (a new card version's assessment starts on the profile the previous one ran on: the repository
-        # sets it in the start's own transaction)
+        # A new card version's assessment starts on the profile the previous one ran on: the
+        # repository sets it in the same transaction.
         return self.view(record.id)
 
-    # ── the objective profile ─────────────────────────────────────────────
+    # The objective profile
 
     @property
     def library(self) -> Library:
@@ -192,11 +190,11 @@ class Projects:
         """The one agentic step: which objectives mitigate each risk.
 
         The model is the one chosen by the project whose database the
-        assessment is in (I5.6). The caller's ledger events (ledger phase 6):
+        assessment is in. The caller's ledger events:
         - `on_start(session, run_id)` records the request, in a transaction of its own, before the first
-          model call: a long run must not push it past the relay's window (review M1);
+          model call, so a long run cannot push it past the relay's window;
         - `on_save(session, outcome)` records the run (its id, outcome, model and each model call) inside the
-          save's transaction. A run that raises, or a model that can't be had (review m2), is recorded in a
+          save's transaction. A run that raises, or a model that cannot be had, is recorded in a
           transaction of its own, then raised again."""
         from aisc_control_objectives import ledger
 
@@ -228,7 +226,7 @@ class Projects:
 
     def _record_failure(self, on_save, outcome: dict) -> None:
         """A run that ended before its save, recorded on its own. A failure to record it is logged and
-        never hides the run's own error, which the caller raises next (review m11)."""
+        never hides the run's own error, which the caller raises next."""
         if on_save is None:
             return
         try:
@@ -237,10 +235,10 @@ class Projects:
             _log.exception("the failed run %s could not be recorded", outcome["run_id"])
 
     def map_by_hand(self, project_id: str, risk_id: str, objective_ids: list[str], on_save=None) -> ProjectView:
-        """A person's mapping of one risk (replaces that risk's mapping, 2026-10-01).
+        """A person's mapping of one risk, replacing that risk's mapping.
 
         An objective the risk already had keeps its row as it was (the AI's quote and source);
-        one added is the person's. The selection follows the change as after a mapping (D1, D2).
+        one added is the person's. The selection follows the change, as after an AI mapping.
         What it replaces is kept in mapping_archive; `on_save` gets the objectives before and after."""
         record = self._repository.get(project_id)
         if risk_id not in {risk.id for risk in record.ontology.risks}:
@@ -268,13 +266,13 @@ class Projects:
 
     def _scope(self, record: ProjectRecord, run: MappingRun) -> list[str]:
         """What the assessment takes forward to step 4: what its matrix holds, in catalogue order
-        (the matrix is the selection, 2026-10-01)."""
+        (the matrix is the selection)."""
         return self._in_order(self._catalogue_for(record), _mapped_ids(run))
 
     def delete(self, project_id: str, record=None) -> None:
         self._repository.delete(project_id, record=record)
 
-    # ── reading ───────────────────────────────────────────────────────────
+    # Reading
 
     def view(self, project_id: str) -> ProjectView | None:
         record = self._repository.get(project_id)
@@ -285,8 +283,8 @@ class Projects:
         return [self._derive(record) for record in self._repository.list()]
 
     def _derive(self, record: ProjectRecord) -> ProjectView:
-        """Tiers, computed from what is stored. Never written back: a changed
-        rating must not leave a stale tier."""
+        """Priorities, computed from what is stored. Never written back: a changed
+        rating must not leave a stale score."""
         catalogue = self._catalogue_for(record)
         priorities = prioritise(
             catalogue,

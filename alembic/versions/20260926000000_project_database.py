@@ -1,18 +1,18 @@
 """a project database: the assessment, its card, risks, mappings and runs
 
-The one revision of a project's own database (isolation 2026-09-25, 01-specs.md
-I5.4). It makes the final shape of the old chain (711cc0e45c33 to 7c3e5a9b1d24,
-which lived in the shared platform database) minus what named the platform
-project: the database is the project, so `project.project_id`, its index and
-its keys into the platform are gone (I1.7). `system_id`, the AI card version an
-assessment is of, references `project.system(pid)` of the same database ON
-DELETE CASCADE, one assessment per version (I1.6).
+The baseline revision of a project's own database. The assessment row has no
+column naming its platform project, because the database is the project.
+`system_id`, the AI card version an assessment is of, references
+`project.system(pid)` of the same database ON DELETE CASCADE, one assessment
+per version.
 
-Table, column, index and constraint names are the live ones, so the data move
-copies column by column. `project.system` is not made here: the platform's
-template 0006 makes it, and this role may read it and point at it. The readers
-(report_ro, dashboard_ro) get SELECT on the five tables from their owner, here
-(I2.6); nothing on alembic_version or the sequences.
+Table, column, index and constraint names match those the service used when
+its tables lived in the shared platform database (revisions 711cc0e45c33 to
+7c3e5a9b1d24), so data moved from there copies column by column.
+`project.system` is not made here: the platform's template 0006 makes it, and
+this role may read it and point at it. The readers (report_ro, dashboard_ro)
+get SELECT on the five tables from their owner, here; nothing on
+alembic_version or the sequences.
 
 Revision ID: 20260926000000_project_database
 Revises:
@@ -107,7 +107,7 @@ def upgrade() -> None:
     op.create_index(
         op.f("ix_mapped_objective_risk_row_id"), "mapped_objective", ["risk_row_id"], unique=False
     )
-    # I2.6: the two readers read the five tables, granted by their owner. A
+    # The two readers read the five tables, granted by their owner. A
     # reader role that does not exist (a scratch database) is skipped.
     tables = ", ".join(f"control_objectives.{t}" for t in READER_TABLES)
     op.execute(f"""

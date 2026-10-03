@@ -1,10 +1,9 @@
-"""the ledger (phase 6): mapping changes keep what they replace; authors kept by subject
+"""the ledger: mapping changes keep what they replace; authors kept by subject
 
 mapping_archive keeps the run and every mapped row (an assessor's own ones too) that an AI run, a
 profile switch, a person's edit of a risk or the assessment's deletion replaces: append-only, refused
 UPDATE, DELETE and TRUNCATE. The table's owner (the role migrations run as) can still drop the trigger;
-the ledger's frozen copies are the check on that. Beside
-each author name (created_by, published_by), its Keycloak subject; the name stays what pages show.
+the ledger's frozen copies are the check on that. Beside each author name (created_by, published_by), its Keycloak subject; the name stays what pages show.
 
 Revision ID: 20261003000000_ledger_history
 Revises: 20261002100000_rcm

@@ -118,7 +118,7 @@ class Mapper(Protocol):
 
 
 class RiskMapper:
-    """The writer: asks the model which objectives mitigate one risk."""
+    """Asks the model which objectives mitigate one risk."""
 
     SKILL = "mapping-a-risk-to-control-objectives"
 

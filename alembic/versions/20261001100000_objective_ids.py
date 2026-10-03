@@ -1,6 +1,6 @@
 """objective ids O1 ... O50
 
-2026-10-01: the objectives are numbered O1 ... O50 in catalogue order instead of R1.1 ... R11.4.
+The objectives are numbered O1 ... O50 in catalogue order instead of R1.1 ... R11.4.
 Every stored id is renamed by the table below (a copy of data/objective_id_renames.csv, kept here so
 a later edit of that file never changes what this revision did). A selection is rewritten in
 catalogue order; an id the table does not know (a stale one) is left as it is.

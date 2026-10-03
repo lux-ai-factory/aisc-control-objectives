@@ -38,7 +38,7 @@ class ProjectRecord:
 
     id: str
     #: The platform project this assessment belongs to: the project whose
-    #: database it was read from (the row itself names none, I1.7).
+    #: database it was read from (the row itself names none).
     project: str | None
     name: str
     #: Both read from the stored card, which is the authority on them.
@@ -57,8 +57,8 @@ class ProjectRecord:
     ontology: Ontology = field(default_factory=Ontology)
     severity: Severity = field(default_factory=Severity)
     mapping_run: MappingRun | None = None
-    #: The objectives ticked to take forward; None until anything (the mapping
-    #: or the assessor) has chosen, [] when everything was unticked.
+    #: The objectives taken forward (what the matrix holds); None until anything
+    #: was mapped, [] when the matrix is empty.
     selected: list[str] | None = None
     #: The objective profile version it runs on; None is the built-in Full AI Act.
     profile_version_id: str | None = None
@@ -137,14 +137,13 @@ class ProjectRepository:
                     if not t.info.get("external")],
         )
 
-    # ── writing ───────────────────────────────────────────────────────────
-    # Every write takes `record`: the caller's ledger events, run inside the write's own transaction
-    # with what changed (ledger phase 6, R2.4). None writes none.
+    # Writing. Every write takes `record`: the caller's ledger events, run inside the write's own
+    # transaction with what changed. None writes none.
 
     @staticmethod
     def _archive(session: Session, project: tables.Project, reason: str, risks=None,
                  run_id: str | None = None) -> int:
-        """Keep the run and the mapped rows a change is about to replace (S1); the number of rows kept."""
+        """Keep the run and the mapped rows a change is about to replace; the number of rows kept."""
         rows = [{"risk": r.risk_id, "objective": m.objective_id, "quote": m.quote, "rationale": m.rationale,
                  "source": m.source}
                 for r in (risks if risks is not None else project.risks) for m in r.mapped]
@@ -164,8 +163,8 @@ class ProjectRepository:
         """`system_id` is the AI card version (a row of this database's
         project.system) the assessment is of: one assessment per version, which
         the database holds (UNIQUE system_id, and the key refuses a version it
-        does not have). `project` is accepted so callers read as before, and not
-        stored: the database is the project (I1.7)."""
+        does not have). `project` is accepted but not stored: the database is
+        the project."""
         with self._sessions.begin() as session:
             row = tables.Project(
                 id=uuid.uuid4().hex[:12],
@@ -174,7 +173,7 @@ class ProjectRepository:
                 objectives_digest=self._objectives_digest,
             )
             # a new card version's assessment starts on the profile the previous one ran on, in this same
-            # transaction, so its start event can say so (phase 6 review M2)
+            # transaction, so its start event can say so
             previous = session.execute(_PREVIOUS_ASSESSMENT, {"sid": system_id}).scalar()
             if previous is not None:
                 row.profile_version_id = session.get(tables.Project, previous).profile_version_id
@@ -213,7 +212,7 @@ class ProjectRepository:
         """Record the assessor's key choices (objective id -> key), replacing earlier ones for those ids."""
         with self._sessions.begin() as session:
             # the whole key map before and after, read in this transaction, so one save's after is the
-            # next one's before whatever ids each names (phase 6 review M3)
+            # next one's before whatever ids each names
             before = self._keys_of(session, project_id)
             for objective_id, key in keys.items():
                 found = session.get(tables.ObjectiveKey, (project_id, objective_id))
@@ -251,7 +250,7 @@ class ProjectRepository:
         selected: list[str] | None = None, record=None, run_id: str | None = None,
     ) -> None:
         """`selected`, when given, replaces the selection in the same transaction. The run and the
-        mappings it replaces, a person's own ones too, are kept in mapping_archive first (S1)."""
+        mappings it replaces, a person's own ones too, are kept in mapping_archive first."""
         with self._sessions.begin() as session:
             project = session.get(tables.Project, project_id)
             kept = self._archive(session, project, "ai_run", run_id=run_id)
@@ -321,7 +320,7 @@ class ProjectRepository:
                     record=None) -> list[str]:
         """Put the assessment on a profile version, and drop every mapping and selected objective
         not in `keep` (the new profile's objectives). Returns the objectives dropped; the mappings
-        dropped are kept in mapping_archive (S1)."""
+        dropped are kept in mapping_archive."""
         with self._sessions.begin() as session:
             project = session.get(tables.Project, project_id)
             version_before = project.profile_version_id
@@ -359,14 +358,14 @@ class ProjectRepository:
                                    "mapped": [m.objective_id for m in r.mapped]} for r in project.risks],
                         "keys": self._keys_of(session, project_id),
                         "selected": None if project.selection is None else list(project.selection.objective_ids)}
-                # the mapping's rows (quote, rationale, source) and its run, kept as a change keeps them
-                # (phase 6 review m5); the archive has no key to the assessment, so it outlives it
+                # the mapping's rows (quote, rationale, source) and its run, kept as a change keeps them;
+                # the archive has no key to the assessment, so it outlives it
                 self._archive(session, project, "deleted")
                 session.delete(project)
                 if record is not None:
                     record(session, held)
 
-    # ── reading ───────────────────────────────────────────────────────────
+    # Reading
 
     def get(self, project_id: str) -> ProjectRecord | None:
         with self._sessions() as session:
@@ -417,7 +416,7 @@ class ProjectRepository:
                 .where(~tables.Risk.project_id.in_(select(tables.Project.id)))
             )
 
-    # ── translation ───────────────────────────────────────────────────────
+    # Translation between rows and domain models
 
     @staticmethod
     def _attach_card(

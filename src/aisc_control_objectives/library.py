@@ -1,4 +1,4 @@
-"""Objective sets and objective profiles (2026-10-01), in one project's database.
+"""Objective sets and objective profiles, in one project's database.
 
 Two levels, like the qualification app's question sets and questionnaires:
 
@@ -114,7 +114,7 @@ class Library:
         self._builtin = builtin
         self._titles = {macro.id: macro.title for macro in builtin.macro_requirements()}
 
-    # ── objectives ─────────────────────────────────────────────────────────
+    # Objectives
 
     @property
     def dimensions(self) -> dict[str, str]:
@@ -161,7 +161,7 @@ class Library:
             raise ValueError(f"{objective_id}: {exc}") from exc
         return clean
 
-    # ── sets ───────────────────────────────────────────────────────────────
+    # Sets
 
     def _latest_version(self, session: Session, set_id: str):
         return session.scalars(
@@ -209,9 +209,8 @@ class Library:
             raise LookupError(f"no set {set_id}")
         return row
 
-    # Each write takes `who_sub`, the author's Keycloak subject, kept beside the name shown (ledger
-    # phase 6: authors by subject), and `record`, the caller's ledger events, run inside the write's
-    # own transaction with what changed (R2.4).
+    # Each write takes `who_sub`, the author's Keycloak subject, kept beside the name shown, and
+    # `record`, the caller's ledger events, run inside the write's own transaction with what changed.
 
     def create_set(self, code: str, name: str, description: str, *, who: str, who_sub: str = "",
                    record=None) -> SetSummary:
@@ -356,7 +355,7 @@ class Library:
                 out[row.code] = latest.number
         return out
 
-    # ── profiles ───────────────────────────────────────────────────────────
+    # Profiles
 
     def _profile_versions(self, session: Session, profile_id: str) -> list:
         return session.scalars(
@@ -470,7 +469,7 @@ class Library:
         self._check_picks(picks)
         with self._sessions.begin() as session:
             # locked, and its last number read under the lock: two saves at once take turns, each its own
-            # number (phase 6 review m7)
+            # number
             row = session.get(tables.ObjectiveProfile, profile_id, with_for_update=True)
             last = session.scalar(select(func.max(tables.ObjectiveProfileVersion.number))
                                   .where(tables.ObjectiveProfileVersion.profile_id == profile_id))

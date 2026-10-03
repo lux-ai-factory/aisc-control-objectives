@@ -20,7 +20,7 @@ same bargain the filler takes, and it works on providers that have no
 structured-output mode at all.
 
 The provider table and the building itself live in `baf_llm.py`, a byte-for-byte
-copy of the card agent's module; this one keeps the environment-only API and the
+copy of the card agent's module; this one holds the environment-only API and the
 JSON helpers. A project's own model and key (the platform's "Models and API keys"
 page) reach the risk mapper through `baf_llm.config_for`, wired in `server.py`.
 """
@@ -34,7 +34,7 @@ from typing import Any, TypeVar
 from pydantic import BaseModel, ValidationError
 
 from aisc_control_objectives import baf_llm
-from aisc_control_objectives.baf_llm import (  # noqa: F401  re-exported: today's names keep working
+from aisc_control_objectives.baf_llm import (  # noqa: F401  re-exported for callers of this module
     DEFAULT_MODEL,
     DEFAULT_PROVIDER,
     OPTIONAL_KEY,
@@ -57,10 +57,9 @@ def json_object(text: str) -> dict:
 
     Models fence their JSON, introduce it, apologise after it, and sometimes
     close it twice. So this scans forward from each "{" and keeps the first
-    one that decodes as a complete object, ignoring whatever follows it: a
-    local model's very first answer here was `{"ok": true}}`, and taking
-    everything up to the LAST brace would have made that unparseable and
-    failed the run.
+    one that decodes as a complete object, ignoring whatever follows it.
+    Taking everything up to the last brace would make an answer such as
+    `{"ok": true}}` unparseable.
     """
     text = text or ""
     decoder = json.JSONDecoder()
@@ -103,7 +102,7 @@ def parse_into(text: str, output_format: type[T]) -> T:
         return output_format.model_validate(obj)
     except ValidationError:
         pass
-    # A field arrived as a JSON string ({"frames": "[...]"}) — decode each
+    # A field arrived as a JSON string ({"frames": "[...]"}): decode each
     # string-encoded value in place and retry.
     decoded = {key: _try_json(value) for key, value in obj.items()}
     try:

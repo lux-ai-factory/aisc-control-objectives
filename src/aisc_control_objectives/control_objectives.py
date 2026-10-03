@@ -44,7 +44,7 @@ class ControlObjectiveCatalogue:
 
     def __init__(self, objectives: Iterable[ControlObjective], digest: str = ""):
         #: Identity of the catalogue this came from. A project records it, so a
-        #: re-exported CSV cannot change an old assessment's tiers unnoticed.
+        #: re-exported CSV cannot change an old assessment's scores unnoticed.
         self.digest = digest
         self.objectives: list[ControlObjective] = sorted(
             objectives, key=lambda objective: objective.sort_key

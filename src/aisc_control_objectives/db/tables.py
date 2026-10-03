@@ -10,11 +10,11 @@ ideas worth copying from `KnowledgeGraph` are here too:
 - **It carries a digest**, its identity, so re-uploading the same graph is a
   no-op rather than a silent rebuild.
 
-What is *not* here: scores and tiers. They are a pure function of the
-catalogue, the ratings and the mapping, so storing them would only let them go
-stale. `objectives_digest` records which catalogue a
-project was assessed against, so a re-exported CSV cannot change an old
-assessment's tiers without the page being able to say so.
+What is *not* here: scores and default key objectives. They are a pure function
+of the catalogue, the ratings and the mapping, so storing them would only let
+them go stale. `objectives_digest` records which catalogue a project was
+assessed against, so a re-exported CSV cannot change an old assessment's scores
+without the page being able to say so.
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-#: Each project has a database of its own (isolation 2026-09-25). This service
+#: Each project has a database of its own. This service
 #: owns a schema in it, named after itself, and reads nothing outside that
 #: schema except `project.system`, the project's saved card versions, which the
 #: platform writes.
@@ -72,7 +72,7 @@ class Project(Base):
     """One system being assessed. The aggregate everything else hangs off.
 
     It has no column naming its platform project: the database it is in is the
-    project (I1.7). The table keeps its name (D6).
+    project.
     """
 
     __tablename__ = "project"
@@ -86,7 +86,7 @@ class Project(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, onupdate=_now
     )
-    #: The objective profile version this assessment runs on (2026-10-01); None is the built-in
+    #: The objective profile version this assessment runs on; None is the built-in
     #: Full AI Act profile, all fifty objectives.
     profile_version_id: Mapped[str | None] = mapped_column(
         String(32),
@@ -166,11 +166,12 @@ class Risk(Base):
     areas: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
     vair_terms: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
     provenance: Mapped[str] = mapped_column(Text, default="form")
-    #: The assessor's rating, impact x likelihood, each 1-5 (2026-10-01; impact was "severity"). The
-    #: irreplaceable part: a model did not produce it. Not the AIRO chain's `impact` text above.
+    #: The assessor's rating, impact x likelihood, each 1-5. The irreplaceable part: a model did
+    #: not produce it. Not the AIRO chain's `impact` text above.
     rating_impact: Mapped[int | None] = mapped_column(Integer, nullable=True)
     rating_likelihood: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    #: Why the assessor rated it so, optional (2026-10-01); "" when there is none.
+    #: Why the assessor rated it so, optional; "" when there is none. The column name is older
+    #: than the impact x likelihood rating and is kept because existing databases have it.
     severity_comment: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
 
     project: Mapped[Project] = relationship(back_populates="risks")
@@ -194,15 +195,15 @@ class MappedObjectiveRow(Base):
     objective_id: Mapped[str] = mapped_column(Text, nullable=False)
     quote: Mapped[str] = mapped_column(Text, default="")
     rationale: Mapped[str] = mapped_column(Text, default="")
-    #: Who mapped it: "ai" (the risk mapper) or "person" (2026-10-01).
+    #: Who mapped it: "ai" (the risk mapper) or "person".
     source: Mapped[str] = mapped_column(Text, nullable=False, default="ai", server_default="ai")
 
     risk: Mapped[Risk] = relationship(back_populates="mapped")
 
 
 class MappingRunRow(Base):
-    """How the second agentic workflow went. The mappings themselves are rows
-    on the risks; this is the record of the run that bought them."""
+    """How the last AI mapping run went. The mappings themselves are rows
+    on the risks; this is the record of the run that produced them."""
 
     __tablename__ = "mapping_run"
 
@@ -221,7 +222,7 @@ class MappingRunRow(Base):
 
 
 class MappingArchive(Base):
-    """What a mapping change would otherwise delete (ledger phase 6, S1): before an AI run replaces the
+    """What a mapping change would otherwise delete: before an AI run replaces the
     mappings, a profile switch drops some, or a person replaces a risk's, the run and every mapped row as
     they were (an assessor's own ones too) are kept here. Append-only; no key to the assessment, so a
     deleted assessment's history stays with the project's database."""
@@ -243,10 +244,10 @@ class MappingArchive(Base):
 
 
 class ObjectiveSelectionRow(Base):
-    """Which objectives the project takes forward from this assessment (evidence
-    links plan 2026-09-30, step A). Only these reach step 4, where tests and
-    controls are linked to them. No row: nothing chosen yet, not even by the
-    mapping; a row with no ids: the assessor unticked everything."""
+    """Which objectives the project takes forward from this assessment: every
+    objective its matrix holds, rewritten with each mapping change. Only these
+    reach step 4, where tests and controls are linked to them. No row: nothing
+    mapped yet; a row with no ids: the matrix is empty."""
 
     __tablename__ = "objective_selection"
 
@@ -262,7 +263,7 @@ class ObjectiveSelectionRow(Base):
     project: Mapped[Project] = relationship(back_populates="selection")
 
 
-# ── objective sets and profiles (2026-10-01) ───────────────────────────────────
+# Objective sets and profiles
 
 
 class _ObjectiveFields:
@@ -297,7 +298,7 @@ class ObjectiveSet(Base):
     next_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     created_by: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
-    #: the author's Keycloak subject (ledger phase 6: authors by subject; created_by keeps the name shown)
+    #: the author's Keycloak subject; created_by keeps the name shown
     created_by_sub: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
 
 
@@ -329,7 +330,7 @@ class ObjectiveSetVersion(Base):
     number: Mapped[int] = mapped_column(Integer, nullable=False)
     published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     published_by: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
-    #: the author's Keycloak subject (ledger phase 6: authors by subject; published_by keeps the name shown)
+    #: the author's Keycloak subject; published_by keeps the name shown
     published_by_sub: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
 
 
@@ -354,7 +355,7 @@ class ObjectiveProfile(Base):
     description: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     created_by: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
-    #: the author's Keycloak subject (ledger phase 6: authors by subject; created_by keeps the name shown)
+    #: the author's Keycloak subject; created_by keeps the name shown
     created_by_sub: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
 
 
@@ -369,7 +370,7 @@ class ObjectiveProfileVersion(Base):
     number: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     created_by: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
-    #: the author's Keycloak subject (ledger phase 6: authors by subject; created_by keeps the name shown)
+    #: the author's Keycloak subject; created_by keeps the name shown
     created_by_sub: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
 
 
@@ -392,7 +393,7 @@ class ObjectiveProfileVersionItem(Base):
 
 
 class ObjectiveKey(Base):
-    """The assessor's choice that an objective is, or is not, key (2026-10-01). No row: the default
+    """The assessor's choice that an objective is, or is not, key. No row: the default
     (the first seven driven by a High or Critical risk)."""
 
     __tablename__ = "objective_key"
