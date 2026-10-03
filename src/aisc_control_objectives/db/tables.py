@@ -220,6 +220,28 @@ class MappingRunRow(Base):
     project: Mapped[Project] = relationship(back_populates="mapping_run")
 
 
+class MappingArchive(Base):
+    """What a mapping change would otherwise delete (ledger phase 6, S1): before an AI run replaces the
+    mappings, a profile switch drops some, or a person replaces a risk's, the run and every mapped row as
+    they were (an assessor's own ones too) are kept here. Append-only; no key to the assessment, so a
+    deleted assessment's history stays with the project's database."""
+
+    __tablename__ = "mapping_archive"
+    __table_args__ = (CheckConstraint("reason IN ('ai_run', 'profile', 'by_hand')", name="ck_mapping_archive_reason"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    project_id: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    #: why: "ai_run" (a new AI mapping), "profile" (a profile switch), "by_hand" (a person's edit of a risk)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    #: the run row as it was (findings, stops, stop, attempts, error, model, ran_at), or null
+    run: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    #: every mapped row it replaces: risk, objective, quote, rationale, source
+    rows: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    #: the ledger run that replaced it (ai_run), when there is one
+    run_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    archived_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class ObjectiveSelectionRow(Base):
     """Which objectives the project takes forward from this assessment (evidence
     links plan 2026-09-30, step A). Only these reach step 4, where tests and
@@ -275,6 +297,8 @@ class ObjectiveSet(Base):
     next_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     created_by: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    #: the author's Keycloak subject (ledger phase 6: authors by subject; created_by keeps the name shown)
+    created_by_sub: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
 
 
 class ObjectiveDraft(_ObjectiveFields, Base):
@@ -305,6 +329,8 @@ class ObjectiveSetVersion(Base):
     number: Mapped[int] = mapped_column(Integer, nullable=False)
     published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     published_by: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    #: the author's Keycloak subject (ledger phase 6: authors by subject; published_by keeps the name shown)
+    published_by_sub: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
 
 
 class ObjectiveSetVersionItem(_ObjectiveFields, Base):
@@ -328,6 +354,8 @@ class ObjectiveProfile(Base):
     description: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     created_by: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    #: the author's Keycloak subject (ledger phase 6: authors by subject; created_by keeps the name shown)
+    created_by_sub: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
 
 
 class ObjectiveProfileVersion(Base):
@@ -341,6 +369,8 @@ class ObjectiveProfileVersion(Base):
     number: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     created_by: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    #: the author's Keycloak subject (ledger phase 6: authors by subject; created_by keeps the name shown)
+    created_by_sub: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
 
 
 class ObjectiveProfileVersionItem(Base):

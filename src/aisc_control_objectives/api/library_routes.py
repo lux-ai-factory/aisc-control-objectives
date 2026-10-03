@@ -12,6 +12,7 @@ from dataclasses import asdict
 from fastapi import Body, HTTPException, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
 
+from aisc_control_objectives import ledger
 from aisc_control_objectives.library import BUILTIN_CODE, FIELDS
 from aisc_control_objectives.rendering import (
     render_profile_page,
@@ -24,6 +25,12 @@ from aisc_control_objectives.rendering import (
 def _who(request: Request) -> str:
     caller = getattr(request.state, "caller", None)
     return (getattr(caller, "username", None) or getattr(caller, "subject", None) or "") if caller else ""
+
+
+def _who_sub(request: Request) -> str:
+    """The author's Keycloak subject, kept beside the name shown (ledger phase 6: authors by subject)."""
+    caller = getattr(request.state, "caller", None)
+    return (getattr(caller, "subject", None) or "") if caller else ""
 
 
 def _set_view(view) -> dict:
@@ -67,7 +74,9 @@ def register_library(app, projects_of, root_path: str) -> None:
         form = await request.form()
         try:
             made = library(request).create_set(str(form.get("code") or ""), str(form.get("name") or ""),
-                                               str(form.get("description") or ""), who=_who(request))
+                                               str(form.get("description") or ""), who=_who(request), who_sub=_who_sub(request), record=lambda s, c: ledger.emit(
+                s, "objective_set.created", item_type="objective_set", item_id=c["id"], details={"code": c["code"]},
+                content=c))
         except ValueError as exc:
             return PlainTextResponse(f"Invalid set: {exc}", status_code=400)
         return page(project, f"/sets/{made.id}")
@@ -84,7 +93,9 @@ def register_library(app, projects_of, root_path: str) -> None:
     @app.post("/p/{project}/sets/{set_id}/objectives", include_in_schema=False)
     async def add_objective_form(project: str, set_id: str, request: Request):
         try:
-            made = library(request).add_objective(set_id, await form_fields(request))
+            made = library(request).add_objective(set_id, await form_fields(request), record=lambda s, c: ledger.emit(
+                s, "objective.added", item_type="objective", item_id=c["id"], details={"set": set_id},
+                content=c["after"]))
         except ValueError as exc:
             return PlainTextResponse(f"Invalid objective: {exc}", status_code=400)
         except LookupError as exc:
@@ -94,7 +105,9 @@ def register_library(app, projects_of, root_path: str) -> None:
     @app.post("/p/{project}/sets/{set_id}/objectives/{objective_id}", include_in_schema=False)
     async def edit_objective_form(project: str, set_id: str, objective_id: str, request: Request):
         try:
-            library(request).edit_objective(set_id, objective_id, await form_fields(request))
+            library(request).edit_objective(set_id, objective_id, await form_fields(request), record=lambda s, c: ledger.emit(
+                s, "objective.edited", item_type="objective", item_id=objective_id, details={"set": set_id},
+                content=c["after"], before=c["before"], after=c["after"]))
         except ValueError as exc:
             return PlainTextResponse(f"Invalid objective: {exc}", status_code=400)
         except LookupError as exc:
@@ -106,7 +119,9 @@ def register_library(app, projects_of, root_path: str) -> None:
         if action not in ("retire", "restore"):
             raise HTTPException(status_code=404)
         try:
-            getattr(library(request), action)(set_id, objective_id)
+            getattr(library(request), action)(set_id, objective_id, record=lambda s, c: ledger.emit(
+                s, "objective.retired" if action == "retire" else "objective.restored", item_type="objective",
+                item_id=objective_id, details={"set": set_id}))
         except LookupError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return page(project, f"/sets/{set_id}#obj-{objective_id}")
@@ -114,7 +129,9 @@ def register_library(app, projects_of, root_path: str) -> None:
     @app.post("/p/{project}/sets/{set_id}/publish", include_in_schema=False)
     def publish_form(project: str, set_id: str, request: Request):
         try:
-            library(request).publish(set_id, who=_who(request))
+            library(request).publish(set_id, who=_who(request), who_sub=_who_sub(request), record=lambda s, c: ledger.emit(
+                s, "objective_set.published", item_type="objective_set", item_id=set_id,
+                item_version=str(c["number"]), details={"version": c["number"]}, content=c["items"]))
         except ValueError as exc:
             return PlainTextResponse(f"Cannot publish: {exc}", status_code=400)
         except LookupError as exc:
@@ -124,7 +141,8 @@ def register_library(app, projects_of, root_path: str) -> None:
     @app.post("/p/{project}/sets/{set_id}/delete", include_in_schema=False)
     def delete_set_form(project: str, set_id: str, request: Request):
         try:
-            library(request).delete_set(set_id)
+            library(request).delete_set(set_id, record=lambda s, held: ledger.emit(
+                s, "objective_set.deleted", item_type="objective_set", item_id=set_id, content=held))
         except ValueError as exc:
             return PlainTextResponse(f"Cannot delete: {exc}", status_code=400)
         except LookupError as exc:
@@ -145,7 +163,8 @@ def register_library(app, projects_of, root_path: str) -> None:
         try:
             made = library(request).create_profile(
                 str(form.get("name") or ""), str(form.get("description") or ""),
-                [str(v) for v in form.getlist("objective")], who=_who(request))
+                [str(v) for v in form.getlist("objective")], who=_who(request), who_sub=_who_sub(request), record=lambda s, c: ledger.emit(
+                s, "objective_profile.created", item_type="objective_profile", item_id=c["id"], content=c))
         except ValueError as exc:
             return PlainTextResponse(f"Invalid profile: {exc}", status_code=400)
         return page(project, f"/profiles/{made.id}")
@@ -163,7 +182,10 @@ def register_library(app, projects_of, root_path: str) -> None:
         try:
             library(request).save_profile(
                 profile_id, [str(v) for v in form.getlist("objective")], who=_who(request),
-                name=str(form.get("name") or ""), description=str(form.get("description") or ""))
+                name=str(form.get("name") or ""), description=str(form.get("description") or ""), who_sub=_who_sub(request), record=lambda s, c: ledger.emit(
+                s, "objective_profile.version_saved", item_type="objective_profile", item_id=profile_id,
+                item_version=str(c["number"]), details={"version": c["number"], "dropped": c["dropped"]},
+                content={"picks": c["picks"], **c["after"]}, before=c["before"], after=c["after"]))
         except ValueError as exc:
             return PlainTextResponse(f"Invalid profile: {exc}", status_code=400)
         except LookupError as exc:
@@ -185,7 +207,9 @@ def register_library(app, projects_of, root_path: str) -> None:
     def make_set(project: str, request: Request, code: str = Body(...), name: str = Body(...),
                  description: str = Body("")) -> dict:
         try:
-            return asdict(library(request).create_set(code, name, description, who=_who(request)))
+            return asdict(library(request).create_set(code, name, description, who=_who(request), who_sub=_who_sub(request), record=lambda s, c: ledger.emit(
+                s, "objective_set.created", item_type="objective_set", item_id=c["id"], details={"code": c["code"]},
+                content=c)))
         except ValueError as exc:
             raise refused(exc) from exc
 
@@ -199,7 +223,8 @@ def register_library(app, projects_of, root_path: str) -> None:
     @app.delete("/p/{project}/api/sets/{set_id}", status_code=204)
     def delete_set(project: str, set_id: str, request: Request) -> Response:
         try:
-            library(request).delete_set(set_id)
+            library(request).delete_set(set_id, record=lambda s, held: ledger.emit(
+                s, "objective_set.deleted", item_type="objective_set", item_id=set_id, content=held))
         except (ValueError, LookupError) as exc:
             raise refused(exc) from exc
         return Response(status_code=204)
@@ -207,7 +232,9 @@ def register_library(app, projects_of, root_path: str) -> None:
     @app.post("/p/{project}/api/sets/{set_id}/objectives", status_code=201)
     def add_objective(project: str, set_id: str, request: Request, values: dict = Body(...)) -> dict:
         try:
-            return {"id": library(request).add_objective(set_id, values)}
+            return {"id": library(request).add_objective(set_id, values, record=lambda s, c: ledger.emit(
+                s, "objective.added", item_type="objective", item_id=c["id"], details={"set": set_id},
+                content=c["after"]))}
         except (ValueError, LookupError) as exc:
             raise refused(exc) from exc
 
@@ -215,7 +242,9 @@ def register_library(app, projects_of, root_path: str) -> None:
     def edit_objective(project: str, set_id: str, objective_id: str, request: Request,
                        values: dict = Body(...)) -> dict:
         try:
-            library(request).edit_objective(set_id, objective_id, values)
+            library(request).edit_objective(set_id, objective_id, values, record=lambda s, c: ledger.emit(
+                s, "objective.edited", item_type="objective", item_id=objective_id, details={"set": set_id},
+                content=c["after"], before=c["before"], after=c["after"]))
             return _set_view(library(request).get_set(set_id))
         except (ValueError, LookupError) as exc:
             raise refused(exc) from exc
@@ -225,7 +254,9 @@ def register_library(app, projects_of, root_path: str) -> None:
         if action not in ("retire", "restore"):
             raise HTTPException(status_code=404)
         try:
-            getattr(library(request), action)(set_id, objective_id)
+            getattr(library(request), action)(set_id, objective_id, record=lambda s, c: ledger.emit(
+                s, "objective.retired" if action == "retire" else "objective.restored", item_type="objective",
+                item_id=objective_id, details={"set": set_id}))
             return _set_view(library(request).get_set(set_id))
         except LookupError as exc:
             raise refused(exc) from exc
@@ -233,7 +264,9 @@ def register_library(app, projects_of, root_path: str) -> None:
     @app.post("/p/{project}/api/sets/{set_id}/publish")
     def publish(project: str, set_id: str, request: Request) -> dict:
         try:
-            return {"version": library(request).publish(set_id, who=_who(request))}
+            return {"version": library(request).publish(set_id, who=_who(request), who_sub=_who_sub(request), record=lambda s, c: ledger.emit(
+                s, "objective_set.published", item_type="objective_set", item_id=set_id,
+                item_version=str(c["number"]), details={"version": c["number"]}, content=c["items"]))}
         except (ValueError, LookupError) as exc:
             raise refused(exc) from exc
 
@@ -252,7 +285,9 @@ def register_library(app, projects_of, root_path: str) -> None:
     def make_profile(project: str, request: Request, name: str = Body(...), description: str = Body(""),
                      objective_ids: list[str] = Body(...)) -> dict:
         try:
-            return asdict(library(request).create_profile(name, description, objective_ids, who=_who(request)))
+            return asdict(library(request).create_profile(name, description, objective_ids, who=_who(request),
+                                                          who_sub=_who_sub(request), record=lambda s, c: ledger.emit(
+                s, "objective_profile.created", item_type="objective_profile", item_id=c["id"], content=c)))
         except ValueError as exc:
             raise refused(exc) from exc
 
@@ -268,7 +303,10 @@ def register_library(app, projects_of, root_path: str) -> None:
                      name: str | None = Body(None), description: str | None = Body(None)) -> dict:
         try:
             current, dropped = library(request).save_profile(
-                profile_id, objective_ids, who=_who(request), name=name, description=description)
+                profile_id, objective_ids, who=_who(request), name=name, description=description, who_sub=_who_sub(request), record=lambda s, c: ledger.emit(
+                s, "objective_profile.version_saved", item_type="objective_profile", item_id=profile_id,
+                item_version=str(c["number"]), details={"version": c["number"], "dropped": c["dropped"]},
+                content={"picks": c["picks"], **c["after"]}, before=c["before"], after=c["after"]))
         except (ValueError, LookupError) as exc:
             raise refused(exc) from exc
         return {"current": asdict(current), "dropped": dropped}

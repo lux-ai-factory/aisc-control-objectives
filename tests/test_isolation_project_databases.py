@@ -158,9 +158,9 @@ def test_I5_4_the_database_is_at_the_baseline_and_readers_get_their_reads(cluste
 
     a, _, _, _ = two
     database = projects.database(a)
-    # the head: the risk and control matrix (2026-10-01), on the earlier revisions and the baseline
+    # the head: the ledger's history (2026-10-03), on the earlier revisions and the baseline
     baseline = (Path(__file__).resolve().parents[1] / "alembic" / "versions"
-                / "20261002100000_rcm.py").read_text()
+                / "20261003000000_ledger_history.py").read_text()
     revision = re.search(r"^revision\s*=\s*['\"]([^'\"]+)", baseline, re.M).group(1)
     assert _rows(cluster, database, "SELECT version_num FROM control_objectives.alembic_version") == [
         (revision,)

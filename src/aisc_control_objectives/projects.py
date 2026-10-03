@@ -20,6 +20,7 @@ recomputed: the uploaded bytes, the ratings, and what the mapping cost.
 from __future__ import annotations
 
 import copy
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
@@ -102,7 +103,7 @@ class Projects:
     # ── the flow ──────────────────────────────────────────────────────────
 
     def create(
-        self, project: str, name: str, jsonld: str, raw: object, system_id: str
+        self, project: str, name: str, jsonld: str, raw: object, system_id: str, record=None
     ) -> ProjectView:
         """Take the AI card of one version. Its risks are what the assessor rates next.
 
@@ -114,7 +115,7 @@ class Projects:
         ontology = Ontology.from_jsonld(raw)
         record = self._repository.create(
             project=project, name=name or ontology.system_name,
-            ontology=ontology, jsonld=jsonld, system_id=system_id,
+            ontology=ontology, jsonld=jsonld, system_id=system_id, record=record,
         )
         # a new card version's assessment starts on the profile the previous one ran on
         previous = self._repository.previous_of(record)
@@ -134,7 +135,7 @@ class Projects:
             return self._catalogue
         return self.library.catalogue_of(record.profile_version_id)
 
-    def use_profile(self, project_id: str, profile_id: str) -> ProjectView:
+    def use_profile(self, project_id: str, profile_id: str, record=None) -> ProjectView:
         """Run the assessment on a profile's current version (switching, or taking a newer
         version). Mappings and selected objectives outside it are dropped; the view says which."""
         library = self.library
@@ -146,7 +147,7 @@ class Projects:
             except LookupError as exc:
                 raise ValueError(f"no profile {profile_id}") from exc
         keep = {o.id for o in library.catalogue_of(version_id)}
-        dropped = self._repository.set_profile(project_id, version_id, keep)
+        dropped = self._repository.set_profile(project_id, version_id, keep, record=record)
         view = self.view(project_id)
         view.dropped = dropped
         return view
@@ -163,7 +164,7 @@ class Projects:
         return self._repository.is_latest(view.record)
 
     def rate(self, project_id: str, impact: dict[str, int], likelihood: dict[str, int] | None = None,
-             comments: dict[str, str] | None = None) -> ProjectView:
+             comments: dict[str, str] | None = None, record=None) -> ProjectView:
         """Impacts, likelihoods and, optionally, comments on the rating ("" or blank clears one).
         Everything is checked before anything is written."""
         likelihood = likelihood or {}
@@ -174,23 +175,27 @@ class Projects:
         cleaned = None if comments is None else {rid: (text or "").strip() for rid, text in comments.items()}
         # the checks: each part 1-5, each comment short enough
         Severity(impact=impact, likelihood=likelihood, comments={rid: t for rid, t in (cleaned or {}).items() if t})
-        self._repository.rate(project_id, impact, likelihood, cleaned)
+        self._repository.rate(project_id, impact, likelihood, cleaned, record=record)
         return self.view(project_id)
 
-    def set_keys(self, project_id: str, keys: dict[str, bool]) -> ProjectView:
+    def set_keys(self, project_id: str, keys: dict[str, bool], record=None) -> ProjectView:
         """The assessor's key choices: objective id -> key. An id outside the profile is refused."""
         catalogue = self._catalogue_for(self._repository.get(project_id))
         unknown = sorted(oid for oid in keys if catalogue.by_id(oid) is None)
         if unknown:
             raise ValueError(f"not in this assessment's objective profile: {', '.join(unknown)}")
-        self._repository.save_keys(project_id, {oid: bool(v) for oid, v in keys.items()})
+        self._repository.save_keys(project_id, {oid: bool(v) for oid, v in keys.items()}, record=record)
         return self.view(project_id)
 
-    def map_risks_of(self, project_id: str) -> ProjectView:
+    def map_risks_of(self, project_id: str, on_save=None) -> ProjectView:
         """The one agentic step: which objectives mitigate each risk.
 
         The model is the one chosen by the project whose database the
-        assessment is in (I5.6)."""
+        assessment is in (I5.6). `on_save`, the caller's ledger events, gets the run (its id, outcome,
+        model and each model call) inside the save's transaction (ledger phase 6); a run that raises is
+        recorded too, in a transaction of its own, then raised again."""
+        from aisc_control_objectives import ledger
+
         record = self._repository.get(project_id)
         mapper, model = self._mapper, self._model
         if self._mapper_for is not None:
@@ -198,17 +203,30 @@ class Projects:
                 mapper, model = self._mapper_for(record.project)
             except (ResolveError, ValueError) as exc:
                 raise ModelUnavailable(str(exc)) from exc
-        run = map_risks(record.ontology.risks, mapper, self._catalogue_for(record))
+        run_id, calls = str(uuid.uuid4()), ledger.Calls()
+        if hasattr(mapper, "_complete"):                              # each model call, timed, for ai.llm_call
+            mapper = copy.copy(mapper)
+            mapper._complete = calls.recording(mapper._complete, "mapping")
+        try:
+            run = map_risks(record.ontology.risks, mapper, self._catalogue_for(record))
+        except Exception as exc:
+            if on_save is not None:
+                outcome = {"run_id": run_id, "run": None, "error": str(exc), "model": model, "calls": calls}
+                self._repository.recording(lambda session: on_save(session, outcome))
+            raise
+        outcome = {"run_id": run_id, "run": run, "error": run.error, "model": model, "calls": calls}
         self._repository.save_mapping_run(
-            project_id, run, model=model, selected=self._scope(record, run)
+            project_id, run, model=model, selected=self._scope(record, run), run_id=run_id,
+            record=None if on_save is None else (lambda session, change: on_save(session, {**change, **outcome})),
         )
         return self.view(project_id)
 
-    def map_by_hand(self, project_id: str, risk_id: str, objective_ids: list[str]) -> ProjectView:
+    def map_by_hand(self, project_id: str, risk_id: str, objective_ids: list[str], on_save=None) -> ProjectView:
         """A person's mapping of one risk (replaces that risk's mapping, 2026-10-01).
 
         An objective the risk already had keeps its row as it was (the AI's quote and source);
-        one added is the person's. The selection follows the change as after a mapping (D1, D2)."""
+        one added is the person's. The selection follows the change as after a mapping (D1, D2).
+        What it replaces is kept in mapping_archive; `on_save` gets the objectives before and after."""
         record = self._repository.get(project_id)
         if risk_id not in {risk.id for risk in record.ontology.risks}:
             raise ValueError(f"no risk {risk_id} on this card")
@@ -222,7 +240,7 @@ class Projects:
                  for oid in self._in_order(catalogue, set(objective_ids))]
         after = MappingRun(mappings={**before, risk_id: Mapping(risk_id=risk_id, objectives=items)})
         self._repository.save_risk_mapping(
-            project_id, risk_id, items, selected=self._scope(record, after))
+            project_id, risk_id, items, selected=self._scope(record, after), record=on_save)
         return self.view(project_id)
 
     @staticmethod
@@ -238,8 +256,8 @@ class Projects:
         (the matrix is the selection, 2026-10-01)."""
         return self._in_order(self._catalogue_for(record), _mapped_ids(run))
 
-    def delete(self, project_id: str) -> None:
-        self._repository.delete(project_id)
+    def delete(self, project_id: str, record=None) -> None:
+        self._repository.delete(project_id, record=record)
 
     # ── reading ───────────────────────────────────────────────────────────
 

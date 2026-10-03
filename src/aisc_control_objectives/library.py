@@ -209,7 +209,12 @@ class Library:
             raise LookupError(f"no set {set_id}")
         return row
 
-    def create_set(self, code: str, name: str, description: str, *, who: str) -> SetSummary:
+    # Each write takes `who_sub`, the author's Keycloak subject, kept beside the name shown (ledger
+    # phase 6: authors by subject), and `record`, the caller's ledger events, run inside the write's
+    # own transaction with what changed (R2.4).
+
+    def create_set(self, code: str, name: str, description: str, *, who: str, who_sub: str = "",
+                   record=None) -> SetSummary:
         code = (code or "").strip()
         if not CODE.match(code):
             raise ValueError("the code is 2 to 6 capital letters (A to Z), e.g. BNK")
@@ -221,9 +226,12 @@ class Library:
             if taken:
                 raise ValueError(f"the code {code} is already a set's in this project")
             row = tables.ObjectiveSet(id=_new_id(), code=code, name=name.strip(),
-                                      description=(description or "").strip(), created_by=who)
+                                      description=(description or "").strip(), created_by=who,
+                                      created_by_sub=who_sub)
             session.add(row)
             session.flush()
+            if record is not None:
+                record(session, {"id": row.id, "code": code, "name": row.name, "description": row.description})
             return self._summary(session, row)
 
     def get_set(self, set_id: str) -> SetView:
@@ -238,7 +246,7 @@ class Library:
                 draft_rows=[(self._objective(d.objective_id, d), d.retired) for d in drafts],
                 versions=[(v.number, v.published_at, v.published_by) for v in versions])
 
-    def add_objective(self, set_id: str, values: dict) -> str:
+    def add_objective(self, set_id: str, values: dict, record=None) -> str:
         """A new objective in the draft; returns its id."""
         with self._sessions.begin() as session:
             row = self._set_row(session, set_id)
@@ -247,6 +255,8 @@ class Library:
             session.add(tables.ObjectiveDraft(set_id=set_id, number=row.next_number,
                                               objective_id=objective_id, **clean))
             row.next_number += 1
+            if record is not None:
+                record(session, {"id": objective_id, "after": clean})
             return objective_id
 
     def _draft_row(self, session: Session, set_id: str, objective_id: str):
@@ -257,21 +267,32 @@ class Library:
             raise LookupError(f"no objective {objective_id} in this set")
         return found
 
-    def edit_objective(self, set_id: str, objective_id: str, values: dict) -> None:
+    def edit_objective(self, set_id: str, objective_id: str, values: dict, record=None) -> None:
+        """The draft's wording; `record` gets it before and after (the draft keeps no versions)."""
         with self._sessions.begin() as session:
             draft = self._draft_row(session, set_id, objective_id)
+            before = {name: getattr(draft, name) for name in FIELDS}
             for name, value in self._checked(objective_id, values).items():
                 setattr(draft, name, value)
+            after = {name: getattr(draft, name) for name in FIELDS}
+            if record is not None and before != after:
+                record(session, {"before": before, "after": after})
 
-    def retire(self, set_id: str, objective_id: str) -> None:
+    def retire(self, set_id: str, objective_id: str, record=None) -> None:
         with self._sessions.begin() as session:
-            self._draft_row(session, set_id, objective_id).retired = True
+            draft = self._draft_row(session, set_id, objective_id)
+            was, draft.retired = draft.retired, True
+            if record is not None and not was:
+                record(session, {})
 
-    def restore(self, set_id: str, objective_id: str) -> None:
+    def restore(self, set_id: str, objective_id: str, record=None) -> None:
         with self._sessions.begin() as session:
-            self._draft_row(session, set_id, objective_id).retired = False
+            draft = self._draft_row(session, set_id, objective_id)
+            was, draft.retired = draft.retired, False
+            if record is not None and was:
+                record(session, {})
 
-    def publish(self, set_id: str, *, who: str) -> int:
+    def publish(self, set_id: str, *, who: str, who_sub: str = "", record=None) -> int:
         """The draft becomes the next version; returns its number."""
         with self._sessions.begin() as session:
             self._set_row(session, set_id)
@@ -282,13 +303,17 @@ class Library:
             if latest is not None and self._content(active) == self._content(self._items(session, latest.id)):
                 raise ValueError(f"nothing changed since version {latest.number}")
             version = tables.ObjectiveSetVersion(id=_new_id(), set_id=set_id,
-                                                 number=(latest.number if latest else 0) + 1, published_by=who)
+                                                 number=(latest.number if latest else 0) + 1, published_by=who,
+                                                 published_by_sub=who_sub)
             session.add(version)
             session.flush()
             for position, draft in enumerate(active, 1):
                 session.add(tables.ObjectiveSetVersionItem(
                     set_version_id=version.id, objective_id=draft.objective_id, position=position,
                     **{name: getattr(draft, name) for name in FIELDS}))
+            if record is not None:
+                record(session, {"number": version.number, "items": [
+                    {"id": d.objective_id, **{name: getattr(d, name) for name in FIELDS}} for d in active]})
             return version.number
 
     def set_version(self, set_id: str, number: int) -> list[ControlObjective]:
@@ -300,12 +325,18 @@ class Library:
                 raise LookupError(f"no version {number} of this set")
             return [self._objective(item.objective_id, item) for item in self._items(session, version.id)]
 
-    def delete_set(self, set_id: str) -> None:
+    def delete_set(self, set_id: str, record=None) -> None:
+        """An unpublished set and its drafts; `record` gets what they were (only the ledger keeps them)."""
         with self._sessions.begin() as session:
             row = self._set_row(session, set_id)
             if self._latest_version(session, set_id) is not None:
                 raise ValueError("a published set cannot be deleted: profiles and assessments may rest on it")
+            held = {"code": row.code, "name": row.name, "description": row.description, "drafts": [
+                {"id": d.objective_id, "retired": d.retired, **{n: getattr(d, n) for n in FIELDS}}
+                for d in self._drafts(session, set_id)]}
             session.delete(row)
+            if record is not None:
+                record(session, held)
 
     def available(self) -> ControlObjectiveCatalogue:
         """What a profile can pick: the built-in set and every set's latest published version."""
@@ -382,10 +413,12 @@ class Library:
                 pins={i.set_code: i.set_version_number for i in items if i.set_code != BUILTIN_CODE},
                 updates=updates)
 
-    def _add_version(self, session: Session, profile_id: str, number: int, picks: list[str], who: str) -> str:
+    def _add_version(self, session: Session, profile_id: str, number: int, picks: list[str], who: str,
+                     who_sub: str = "") -> str:
         available = self.available()
         latest = self._latest_by_code(session)
-        version = tables.ObjectiveProfileVersion(id=_new_id(), profile_id=profile_id, number=number, created_by=who)
+        version = tables.ObjectiveProfileVersion(id=_new_id(), profile_id=profile_id, number=number, created_by=who,
+                                                 created_by_sub=who_sub)
         session.add(version)
         session.flush()
         chosen = sorted((available.by_id(oid) for oid in dict.fromkeys(picks)), key=lambda o: o.sort_key)
@@ -404,21 +437,27 @@ class Library:
         if missing:
             raise ValueError(f"cannot be picked (not in the built-in set or a published set): {', '.join(missing)}")
 
-    def create_profile(self, name: str, description: str, picks: list[str], *, who: str) -> ProfileSummary:
+    def create_profile(self, name: str, description: str, picks: list[str], *, who: str, who_sub: str = "",
+                       record=None) -> ProfileSummary:
         if not (name or "").strip():
             raise ValueError("a profile needs a name")
         picks = list(dict.fromkeys(picks))
         self._check_picks(picks)
         with self._sessions.begin() as session:
             row = tables.ObjectiveProfile(id=_new_id(), name=name.strip(),
-                                          description=(description or "").strip(), created_by=who)
+                                          description=(description or "").strip(), created_by=who,
+                                          created_by_sub=who_sub)
             session.add(row)
             session.flush()
-            self._add_version(session, row.id, 1, picks, who)
+            version_id = self._add_version(session, row.id, 1, picks, who, who_sub)
+            if record is not None:
+                record(session, {"id": row.id, "version_id": version_id, "name": row.name,
+                                 "description": row.description, "picks": picks})
         return self.get_profile(row.id).profile
 
     def save_profile(self, profile_id: str, picks: list[str], *, who: str, name: str | None = None,
-                     description: str | None = None) -> tuple[ProfileVersion, list[str]]:
+                     description: str | None = None, who_sub: str = "",
+                     record=None) -> tuple[ProfileVersion, list[str]]:
         """The next version, pinned to the sets' latest versions. An objective the current version
         had and a newer set version retired is dropped, and returned so the page can say so."""
         current = self.get_profile(profile_id)
@@ -431,13 +470,18 @@ class Library:
         self._check_picks(picks)
         with self._sessions.begin() as session:
             row = session.get(tables.ObjectiveProfile, profile_id)
+            named_before = {"name": row.name, "description": row.description}
             if name is not None:
                 if not name.strip():
                     raise ValueError("a profile needs a name")
                 row.name = name.strip()
             if description is not None:
                 row.description = description.strip()
-            self._add_version(session, profile_id, current.current.number + 1, picks, who)
+            number = current.current.number + 1
+            self._add_version(session, profile_id, number, picks, who, who_sub)
+            if record is not None:
+                record(session, {"number": number, "picks": picks, "dropped": dropped, "before": named_before,
+                                 "after": {"name": row.name, "description": row.description}})
         return self.get_profile(profile_id).current, dropped
 
     def catalogue_of(self, profile_version_id: str | None) -> ControlObjectiveCatalogue:

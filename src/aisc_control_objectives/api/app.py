@@ -36,6 +36,8 @@ from fastapi.responses import (
 )
 from sqlalchemy.exc import DBAPIError, IntegrityError
 
+from aisc_control_objectives import ledger
+from aisc_control_objectives.api import ledger_events
 from aisc_control_objectives import projectdb, upstream
 from aisc_control_objectives.access import REFUSALS, ProjectAccess
 from aisc_control_objectives.api.library_routes import register_library
@@ -156,6 +158,9 @@ def create_app(
     # tests/test_api_auth.py).
     if engine is not None:
         app.add_middleware(ProjectAccess, engine=engine, databases=databases)
+
+    # The witnessed request (X-AISC-Request-Id) this request's ledger events cite (phase 6).
+    app.add_middleware(ledger.RequestId)
 
     app.add_middleware(
         CORSMiddleware,
@@ -303,7 +308,10 @@ def _register_pages(app, objectives, projects_of, view_in, source_name, root_pat
             return PlainTextResponse(refused.message, status_code=refused.status_code)
         try:
             view = projects.create(
-                project=pid, name=name, jsonld=jsonld, raw=raw, system_id=latest["pid"]
+                project=pid, name=name, jsonld=jsonld, raw=raw, system_id=latest["pid"],
+                record=lambda s, c: ledger.emit(s, "assessment.started", item_type="assessment", item_id=c["id"],
+                                                card_version=latest["pid"],
+                                                details={"card_version": latest["pid"], "risks": c["risks"]}),
             )
         except IntegrityError as exc:
             if getattr(exc.orig, "sqlstate", None) == "23503":
@@ -339,7 +347,9 @@ def _register_pages(app, objectives, projects_of, view_in, source_name, root_pat
         if (why := _read_only(projects, view)) is not None:
             return PlainTextResponse(why, status_code=409)
         try:
-            projects.map_risks_of(project_id)
+            projects.map_risks_of(project_id, on_save=lambda s, o: (
+                ledger.emit(s, "ai.mapping.requested", item_type="assessment", item_id=project_id, run_id=o["run_id"]),
+                ledger_events.mapping_outcome(s, project_id, o)))
         except ModelUnavailable as exc:
             return PlainTextResponse(str(exc), status_code=502)
         return RedirectResponse(
@@ -355,7 +365,12 @@ def _register_pages(app, objectives, projects_of, view_in, source_name, root_pat
             return PlainTextResponse(why, status_code=409)
         form = await request.form()
         try:
-            projects.map_by_hand(project_id, risk_id, [str(v) for v in form.getlist("objective")])
+            projects.map_by_hand(project_id, risk_id, [str(v) for v in form.getlist("objective")],
+                                 on_save=lambda s, c: ledger.emit(
+                                     s, "mapping.risk.edited", item_type="risk", item_id=risk_id,
+                                     before=c["before"], after=c["after"],
+                                     details={"added": sorted(set(c["after"]) - set(c["before"])),
+                                              "removed": sorted(set(c["before"]) - set(c["after"]))}))
         except ValueError as exc:
             return PlainTextResponse(f"Invalid mapping: {exc}", status_code=400)
         return RedirectResponse(
@@ -371,7 +386,9 @@ def _register_pages(app, objectives, projects_of, view_in, source_name, root_pat
             return PlainTextResponse(why, status_code=409)
         form = await request.form()
         try:
-            projects.use_profile(project_id, str(form.get("profile") or ""))
+            projects.use_profile(project_id, str(form.get("profile") or ""), record=lambda s, c: ledger.emit(
+                s, "assessment.profile.switched", item_type="assessment", item_id=project_id,
+                details={"version_before": c["before"], "version_after": c["after"], "dropped": c["dropped"]}))
         except ValueError as exc:
             return PlainTextResponse(f"Invalid profile: {exc}", status_code=400)
         return RedirectResponse(
@@ -395,7 +412,9 @@ def _register_pages(app, objectives, projects_of, view_in, source_name, root_pat
                 key.split(":", 1)[1]: str(value)
                 for key, value in form.items() if key.startswith("comment:")
             }
-            projects.rate(project_id, part("impact:"), part("likelihood:"), comments)
+            projects.rate(project_id, part("impact:"), part("likelihood:"), comments, record=lambda s, changed: (
+                [ledger.emit(s, "risk.rated", **e) for e in ledger_events.ratings(changed)],
+                [ledger.emit(s, "risk.rating_comment.set", **e) for e in ledger_events.comments(changed)]))
         except ValueError as exc:
             return PlainTextResponse(f"Invalid rating: {exc}", status_code=400)
         return RedirectResponse(
@@ -415,7 +434,9 @@ def _register_pages(app, objectives, projects_of, view_in, source_name, root_pat
         ticked = {str(v) for v in form.getlist("key")}
         in_matrix = {p.objective_id for p in view.priorities if p.risk_ids} | ticked
         try:
-            projects.set_keys(project_id, {oid: oid in ticked for oid in in_matrix})
+            projects.set_keys(project_id, {oid: oid in ticked for oid in in_matrix}, record=lambda s, c: ledger.emit(
+                s, "objective.key.set", item_type="assessment", item_id=project_id, before=c["before"],
+                after=c["after"], details=ledger_events.keys(c)))
         except ValueError as exc:
             return PlainTextResponse(f"Invalid key objectives: {exc}", status_code=400)
         return RedirectResponse(
@@ -506,7 +527,9 @@ def _register_project_api(app, projects_of, view_in):
         projects = projects_of(request)
         _latest_or_409(projects, view_in(request, project_id))
         try:
-            return payload(projects.map_risks_of(project_id))
+            return payload(projects.map_risks_of(project_id, on_save=lambda s, o: (
+                ledger.emit(s, "ai.mapping.requested", item_type="assessment", item_id=project_id, run_id=o["run_id"]),
+                ledger_events.mapping_outcome(s, project_id, o))))
         except ModelUnavailable as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
 
@@ -519,7 +542,10 @@ def _register_project_api(app, projects_of, view_in):
         projects = projects_of(request)
         _latest_or_409(projects, view_in(request, project_id))
         try:
-            return payload(projects.map_by_hand(project_id, risk_id, objective_ids))
+            return payload(projects.map_by_hand(project_id, risk_id, objective_ids, on_save=lambda s, c: ledger.emit(
+                s, "mapping.risk.edited", item_type="risk", item_id=risk_id, before=c["before"], after=c["after"],
+                details={"added": sorted(set(c["after"]) - set(c["before"])),
+                         "removed": sorted(set(c["before"]) - set(c["after"]))})))
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -533,7 +559,9 @@ def _register_project_api(app, projects_of, view_in):
         impact = {rid: r["impact"] for rid, r in ratings.items() if "impact" in r}
         likelihood = {rid: r["likelihood"] for rid, r in ratings.items() if "likelihood" in r}
         try:
-            return payload(projects.rate(project_id, impact, likelihood))
+            return payload(projects.rate(project_id, impact, likelihood, record=lambda s, changed: (
+                [ledger.emit(s, "risk.rated", **e) for e in ledger_events.ratings(changed)],
+                [ledger.emit(s, "risk.rating_comment.set", **e) for e in ledger_events.comments(changed)])))
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -546,7 +574,9 @@ def _register_project_api(app, projects_of, view_in):
         projects = projects_of(request)
         _latest_or_409(projects, view_in(request, project_id))
         try:
-            return payload(projects.rate(project_id, ratings, {}))
+            return payload(projects.rate(project_id, ratings, {}, record=lambda s, changed: (
+                [ledger.emit(s, "risk.rated", **e) for e in ledger_events.ratings(changed)],
+                [ledger.emit(s, "risk.rating_comment.set", **e) for e in ledger_events.comments(changed)])))
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -558,7 +588,9 @@ def _register_project_api(app, projects_of, view_in):
         projects = projects_of(request)
         _latest_or_409(projects, view_in(request, project_id))
         try:
-            return payload(projects.set_keys(project_id, keys))
+            return payload(projects.set_keys(project_id, keys, record=lambda s, c: ledger.emit(
+                s, "objective.key.set", item_type="assessment", item_id=project_id, before=c["before"],
+                after=c["after"], details=ledger_events.keys(c))))
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -570,7 +602,9 @@ def _register_project_api(app, projects_of, view_in):
         projects = projects_of(request)
         _latest_or_409(projects, view_in(request, project_id))
         try:
-            return payload(projects.use_profile(project_id, profile_id))
+            return payload(projects.use_profile(project_id, profile_id, record=lambda s, c: ledger.emit(
+                s, "assessment.profile.switched", item_type="assessment", item_id=project_id,
+                details={"version_before": c["before"], "version_after": c["after"], "dropped": c["dropped"]})))
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -582,11 +616,14 @@ def _register_project_api(app, projects_of, view_in):
         projects = projects_of(request)
         _latest_or_409(projects, view_in(request, project_id))
         try:
-            return payload(projects.rate(project_id, {}, {}, comments))
+            return payload(projects.rate(project_id, {}, {}, comments, record=lambda s, changed: (
+                [ledger.emit(s, "risk.rated", **e) for e in ledger_events.ratings(changed)],
+                [ledger.emit(s, "risk.rating_comment.set", **e) for e in ledger_events.comments(changed)])))
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @app.delete("/p/{project}/api/projects/{project_id}", status_code=204)
     def delete_project(project: str, project_id: str, request: Request) -> None:
         view_in(request, project_id)
-        projects_of(request).delete(project_id)
+        projects_of(request).delete(project_id, record=lambda s, held: ledger.emit(
+            s, "assessment.deleted", item_type="assessment", item_id=project_id, content=held))

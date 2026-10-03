@@ -138,9 +138,28 @@ class ProjectRepository:
         )
 
     # ── writing ───────────────────────────────────────────────────────────
+    # Every write takes `record`: the caller's ledger events, run inside the write's own transaction
+    # with what changed (ledger phase 6, R2.4). None writes none.
+
+    @staticmethod
+    def _archive(session: Session, project: tables.Project, reason: str, risks=None,
+                 run_id: str | None = None) -> int:
+        """Keep the run and the mapped rows a change is about to replace (S1); the number of rows kept."""
+        rows = [{"risk": r.risk_id, "objective": m.objective_id, "quote": m.quote, "rationale": m.rationale,
+                 "source": m.source}
+                for r in (risks if risks is not None else project.risks) for m in r.mapped]
+        run = project.mapping_run
+        kept_run = None if run is None or risks is not None else {
+            "findings": run.findings, "stops": run.stops, "stop": run.stop, "attempts": run.attempts,
+            "error": run.error, "model": run.model, "ran_at": run.ran_at.isoformat() if run.ran_at else None}
+        if rows or kept_run:
+            session.add(tables.MappingArchive(project_id=project.id, reason=reason, run=kept_run, rows=rows,
+                                              run_id=run_id))
+        return len(rows)
 
     def create(
-        self, project: str | None, name: str, ontology: Ontology, jsonld: str, *, system_id: str
+        self, project: str | None, name: str, ontology: Ontology, jsonld: str, *, system_id: str,
+        record=None,
     ) -> ProjectRecord:
         """`system_id` is the AI card version (a row of this database's
         project.system) the assessment is of: one assessment per version, which
@@ -157,31 +176,48 @@ class ProjectRepository:
             session.add(row)
             self._attach_card(session, row, ontology, jsonld)
             session.flush()
+            if record is not None:
+                record(session, {"id": row.id, "risks": len(row.risks)})
             return self._to_record(session, row)
 
     def rate(self, project_id: str, impact: dict[str, int], likelihood: dict[str, int],
-             comments: dict[str, str] | None = None) -> None:
+             comments: dict[str, str] | None = None, record=None) -> None:
         """Set the given impacts, likelihoods and, when given, comments ("" clears one), in one
-        transaction. A risk not named keeps what it had."""
+        transaction. A risk not named keeps what it had. `record` gets each risk that changed, with
+        its rating and comment before and after."""
         with self._sessions.begin() as session:
             project = session.get(tables.Project, project_id)
+            changed = []
             for row in project.risks:
+                before = {"impact": row.rating_impact, "likelihood": row.rating_likelihood,
+                          "comment": row.severity_comment}
                 if row.risk_id in impact:
                     row.rating_impact = impact[row.risk_id]
                 if row.risk_id in likelihood:
                     row.rating_likelihood = likelihood[row.risk_id]
                 if comments is not None and row.risk_id in comments:
                     row.severity_comment = comments[row.risk_id]
+                after = {"impact": row.rating_impact, "likelihood": row.rating_likelihood,
+                         "comment": row.severity_comment}
+                if after != before:
+                    changed.append({"risk": row.risk_id, "before": before, "after": after})
+            if record is not None and changed:
+                record(session, changed)
 
-    def save_keys(self, project_id: str, keys: dict[str, bool]) -> None:
+    def save_keys(self, project_id: str, keys: dict[str, bool], record=None) -> None:
         """Record the assessor's key choices (objective id -> key), replacing earlier ones for those ids."""
         with self._sessions.begin() as session:
+            before, after = {}, {}
             for objective_id, key in keys.items():
                 found = session.get(tables.ObjectiveKey, (project_id, objective_id))
+                before[objective_id] = None if found is None else found.key
+                after[objective_id] = key
                 if found is None:
                     session.add(tables.ObjectiveKey(project_id=project_id, objective_id=objective_id, key=key))
                 else:
                     found.key = key
+            if record is not None and before != after:
+                record(session, {"before": before, "after": after})
 
     def save_selection(self, project_id: str, objective_ids: list[str]) -> None:
         """Replace the objectives this assessment takes forward."""
@@ -199,11 +235,13 @@ class ProjectRepository:
 
     def save_mapping_run(
         self, project_id: str, run: MappingRun, model: str = "",
-        selected: list[str] | None = None,
+        selected: list[str] | None = None, record=None, run_id: str | None = None,
     ) -> None:
-        """`selected`, when given, replaces the selection in the same transaction."""
+        """`selected`, when given, replaces the selection in the same transaction. The run and the
+        mappings it replaces, a person's own ones too, are kept in mapping_archive first (S1)."""
         with self._sessions.begin() as session:
             project = session.get(tables.Project, project_id)
+            kept = self._archive(session, project, "ai_run", run_id=run_id)
             if selected is not None:
                 self._set_selection(session, project, selected)
             if project.mapping_run is not None:
@@ -238,16 +276,20 @@ class ProjectRepository:
                     model=model,
                 )
             )
+            if record is not None:
+                record(session, {"archived": kept})
 
     def save_risk_mapping(
         self, project_id: str, risk_id: str, objectives: list[MappedObjective],
-        selected: list[str],
+        selected: list[str], record=None,
     ) -> None:
         """Replace one risk's mapping (a person's edit) and the selection, in one transaction. An
         assessment no AI ever mapped gets an empty run, so it reads as mapped."""
         with self._sessions.begin() as session:
             project = session.get(tables.Project, project_id)
             row = next(r for r in project.risks if r.risk_id == risk_id)
+            before = sorted(m.objective_id for m in row.mapped)
+            self._archive(session, project, "by_hand", risks=[row])
             row.mapped.clear()
             session.flush()
             for item in objectives:
@@ -258,12 +300,21 @@ class ProjectRepository:
                 session.add(tables.MappingRunRow(project_id=project_id, findings=[], stops={},
                                                  stop="clean", attempts=0, error="", model=""))
             self._set_selection(session, project, selected)
+            after = sorted(item.objective_id for item in objectives)
+            if record is not None and before != after:
+                record(session, {"before": before, "after": after})
 
-    def set_profile(self, project_id: str, profile_version_id: str | None, keep: set[str]) -> list[str]:
+    def set_profile(self, project_id: str, profile_version_id: str | None, keep: set[str],
+                    record=None) -> list[str]:
         """Put the assessment on a profile version, and drop every mapping and selected objective
-        not in `keep` (the new profile's objectives). Returns the objectives dropped."""
+        not in `keep` (the new profile's objectives). Returns the objectives dropped; the mappings
+        dropped are kept in mapping_archive (S1)."""
         with self._sessions.begin() as session:
             project = session.get(tables.Project, project_id)
+            version_before = project.profile_version_id
+            losing = [r for r in project.risks if any(m.objective_id not in keep for m in r.mapped)]
+            if losing:
+                self._archive(session, project, "profile", risks=losing)
             project.profile_version_id = profile_version_id
             dropped: set[str] = set()
             for risk in project.risks:
@@ -275,13 +326,27 @@ class ProjectRepository:
                 ids = list(project.selection.objective_ids)
                 dropped |= {oid for oid in ids if oid not in keep}
                 project.selection.objective_ids = [oid for oid in ids if oid in keep]
+            if record is not None and version_before != profile_version_id:
+                record(session, {"before": version_before, "after": profile_version_id, "dropped": sorted(dropped)})
             return sorted(dropped)
 
-    def delete(self, project_id: str) -> None:
+    def recording(self, record) -> None:
+        """A transaction for ledger events alone: what happened changed nothing here (a failed AI run)."""
+        with self._sessions.begin() as session:
+            record(session)
+
+    def delete(self, project_id: str, record=None) -> None:
+        """Delete an assessment and all it holds. `record` gets what it held, for the ledger to freeze."""
         with self._sessions.begin() as session:
             project = session.get(tables.Project, project_id)
             if project is not None:
+                held = {"system_id": str(project.system_id), "name": project.name,
+                        "risks": [{"risk": r.risk_id, "impact": r.rating_impact, "likelihood": r.rating_likelihood,
+                                   "comment": r.severity_comment,
+                                   "mapped": [m.objective_id for m in r.mapped]} for r in project.risks]}
                 session.delete(project)
+                if record is not None:
+                    record(session, held)
 
     # ── reading ───────────────────────────────────────────────────────────
 

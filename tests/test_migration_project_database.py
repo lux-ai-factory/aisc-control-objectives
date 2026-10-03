@@ -35,10 +35,13 @@ COMMENT = "20261001120000_severity_comment"
 #: Objective sets and profiles (2026-10-01), on top of the comment.
 SETS = "20261002000000_objective_sets"
 #: The risk and control matrix (2026-10-01): impact x likelihood, key objectives, scope = the matrix.
-HEAD = "20261002100000_rcm"
+RCM = "20261002100000_rcm"
+#: The ledger (2026-10-03): mapping changes keep what they replace; authors by subject.
+HEAD = "20261003000000_ledger_history"
 TABLES = ("project", "graph", "risk", "mapped_objective", "mapping_run", "objective_selection",
           "objective_set", "objective_draft", "objective_set_version", "objective_set_version_item",
-          "objective_profile", "objective_profile_version", "objective_profile_version_item", "objective_key")
+          "objective_profile", "objective_profile_version", "objective_profile_version_item", "objective_key",
+          "mapping_archive")
 
 
 def _scratch(database_url: str, suffix: str):
@@ -136,7 +139,8 @@ def test_the_chain_is_baseline_selection_rename_source():
     config.set_main_option("script_location", str(projectdb.ALEMBIC_DIR))
     script = ScriptDirectory.from_config(config)
     assert script.get_heads() == [HEAD]
-    assert script.get_revision(HEAD).down_revision == SETS
+    assert script.get_revision(HEAD).down_revision == RCM
+    assert script.get_revision(RCM).down_revision == SETS
     assert script.get_revision(SETS).down_revision == COMMENT
     assert script.get_revision(COMMENT).down_revision == SOURCE
     assert script.get_revision(SOURCE).down_revision == RENAME
