@@ -1,7 +1,7 @@
 """Who may be in a project, and who may change it.
 
-This service holds the risk ratings and the mappings for somebody's system.
-Before this, any signed-in account could read and rewrite every project's. The
+This service holds the risk ratings and the mappings for somebody's system, so
+a signed-in account may read or change only the projects it is in. The
 membership is the platform's to decide and lives in `core.project_member`,
 which this service already has SELECT on: it reads the answer rather than
 asking over HTTP, because it is looking at the same database.
@@ -23,9 +23,8 @@ class TestWhichProjectARequestIsIn:
 
     def test_does_not_decode_a_second_time(self):
         """The path is the router's, which the server has decoded once already.
-        (Changed by WP1, api-auth 2026-09-25: this used to pin a second
-        decode, which made the gate check `a b` while the handler was given
-        `a%20b`. The gate now checks the very string the handler receives.)"""
+        A second decode would make the gate check `a b` while the handler is
+        given `a%20b`; the gate checks the very string the handler receives."""
         assert project_from_path("/p/a b/x") == "a b"
         assert project_from_path("/p/a%20b/x") == "a%20b"
 
@@ -84,7 +83,7 @@ def test_an_unknown_project_has_no_role(repository):
     assert role_in_project(repository._engine, "no-such-project", "nobody") is None
 
 
-# ── the door itself ──────────────────────────────────────────────────────────
+# The door itself
 # The unit tests above say what the answer means. These say that every page and
 # every endpoint under /p/{project} actually goes through it, which is the part
 # that cannot be got right by remembering.
@@ -158,8 +157,8 @@ def test_a_viewer_cannot_change_the_project(guarded_app, project_member):
 def test_an_editor_gets_past_the_door(guarded_app, project_member):
     """Past it the call answers on its own merits (here the platform is not
     configured, so starting an assessment is a 502). What matters is that the
-    refusal is no longer about who is asking. (WP7: "Start assessment" takes no
-    file, so none is sent.)"""
+    refusal is not about who is asking. "Start assessment" takes no file, so
+    none is sent."""
     client, token = guarded_app
     pid, _, subject = project_member("editor")
     response = client.post(

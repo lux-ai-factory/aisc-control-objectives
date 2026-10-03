@@ -1,15 +1,14 @@
-"""WP7: an assessment is of one saved version of the project's AI card.
+"""An assessment is of one saved version of the project's AI card.
 
 "Start assessment" takes no file. It asks the platform for the project's latest
 system version, asks qualification for that version's card as JSON-LD, and
 stores the assessment against that version (`project.system_id`, a pid in
-the project database's `project.system`). One assessment per version; an older version's assessment is
-kept as it was and can no longer be changed.
+the project database's `project.system`). One assessment per version; an older
+version's assessment is kept as it was and is read-only.
 
 The two upstream services are real HTTP servers here (a stub on a free port),
 so what is tested is the wire: the paths, the forwarded Authorization header,
-and what happens when either one is down. Rule ids refer to
-docs/superpowers/pipeline-2026-09-23/03-specs.md.
+and what happens when either one is down.
 """
 
 from __future__ import annotations
@@ -109,7 +108,7 @@ def upstream(monkeypatch):
 @pytest.fixture()
 def card_v1(fixtures_dir) -> str:
     # Odd spacing on purpose: the stored bytes must be the served bytes, not a
-    # re-serialisation of the parse (S7.5).
+    # re-serialisation of the parse.
     return (fixtures_dir / "mcas.ontology.jsonld").read_text() + "\n  \n"
 
 
@@ -168,13 +167,12 @@ def _count(repository) -> int:
         return connection.execute(text("SELECT count(*) FROM control_objectives.project")).scalar()
 
 
-# ── S7.1 one assessment per version ─────────────────────────────────────────
+# One assessment per version
 
 
 def test_s7_1_starting_twice_on_v1_opens_the_same_assessment(
     client, repository, platform_project, system_version, upstream, card_v1
 ):
-    """# S7.1"""
     v1 = system_version(platform_project, 1)
     upstream.version(platform_project, v1, 1, card_v1)
 
@@ -186,13 +184,12 @@ def test_s7_1_starting_twice_on_v1_opens_the_same_assessment(
     assert _system_id(repository, first) == v1
 
 
-# ── S7.2 the next version gets its own, the old one is read-only ────────────
+# The next version gets its own, the earlier one is read-only
 
 
 def test_s7_2_v2_gets_its_own_assessment_and_v1s_is_left_as_it_was(
     client, repository, platform_project, system_version, upstream, card_v1, card_v2
 ):
-    """# S7.2"""
     v1 = system_version(platform_project, 1)
     upstream.version(platform_project, v1, 1, card_v1)
     a1 = _assessment_id(_start(client, platform_project))
@@ -213,7 +210,7 @@ def test_s7_2_v2_gets_its_own_assessment_and_v1s_is_left_as_it_was(
 def test_s7_2_map_and_severity_on_a_non_latest_assessment_are_409(
     client, repository, platform_project, system_version, upstream, card_v1, card_v2
 ):
-    """# S7.2: A1 is read-only once v2 exists."""
+    """A1 is read-only once v2 exists."""
     v1 = system_version(platform_project, 1)
     upstream.version(platform_project, v1, 1, card_v1)
     a1 = _assessment_id(_start(client, platform_project))
@@ -236,7 +233,7 @@ def test_s7_2_map_and_severity_on_a_non_latest_assessment_are_409(
 def test_s7_2_the_pages_say_which_version_and_whether_it_is_read_only(
     client, platform_project, system_version, upstream, card_v1, card_v2
 ):
-    """# S7.2: "Assessment of vN"; "read-only: vM is the latest" with the forms gone."""
+    """"Assessment of vN"; "read-only: vM is the latest" with the forms gone."""
     v1 = system_version(platform_project, 1)
     upstream.version(platform_project, v1, 1, card_v1)
     a1 = _assessment_id(_start(client, platform_project))
@@ -256,7 +253,7 @@ def test_s7_2_the_pages_say_which_version_and_whether_it_is_read_only(
     assert "read-only" not in new
 
 
-# ── S7.3 strangers see nothing ──────────────────────────────────────────────
+# Strangers see nothing
 
 
 @pytest.fixture()
@@ -292,7 +289,7 @@ def guarded(repository, objectives, upstream, monkeypatch):
 def test_s7_3_a_stranger_cannot_start_or_open_an_assessment(
     guarded, repository, project_member, system_version, upstream, card_v1
 ):
-    """# S7.3 (the control-objectives half; the qualification route is tested there)."""
+    """The control-objectives half; the qualification route is tested there."""
     client, token = guarded
     pid, _, _ = project_member("owner")
     v1 = system_version(pid, 1)
@@ -306,13 +303,12 @@ def test_s7_3_a_stranger_cannot_start_or_open_an_assessment(
     assert _count(repository) == 0
 
 
-# ── S7.4, S7.5 what is stored is the version's card ─────────────────────────
+# What is stored is the version's card
 
 
 def test_s7_4_the_risks_stored_are_the_cards_risks_by_text_and_position(
     client, repository, platform_project, system_version, upstream, card_v1, card_v2
 ):
-    """# S7.4"""
     v1 = system_version(platform_project, 1)
     upstream.version(platform_project, v1, 1, card_v1)
     _start(client, platform_project)
@@ -329,7 +325,6 @@ def test_s7_4_the_risks_stored_are_the_cards_risks_by_text_and_position(
 def test_s7_5_the_graph_is_the_served_bytes_and_its_digest_is_their_sha256(
     client, repository, platform_project, system_version, upstream, card_v1
 ):
-    """# S7.5"""
     v1 = system_version(platform_project, 1)
     upstream.version(platform_project, v1, 1, card_v1)
     a1 = _assessment_id(_start(client, platform_project))
@@ -339,13 +334,12 @@ def test_s7_5_the_graph_is_the_served_bytes_and_its_digest_is_their_sha256(
     assert record.digest == hashlib.sha256(card_v1.encode("utf-8")).hexdigest()
 
 
-# ── S7.6 the version takes its assessment with it ───────────────────────────
+# The version takes its assessment with it
 
 
 def test_s7_6_deleting_the_version_deletes_its_assessment(
     client, repository, platform_project, system_version, upstream, card_v1
 ):
-    """# S7.6"""
     v1 = system_version(platform_project, 1)
     upstream.version(platform_project, v1, 1, card_v1)
     a1 = _assessment_id(_start(client, platform_project))
@@ -357,20 +351,19 @@ def test_s7_6_deleting_the_version_deletes_its_assessment(
     assert repository.orphan_rows() == 0
 
 
-# (Isolation, S-D13: "deleting the project deletes versions and assessments"
-# is gone from here. A deleted project's database is dropped whole, so there is
-# no cascade left to test in it; the drop and the 404 after it are
+# A deleted project's database is dropped whole, so there is no cascade to test
+# here; the drop and the 404 after it are tested in
 # test_isolation_project_databases.py::test_I2_5_I17_1_a_dropped_database_is_evicted_and_answers_404
-# and the platform's delete tests.)
+# and in the platform's delete tests.
 
 
-# ── S7.7 the catalogue digest is per assessment ─────────────────────────────
+# The catalogue digest is per assessment
 
 
 def test_s7_7_a_new_catalogue_changes_the_digest_of_new_assessments_only(
     repository, objectives, platform_project, system_version, upstream, card_v1, card_v2
 ):
-    """# S7.7 (DEFAULT, user to confirm)"""
+    """A new catalogue changes the digest of new assessments only."""
     old_projects = Projects(repository, objectives, _Mapper())
     old = TestClient(create_app(objectives, old_projects), follow_redirects=False,
                      raise_server_exceptions=False)
@@ -391,11 +384,11 @@ def test_s7_7_a_new_catalogue_changes_the_digest_of_new_assessments_only(
     assert repository.get(a2).objectives_digest == "f" * 64
 
 
-# ── the start flow's errors: nothing is stored ──────────────────────────────
+# The start flow's errors: nothing is stored
 
 
 def test_no_version_yet_is_409_and_nothing_is_stored(client, repository, platform_project, upstream):
-    """WP7 interface: 409 "No AI card for the latest version yet"."""
+    """409 "No AI card for the latest version yet"."""
     upstream.latest[platform_project] = None
     response = _start(client, platform_project)
     assert response.status_code == 409
@@ -406,7 +399,7 @@ def test_no_version_yet_is_409_and_nothing_is_stored(client, repository, platfor
 def test_a_version_without_a_card_is_409_and_nothing_is_stored(
     client, repository, platform_project, system_version, upstream
 ):
-    """WP7 interface: the qualification route 404s (vN has no card yet)."""
+    """the qualification route 404s (vN has no card yet)."""
     v1 = system_version(platform_project, 1)
     upstream.version(platform_project, v1, 1, card=None)
     response = _start(client, platform_project)
@@ -419,7 +412,7 @@ def test_a_version_without_a_card_is_409_and_nothing_is_stored(
 def test_an_upstream_that_is_down_is_502_and_nothing_is_stored(
     client, repository, platform_project, system_version, upstream, card_v1, which
 ):
-    """WP7 interface: 502 when qualification or the platform is down."""
+    """502 when qualification or the platform is down."""
     v1 = system_version(platform_project, 1)
     upstream.version(platform_project, v1, 1, card_v1)
     upstream.down.add(which)
@@ -431,7 +424,7 @@ def test_an_upstream_that_is_down_is_502_and_nothing_is_stored(
 def test_the_callers_authorization_is_what_reaches_both_upstreams(
     client, platform_project, system_version, upstream, card_v1
 ):
-    """WP7 interface: upstream.py forwards the incoming Authorization header."""
+    """upstream.py forwards the incoming Authorization header."""
     v1 = system_version(platform_project, 1)
     upstream.version(platform_project, v1, 1, card_v1)
     _assessment_id(_start(client, platform_project))
@@ -442,18 +435,18 @@ def test_the_callers_authorization_is_what_reaches_both_upstreams(
     assert {auth for _, auth in upstream.calls} == {AUTH}
 
 
-# ── the upload is gone ──────────────────────────────────────────────────────
+# No upload
 
 
 def test_the_projects_page_has_a_start_button_and_no_upload(client, platform_project):
-    """WP7 interface: the upload field leaves the page."""
+    """the upload field leaves the page."""
     page = client.get(f"/p/{platform_project}/projects", headers={"Authorization": AUTH}).text
     assert "Start assessment" in page
     assert 'type="file"' not in page
 
 
 def test_the_json_upload_routes_are_removed(client, repository, platform_project, fixtures_dir):
-    """WP7 interface: POST /api/projects and POST /api/projects/{id}/card are removed."""
+    """POST /api/projects and POST /api/projects/{id}/card are removed."""
     graph = json.loads((fixtures_dir / "mcas.ontology.jsonld").read_text())
     created = client.post(f"/api/projects?project={platform_project}", json=graph)
     replaced = client.post("/api/projects/abc123/card", json=graph)
@@ -462,11 +455,11 @@ def test_the_json_upload_routes_are_removed(client, repository, platform_project
     assert _count(repository) == 0
 
 
-# ── upstream.py on its own ──────────────────────────────────────────────────
+# upstream.py on its own
 
 
 def test_upstream_latest_version_returns_the_platforms_row(upstream, platform_project):
-    """WP7 interface: upstream.latest_version(project, token)."""
+    """upstream.latest_version(project, token)."""
     from aisc_control_objectives import upstream as client_module
 
     upstream.version(platform_project, "11111111-1111-1111-1111-111111111111", 3, card=None)
@@ -484,7 +477,7 @@ def test_upstream_latest_version_is_none_when_there_is_none(upstream, platform_p
 
 
 def test_upstream_card_jsonld_returns_the_bytes_as_served(upstream, platform_project, card_v1):
-    """WP7 interface: upstream.card_jsonld(project, system_pid, token)."""
+    """upstream.card_jsonld(project, system_pid, token)."""
     from aisc_control_objectives import upstream as client_module
 
     pid = "22222222-2222-2222-2222-222222222222"

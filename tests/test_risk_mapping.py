@@ -130,7 +130,7 @@ class TestTheLoop:
 
     def test_what_publishes_after_a_fixpoint_holds_no_rejected_objective(self, objectives):
         """Every exit publishes, but an invented objective id must not survive
-        into the tiers: publishing it would schedule work on a duty that does
+        into the matrix: publishing it would schedule work on a duty that does
         not exist."""
         stubborn = _mapping(_good("R42.9"), _good("O1"))
         run = map_risks([RUBBER_STAMP], FakeMapper(stubborn), objectives)

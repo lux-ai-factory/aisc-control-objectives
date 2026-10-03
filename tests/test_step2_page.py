@@ -1,4 +1,4 @@
-"""The step 2 page (2026-10-01): every part folds, a severity can carry a comment, and the AI
+"""The step 2 page: every part folds, a severity can carry a comment, and the AI
 button explains itself in a pop-up instead of a sentence beside it."""
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ def _page(http, platform_project, assessment) -> str:
     return response.text
 
 
-# ── every part folds ────────────────────────────────────────────────────────
+# Every part folds
 
 def test_every_part_of_the_page_folds_and_starts_open(client, start, platform_project):
     http, _ = client
@@ -21,7 +21,7 @@ def test_every_part_of_the_page_folds_and_starts_open(client, start, platform_pr
     http.post(_api(platform_project, assessment, "/map"))
     page = _page(http, platform_project, assessment)
     folds = re.findall(r'<details class="qf-section co-fold[^"]*"[^>]*>\s*<summary class="co-macro-head">', page)
-    # the risk register and the matrix (the risk and control matrix, 2026-10-01)
+    # the risk register and the matrix
     assert len(folds) == 2, len(folds)
     assert all(" open" in f for f in folds)
     assert '<div class="qf-section">' not in page and '<section class="qf-section' not in page
@@ -36,7 +36,7 @@ def test_the_register_and_the_matrix_keep_their_anchors(client, start, platform_
     assert re.search(r'<details class="qf-section co-fold" open id="matrix">', page)
 
 
-# ── a comment on a severity ─────────────────────────────────────────────────
+# A comment on a severity
 
 def test_the_ranking_form_saves_a_comment_with_the_severity(client, start, platform_project):
     http, _ = client
@@ -99,7 +99,7 @@ def test_an_older_version_shows_the_comment_read_only(client, start, platform_pr
     assert http.post(_api(platform_project, first, "/severity-comments"), json={"risk2": "x"}).status_code == 409
 
 
-# ── the AI button explains itself ───────────────────────────────────────────
+# The AI button explains itself
 
 def test_the_ai_button_has_a_question_mark_pop_up_and_no_sentence(client, start, platform_project):
     http, _ = client

@@ -1,13 +1,10 @@
-"""A project, end to end: the AI Card · rank the risks · map · tiers.
+"""An assessment, end to end: the AI Card, rate the risks, map, key objectives.
 
 Driven through the HTTP surface against a real database, with a fake mapper,
-so what is tested is the flow rather than a model's judgement.
-
-(Rewritten for WP7, pipeline 2026-09-23: an assessment is of one saved card
-version, so each one is made with `Projects.create(..., system_id)` on a
-version of its own. The upload cases, "not an AI card", the ai-card.json
-upload and the corrected card, were about the removed upload routes; how an
-assessment is started now is pinned in test_assessment_of_a_version.py.)
+so what is tested is the flow rather than a model's judgement. An assessment is
+of one saved card version, so each one is made with
+`Projects.create(..., system_id)` on a version of its own; how an assessment is
+started is tested in test_assessment_of_a_version.py.
 """
 
 from __future__ import annotations
@@ -113,14 +110,14 @@ class TestStartingAProject:
 
 class TestRankingTheRisks:
     def test_ranking_needs_nothing_but_the_card(self, _starter, platform_project, client, graph):
-        """The point of dropping the first workflow: an assessor can rank the
-        moment the card is in, with no model call in between."""
+        """An assessor can rank the moment the card is in, with no model call
+        in between."""
         project = _start(client, graph, platform_project, starter=_starter)
         rated = client.post(
             f"/p/{platform_project}/api/projects/{project['id']}/severity", json={"risk2": 5, "risk4": 1}
         )
         assert rated.status_code == 200
-        # the route from before the matrix sets the impact
+        # the /severity route sets the impact only
         assert rated.json()["severity"]["impact"] == {"risk2": 5, "risk4": 1}
 
     def test_a_rating_for_a_risk_this_card_lacks_is_refused(self, _starter, platform_project, client, graph):

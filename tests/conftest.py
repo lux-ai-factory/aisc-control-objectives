@@ -29,7 +29,7 @@ def objectives():
     return load_control_objectives()
 
 
-#: Databases the suite must never drop and recreate (I5.7): the platform's, the
+#: Databases the suite must never drop and recreate: the platform's, the
 #: server's maintenance database and any project's own.
 _REFUSED_NAMES = ("platform", "postgres")
 
@@ -40,8 +40,7 @@ def refused_database(url: str | None) -> str | None:
     Decided from the URL alone, before anything connects: the fixtures below
     DROP the database they are given, so a URL that names the platform, the
     maintenance database, a project database, or the running stack's port
-    (5432) is refused outright, and so is no URL at all (the old default was
-    the running stack's Postgres).
+    (5432) is refused outright, and so is no URL at all.
     """
     from urllib.parse import urlsplit
 
@@ -64,7 +63,7 @@ def database_url() -> str:
 
     Not SQLite: testing against a different engine from production is how you
     find out `text[]` does not exist on the day you deploy. Refused before any
-    connection when it names a database the suite must not drop (I5.7).
+    connection when it names a database the suite must not drop.
     """
     import os
 
@@ -79,7 +78,7 @@ def database_url() -> str:
 #: give it. `core.project` and `core.project_member` stand in for the platform
 #: database (membership, in the single-database `create_app(engine=...)` tests);
 #: `project.system` is the project database's list of card versions (template
-#: 0006, I1.5), which an assessment points at. In the suite one database plays
+#: 0006), which an assessment points at. In the suite one database plays
 #: both parts; deployed, they are two (tests/test_isolation_project_databases.py).
 CORE_PROJECT_DDL = """
 CREATE SCHEMA IF NOT EXISTS core;
@@ -121,8 +120,8 @@ def repository(database_url, objectives):
     """A repository on a freshly created database, dropped afterwards.
 
     The database is one project's (its pid is `repository.pid`): the
-    assessment carries no project of its own any more (I1.7), the database it
-    is in is the project.
+    assessment carries no project of its own; the database it is in is the
+    project.
     """
     import uuid
 
@@ -197,8 +196,8 @@ def system_version(repository):
     """A saved AI card version (`project.system` row) of the database's project.
 
     `system_version(project_pid, number)` returns the new row's pid. The
-    project argument is kept so call sites read as before; the database is the
-    project, so it is not stored (project.system has no project column).
+    project argument is not stored: the database is the project, and
+    project.system has no project column.
     """
     import uuid
 

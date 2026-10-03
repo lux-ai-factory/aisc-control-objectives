@@ -1,11 +1,7 @@
-"""WP1 (api-auth 2026-09-25): every route asks who is calling, and an
-assessment is decided by its own project.
+"""Every route asks who is calling, and an assessment is decided by its own project.
 
-Before this, the JSON API under /api/projects had no gate at all, and the
-gate on /p/... could be walked around by adding the app's own root path
-(/control-objectives/p/...), because the gate read the raw path while the
-router read the path with the root path taken off. See
-docs/superpowers/api-auth-2026-09-25/01-inventory.md, findings 1, 2, 5, 9b.
+Among the cases: the gate must read the path the router reads, so that adding
+the app's own root path (/control-objectives/p/...) is not a way around it.
 
 The gate here is the one the service really runs: `create_app(..., engine=)`
 with a stand-in for Keycloak's signing key.
@@ -127,7 +123,7 @@ def _risk_id(client, headers, pid, assessment_id) -> str:
     ).json()["risks"][0]["id"]
 
 
-# ── 1. no token, no entry ───────────────────────────────────────────────────
+# 1. No token, no entry
 
 
 def _gated_routes(pid: str, aid: str) -> list[tuple[str, str]]:
@@ -204,7 +200,7 @@ def test_public_means_exactly_those_paths(client, signing, project_member):
         assert client.get(path).status_code == 401, path
 
 
-# ── 4. the path cannot be dressed up to miss the gate ───────────────────────
+# 4. The path cannot be dressed up to miss the gate
 
 
 def _bypass_variants(pid: str, aid: str) -> list[str]:
@@ -286,7 +282,7 @@ def _asgi_get(app, path: str, headers: dict[str, str]) -> int:
 def test_the_project_in_the_path_is_read_once_as_the_router_reads_it(
     objectives, projects, repository, signing, project_member
 ):
-    """`/p/%2530...` reaches the handler as project `%30...`. The gate used to
+    """`/p/%2530...` reaches the handler as project `%30...`. The gate must not
     decode it a second time and check `0...` instead; it must check the very
     string the handler gets."""
     pid, _, subject = project_member("owner")
@@ -297,7 +293,7 @@ def test_the_project_in_the_path_is_read_once_as_the_router_reads_it(
     assert _asgi_get(app, f"/p/{decoded_once}", headers) == 404
 
 
-# ── 2. the JSON API: the assessment's own project decides ───────────────────
+# 2. The JSON API: the assessment's own project decides
 
 
 def test_a_viewer_reads_through_the_api(client, signing, project_member, assessment):
@@ -400,14 +396,12 @@ def test_a_member_of_one_project_cannot_reach_anothers_assessment_by_id(
     assert client.get(f"/p/{theirs}/api/projects", headers=headers).status_code == 404
 
 
-# ── 3. the pages: an assessment is only under its own project ───────────────
+# 3. The pages: an assessment is only under its own project
 
 
 def test_a_page_refuses_an_assessment_of_another_project(monkeypatch, fixtures_dir):
-    """(Isolation, W-6 / O1.8 exception 1: rewritten in place on two real project
-    databases, same assertions. With project_id gone, two projects can no
-    longer share the one test database, so "another project's assessment" is
-    one in another database, and the service is built as deployed.)"""
+    """On two real project databases: "another project's assessment" is one in
+    another database, and the service is built as deployed."""
     from isolation_support import Projects as PlatformProjects
     from isolation_support import (
         cluster_or_skip,
@@ -466,7 +460,7 @@ def test_a_page_opens_by_slug_behind_the_root_path(rooted, signing, project_memb
     assert rooted.get(f"/p/{slug}/projects/{aid}", headers=headers).status_code == 200
 
 
-# ── 5. the caller's token reaches the platform and qualification ────────────
+# 5. The caller's token reaches the platform and qualification
 
 
 def test_start_assessment_forwards_the_gateway_token(client, signing, project_member, monkeypatch):
@@ -506,7 +500,7 @@ def test_upstream_sends_both_headers():
     assert upstream._headers(None) == {}
 
 
-# ── the service as composed runs with the gate ──────────────────────────────
+# The service as composed runs with the gate
 
 
 def test_build_app_fits_the_gate(monkeypatch):
@@ -521,8 +515,7 @@ def test_build_app_fits_the_gate(monkeypatch):
         return object()
 
     class FakeDatabases:
-        # (Isolation, O1.8 exception 2: the gate's engine is the platform
-        # engine of ProjectDatabases now, not a repository's.)
+        # the gate's engine is the platform engine of ProjectDatabases, not a repository's
         def __init__(self, *a, **k):
             self.platform = "the-engine"
 

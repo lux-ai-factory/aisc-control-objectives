@@ -1,7 +1,6 @@
 """Which control objectives the project takes forward to step 4.
 
-Until 2026-10-01 the assessor ticked them (evidence links plan 2026-09-30, step A, D1 and D2).
-Since the risk and control matrix, what goes forward is what the matrix holds: every objective
+What goes forward is what the risk and control matrix holds: every objective
 mapped to at least one risk, in catalogue order, whoever mapped it. The fixtures here are shared
 by the other step 2 tests.
 """
@@ -133,7 +132,7 @@ def test_an_older_version_shows_its_matrix_without_ticks(client, start, platform
     assert 'name="key"' not in page and "co-chip--" in page
 
 
-# ── each objective carries its trustworthiness dimension as a tag (2026-10-01) ──
+# Each objective carries its trustworthiness dimension as a tag
 
 def test_each_objective_in_the_matrix_shows_its_dimension(client, start, platform_project, objectives):
     import re

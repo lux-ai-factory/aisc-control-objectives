@@ -1,4 +1,4 @@
-"""An objective of a set the user made (2026-10-01): its id is the set's code and a number, it
+"""An objective of a set the user made: its id is the set's code and a number, it
 sorts after the built-in set, and its legal basis may cite something outside the AI Act and GDPR."""
 from __future__ import annotations
 

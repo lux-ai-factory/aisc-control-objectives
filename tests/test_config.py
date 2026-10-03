@@ -1,7 +1,7 @@
 """RunConfig: defaults < TOML file < environment.
 
-The pipeline it once configured is gone; what remains is the model the service
-talks to, and the one loading path `server.build_app` uses.
+What it configures is the model the service talks to, through the one loading
+path `server.build_app` uses.
 """
 
 import pytest

@@ -1,4 +1,4 @@
-"""The Sets and Profiles pages and their API (2026-10-01)."""
+"""The Sets and Profiles pages and their API."""
 from __future__ import annotations
 
 import re
@@ -25,7 +25,7 @@ def made_set(http, pid, code="BNK"):
     return r.json()
 
 
-# ── the API ─────────────────────────────────────────────────────────────────
+# The API
 
 def test_a_set_is_made_with_its_code_and_listed_after_the_built_in_one(http, platform_project):
     made = made_set(http, platform_project)
@@ -86,7 +86,7 @@ def test_profiles_are_made_and_saved_as_versions(http, platform_project):
     assert got["picks"] == ["O1", "O2", "BNK1"] and got["pins"] == {"BNK": 1}
 
 
-# ── the pages ───────────────────────────────────────────────────────────────
+# The pages
 
 def test_the_menu_has_sets_and_profiles(http, platform_project):
     page = http.get(f"/p/{platform_project}/sets").text

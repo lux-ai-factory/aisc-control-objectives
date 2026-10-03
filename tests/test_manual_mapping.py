@@ -1,4 +1,4 @@
-"""A person maps a risk to its control objectives (2026-10-01).
+"""A person maps a risk to its control objectives.
 
 The mapping is made by the AI (the risk mapper, "Map with AI") or by a person, risk by risk. A
 person's save replaces that risk's mapping: an objective kept from the AI keeps its quote and stays

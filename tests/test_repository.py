@@ -5,11 +5,8 @@ thing, the uploaded graph kept as the bytes that were uploaded, and everything
 derivable left out so it cannot go stale.
 
 The tests run in a transaction that is rolled back, so they are isolated
-without truncating anything.
-
-(Rewritten for WP7, pipeline 2026-09-23: every assessment is of one saved card
-version, `system_id`, one version per assessment. The replaced-card case was
-about the removed upload route.)
+without truncating anything. Every assessment is of one saved card version,
+`system_id`, one assessment per version.
 """
 
 from __future__ import annotations
@@ -148,7 +145,7 @@ class TestTheCatalogueStamp:
     def test_a_project_records_which_catalogue_it_was_assessed_against(
         self, system_version, repository, platform_project, ontology, graph_json, objectives
     ):
-        """If the CSV is re-exported, an old project's tiers would silently
+        """If the CSV is re-exported, an old project's scores would silently
         change. The stamp is what lets the page say so."""
         project = repository.create(project=platform_project, name="MCAS", ontology=ontology, jsonld=graph_json, system_id=system_version(platform_project, 1))
         assert project.objectives_digest == objectives.digest
@@ -157,9 +154,8 @@ class TestTheCatalogueStamp:
 
 class TestOneDatabase:
     """This service owns a schema in its project's database, and the database
-    is the project: rows carry no project of their own (isolation, I1.7), and
-    an assessment's card version must be a row of that database's
-    project.system (I5.3)."""
+    is the project: rows carry no project of their own, and an assessment's
+    card version must be a row of that database's project.system."""
 
     def test_its_tables_are_in_its_own_schema(self, repository, platform_project):
         from sqlalchemy import inspect
@@ -182,9 +178,8 @@ class TestOneDatabase:
     def test_the_database_refuses_an_assessment_of_a_version_absent_from_project_system(
         self, repository, platform_project, ontology, graph_json
     ):
-        """(Isolation, S-D13: replaces "refuses an assessment of a project that
-        does not exist"; the assessment has no project column any more, the
-        key that remains is system_id into project.system.)"""
+        """The assessment has no project column; its key into the project is
+        system_id, into project.system."""
         import uuid
 
         from sqlalchemy.exc import IntegrityError

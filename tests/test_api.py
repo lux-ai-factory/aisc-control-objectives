@@ -107,8 +107,8 @@ class TestObjectivesPage:
     def test_the_page_does_not_split_control_from_test(self, page):
         """Assessment mode stays in the data and the API, off the page.
 
-        "Control" itself still occurs — it is in the title and in objective
-        text — so this pins the markers of the distinction, not the word.
+        "Control" itself still occurs (it is in the title and in objective
+        text), so this checks the markers of the distinction, not the word.
         """
         for marker in (
             "qf-tag--control",   # the badges

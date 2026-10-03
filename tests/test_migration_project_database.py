@@ -1,13 +1,10 @@
 """The alembic baseline of a project database, 20260926000000_project_database.
 
-Isolation (01-specs.md I5.4, S-D13): the old chain (six revisions ending at
-7c3e5a9b1d24, with keys into the platform's core.system) is replaced by one
-baseline that makes today's final shape minus `project_id`, with `system_id`
-pointing at `project.system(pid)` ON DELETE CASCADE. This file replaces
-test_migration_assessment_of_a_version.py and
-test_migration_card_version_of_its_project.py: it keeps what of theirs still
-holds in a project database (the head, the cascade from a deleted version, and
-create_all agreeing with the migration).
+The baseline makes the assessment tables without a `project_id` column, with
+`system_id` pointing at `project.system(pid)` ON DELETE CASCADE. The later
+revisions sit on it; these tests check the head, the cascade from a deleted
+version, the data each revision rewrites, and create_all agreeing with the
+migrations.
 
 Runs the real migration on a scratch database of its own, derived from the
 suite's test database and refused by the same rule (conftest.refused_database).
@@ -24,19 +21,19 @@ from sqlalchemy import create_engine, text
 from conftest import CORE_PROJECT_DDL, refused_database
 
 BASELINE = "20260926000000_project_database"
-#: The objective selection (evidence links plan 2026-09-30, step A), on top of the baseline.
+#: The objective selection, on top of the baseline.
 SELECTION = "20261001000000_selection"
-#: The objective ids O1 ... O50 (2026-10-01), on top of the selection.
+#: The objective ids O1 ... O50, on top of the selection.
 RENAME = "20261001100000_objective_ids"
-#: Who mapped a risk to an objective, the AI or a person (2026-10-01), on top of the rename.
+#: Who mapped a risk to an objective, the AI or a person, on top of the rename.
 SOURCE = "20261001110000_mapping_source"
-#: An optional comment on a risk's severity (2026-10-01), on top of the source.
+#: An optional comment on a risk's severity, on top of the source.
 COMMENT = "20261001120000_severity_comment"
-#: Objective sets and profiles (2026-10-01), on top of the comment.
+#: Objective sets and profiles, on top of the comment.
 SETS = "20261002000000_objective_sets"
-#: The risk and control matrix (2026-10-01): impact x likelihood, key objectives, scope = the matrix.
+#: The risk and control matrix: impact x likelihood, key objectives, scope = the matrix.
 RCM = "20261002100000_rcm"
-#: The ledger (2026-10-03): mapping changes keep what they replace; authors by subject.
+#: The ledger: mapping changes keep what they replace; authors by subject.
 HEAD = "20261003000000_ledger_history"
 TABLES = ("project", "graph", "risk", "mapped_objective", "mapping_run", "objective_selection",
           "objective_set", "objective_draft", "objective_set_version", "objective_set_version_item",
@@ -150,7 +147,7 @@ def test_the_chain_is_baseline_selection_rename_source():
 
 
 def test_the_readers_read_the_selection_and_the_platform_is_granted_nothing(migrated):
-    """Step 4 is a platform page that reads as report_ro (D4): platform_rw gets nothing here."""
+    """Step 4 is a platform page that reads as report_ro: platform_rw gets nothing here."""
     with migrated.connect() as connection:
         def can(role, table, what="SELECT"):
             return connection.execute(
@@ -177,7 +174,7 @@ def test_upgrading_again_changes_nothing(migrated):
 
 
 def test_deleting_a_version_deletes_its_assessment(migrated):
-    """(From the old S7.6 schema test: the key into project.system cascades.)"""
+    """The key into project.system cascades."""
     version = str(uuid.uuid4())
     with migrated.begin() as connection:
         connection.execute(
@@ -207,7 +204,7 @@ def test_the_assessment_has_one_key_into_project_system_and_no_project_id(migrat
             " WHERE conrelid = 'control_objectives.project'::regclass AND contype = 'f'"
         )).all()
         columns = [c for (t, c, *_rest) in _columns(connection) if t == "project"]
-    # one key into project.system; the other (2026-10-01) is the profile version it runs on
+    # one key into project.system; the other is the profile version it runs on
     assert sorted(tuple(k) for k in keys) == [
         ("fk_project_profile_version_id",
          "FOREIGN KEY (profile_version_id) REFERENCES objective_profile_version(id) ON DELETE RESTRICT"),
@@ -220,7 +217,7 @@ def test_the_assessment_has_one_key_into_project_system_and_no_project_id(migrat
 
 def test_the_model_and_the_migration_agree(migrated, repository):
     """create_all (the suite's schema) and the baseline give the same keys,
-    indexes and columns (from the old test_the_model_has_the_same_key)."""
+    indexes and columns."""
     with migrated.connect() as connection:
         from_migration = (_constraints(connection), _indexes(connection))
     with repository.engine.connect() as connection:
@@ -235,7 +232,7 @@ def test_the_model_and_the_migration_agree(migrated, repository):
 
 
 def test_an_assessment_mapped_before_the_selection_gets_its_mapped_objectives(database_url):
-    """D1 for what was there before: an assessment already mapped when the selection arrives starts
+    """An assessment already mapped when the selection arrives starts
     with every objective its mapping linked ticked; one not yet mapped gets no selection."""
     from alembic import command
     from alembic.config import Config
@@ -281,7 +278,7 @@ def test_an_assessment_mapped_before_the_selection_gets_its_mapped_objectives(da
 
 
 def test_the_stored_ids_become_o_ids_in_catalogue_order(database_url):
-    """2026-10-01: every stored objective id is renamed by objective_id_renames.csv; a selection is
+    """Every stored objective id is renamed by objective_id_renames.csv; a selection is
     kept in catalogue order (O7 before O24); an id the table does not know is left as it is."""
     from alembic import command
     from alembic.config import Config
@@ -357,7 +354,7 @@ def test_the_readers_read_the_sets_and_profiles(migrated):
 
 
 def test_severity_becomes_impact_and_the_scope_is_the_matrix(database_url):
-    """2026-10-01: a risk's severity is its impact, its likelihood starts unrated; what an assessment
+    """A risk's severity is its impact, its likelihood starts unrated; what an assessment
     takes forward becomes what its matrix holds, in catalogue order."""
     from alembic import command
     from alembic.config import Config
@@ -406,7 +403,7 @@ def test_severity_becomes_impact_and_the_scope_is_the_matrix(database_url):
     "TRUNCATE control_objectives.mapping_archive",
 ])
 def test_the_mapping_archive_is_append_only(migrated, change):
-    """Ledger phase 6 (review M4, m4): what a change replaced is kept; no row is changed or removed,
+    """What a change replaced is kept; no row is changed or removed,
     not even by truncating the table. (Its owner can still drop the trigger: the ledger's frozen copies
     are the check on that.)"""
     from sqlalchemy.exc import DBAPIError

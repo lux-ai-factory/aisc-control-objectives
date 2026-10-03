@@ -1,4 +1,4 @@
-"""Which control objectives matter most (risk and control matrix, 2026-10-01).
+"""Which control objectives matter most: the scores behind the risk and control matrix.
 
 Each risk is rated impact (1-5) x likelihood (1-5), 1 to 25, in the 5x5 bands risk teams know: Low
 1-4, Medium 5-9, High 10-16, Critical 17-25. An unrated impact or likelihood counts 3. An objective
@@ -33,7 +33,7 @@ def by_id(objectives, severity, mappings, **kw):
     return {p.objective_id: p for p in prioritise(objectives, severity, mappings, RISKS, **kw)}
 
 
-# ── the rating ──────────────────────────────────────────────────────────────
+# The rating
 
 def test_a_rating_is_impact_times_likelihood():
     assert rated(r1=(5, 4)).of("r1") == 20
@@ -57,7 +57,7 @@ def test_the_bands(rating, name):
     assert band(rating) == name
 
 
-# ── the score and the rank ──────────────────────────────────────────────────
+# The score and the rank
 
 def test_an_objective_scores_the_sum_of_its_risks_ratings(objectives):
     got = by_id(objectives, rated(r1=(5, 4), r2=(2, 2)), {"r1": maps("r1", "O5"), "r2": maps("r2", "O5")})
@@ -79,7 +79,7 @@ def test_the_reason_gives_the_ratings_and_the_score(objectives):
     assert got["O5"].reasons[0].startswith("mitigates 2 risks rated 20 (Critical) and 6 (Medium): score 26")
 
 
-# ── key objectives ──────────────────────────────────────────────────────────
+# Key objectives
 
 def test_by_default_the_first_seven_driven_by_a_high_risk_are_key(objectives):
     many = ["O1", "O2", "O3", "O4", "O5", "O6", "O7", "O8", "O9"]

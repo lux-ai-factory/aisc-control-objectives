@@ -1,8 +1,4 @@
-"""Isolation (one database per project), the parts that need no database.
-
-Stage 2 of docs/superpowers/isolation-2026-09-25 (01-specs.md section 5). These
-fail until WP O1 is built. Each test names the requirement it proves.
-"""
+"""One database per project: the checks that need no database."""
 
 from __future__ import annotations
 
@@ -23,14 +19,14 @@ BASELINE = "20260926000000_project_database"
 
 
 def _projectdb():
-    # imported per test: until WP O1 the module does not exist, and each test
-    # must fail on its own rather than stop the suite from collecting
+    # imported per test, so a missing module fails each test on its own rather
+    # than stopping the suite from collecting
     from aisc_control_objectives import projectdb
 
     return projectdb
 
 
-# ── I1.8 one naming rule ────────────────────────────────────────────────────
+# One naming rule
 
 
 def test_I1_8_the_example_pid_names_its_database():
@@ -48,7 +44,7 @@ def test_I1_8_I5_2_anything_but_a_pid_never_becomes_a_database_name(bad):
         _projectdb().database_name(bad)
 
 
-# ── I5.1 the only way into a project database ──────────────────────────────
+# The only way into a project database
 
 
 def test_I5_1_create_engine_appears_only_in_projectdb():
@@ -70,7 +66,7 @@ def test_I5_1_the_door_is_ProjectDatabases_open():
     assert callable(getattr(projectdb.ProjectDatabases, "open", None))
 
 
-# ── I5.3 version numbers come from project.system of the same database ─────
+# Version numbers come from project.system of the same database
 
 
 def test_I5_3_the_repository_reads_project_system_not_core():
@@ -80,7 +76,7 @@ def test_I5_3_the_repository_reads_project_system_not_core():
 
 
 def test_I5_3_I1_7_the_assessment_has_no_project_id_column():
-    """control_objectives.project keeps its name and loses project_id (D6)."""
+    """control_objectives.project has no project_id column: the database is the project."""
     from aisc_control_objectives.db import tables
 
     assert tables.Project.__tablename__ == "project"
@@ -97,7 +93,7 @@ def test_I5_1_nothing_in_src_names_core_system():
     assert offenders == []
 
 
-# ── I5.4 one baseline revision, no core ─────────────────────────────────────
+# One baseline revision, nothing outside the project database
 
 
 def _revision_files() -> list[Path]:
@@ -105,8 +101,7 @@ def _revision_files() -> list[Path]:
 
 
 def test_I5_4_one_baseline_revision():
-    """One baseline; the objective selection (evidence links 2026-09-30), the O1 ... O50 ids and
-    who mapped a risk (2026-10-01) sit on it."""
+    """One baseline revision; every later revision sits on it, in order."""
     assert [p.stem for p in _revision_files()] == [
         BASELINE, "20261001000000_selection", "20261001100000_objective_ids", "20261001110000_mapping_source",
         "20261001120000_severity_comment", "20261002000000_objective_sets", "20261002100000_rcm",
@@ -139,7 +134,7 @@ def test_I5_4_env_sets_the_search_path_to_its_own_schema_only():
         assert names == ["control_objectives"], path
 
 
-# ── I5.5 the migrate one-shot exists ────────────────────────────────────────
+# The migrate one-shot exists
 
 
 def test_I5_5_migrate_projects_is_a_module_with_main():
@@ -148,7 +143,7 @@ def test_I5_5_migrate_projects_is_a_module_with_main():
     assert callable(migrate_projects.main)
 
 
-# ── I5.2 routes ─────────────────────────────────────────────────────────────
+# Routes
 
 
 @pytest.fixture()
@@ -191,7 +186,7 @@ def test_I5_2_the_public_catalogue_routes_stay(routes):
         assert ("GET", path) in routes, path
 
 
-# ── I5.7 the test database fixture refuses the wrong database ──────────────
+# The test database fixture refuses the wrong database
 
 
 @pytest.mark.parametrize(

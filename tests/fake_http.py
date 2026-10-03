@@ -1,10 +1,9 @@
-"""A fake HTTP server for the LLM-keys tests (pipeline 2026-09-24-llm-keys, 01-specs.md section 8).
+"""A fake HTTP server for the per-project LLM key tests.
 
 Not a test module. Serves canned answers on 127.0.0.1 and records every request, so no
 test reaches the platform, a provider or the internet, and no real key is used. Test
 keys look like `sk-test-<hex>` so a leak is greppable. The same helper exists in
-platform/tests/llm_support.py, apps/qualification/services/agents/tests/fake_http.py
-and apps/control-objectives/tests/fake_http.py.
+platform/tests/llm_support.py and apps/qualification/services/agents/tests/fake_http.py.
 """
 from __future__ import annotations
 

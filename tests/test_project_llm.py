@@ -1,4 +1,4 @@
-"""The risk mapper works with the model its project chose (01-specs.md S3.9, S3.10; D8).
+"""The risk mapper works with the model its project chose.
 
 `Projects(..., mapper_for=fn)` asks `fn(record.project)` for a (Mapper, model label) at each
 map; `server.build_app` wires it to `baf_llm.config_for(pid, "risk_mapper", fallback=<the
@@ -52,7 +52,7 @@ def assessment(graph, platform_project, system_version):
     return make
 
 
-# ── S3.9 Projects asks for the project's mapper ──────────────────────────────
+# Projects asks for the project's mapper
 
 
 def test_s3_9_map_uses_the_mapper_of_the_records_project_and_records_its_label(
@@ -78,7 +78,7 @@ def test_s3_9_d8_without_mapper_for_the_fixed_mapper_and_label_are_used(reposito
     assert view.record.mapping_run.model == "env/startup"
 
 
-# ── S3.10 a failure to get the model is a 502, and saves nothing ─────────────
+# A failure to get the model is a 502, and saves nothing
 
 
 def _failing(exc):
@@ -124,7 +124,7 @@ def test_s3_10_the_form_route_answers_502_plain_text_and_saves_nothing(failing_c
     assert client.get(f"/p/{platform_project}/api/projects/{pid}").json()["mapping_run"] is None
 
 
-# ── S3.9 server.build_app wires mapper_for to the platform ───────────────────
+# server.build_app wires mapper_for to the platform
 
 
 @pytest.fixture

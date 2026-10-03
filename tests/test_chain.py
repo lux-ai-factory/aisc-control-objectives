@@ -1,4 +1,4 @@
-"""Control objectives' step of the pipeline chain (scripts/test-pipeline-chain.sh, 03 WP12).
+"""Control objectives' step of the pipeline chain (scripts/test-pipeline-chain.sh in the aisc repo).
 
 Skipped unless CHAIN_JSON names the chain's shared state. Step 3: an assessment of
 card version 1, started the way the page starts one (no file), with the platform
@@ -7,7 +7,7 @@ fixture plus one node per card_component row of the chain's card, read from the
 chain project's own database, so the step consumes two links: the card's component
 rows, and the assessment's key into project.system of that database.
 
-Since the isolation (I19.2, S-D6) the service is built as deployed,
+The service is built as deployed,
 `server.build_app()` (isolation_support.deployed_app), with DATABASE_URL on the
 chain's `platform` (membership) and PROJECT_DATABASE_URL the template of a project
 database, both set by the driver; the caller is the chain project's owner, with a

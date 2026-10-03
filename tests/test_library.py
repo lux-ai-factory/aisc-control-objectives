@@ -1,4 +1,4 @@
-"""Objective sets and objective profiles (2026-10-01), on a project's database.
+"""Objective sets and objective profiles, on a project's database.
 
 A set is where objectives are written: the user picks its code, its objectives are code + number,
 never reused, and it is published as numbered, immutable versions. A profile is picked from the
@@ -36,7 +36,7 @@ def bnk(library):
     return made
 
 
-# ── sets ────────────────────────────────────────────────────────────────────
+# Sets
 
 def test_the_built_in_set_is_listed_first_and_read_only(library, bnk):
     sets = library.sets()
@@ -114,7 +114,7 @@ def test_only_published_objectives_can_be_picked(library, bnk):
     assert available[:50] == [f"O{n}" for n in range(1, 51)] and available[50:] == ["BNK1", "BNK2"]
 
 
-# ── profiles ────────────────────────────────────────────────────────────────
+# Profiles
 
 def test_the_full_ai_act_profile_is_built_in(library):
     profiles = library.profiles()

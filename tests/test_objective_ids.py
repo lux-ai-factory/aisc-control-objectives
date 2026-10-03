@@ -1,6 +1,6 @@
-"""Objective ids are O1 ... O50 (2026-10-01): one number each, in catalogue order.
+"""Objective ids are O1 ... O50: one number each, in catalogue order.
 
-They were R1.1 ... R11.4, the macro-requirement in the id. The macro-requirements (R1 ... R11)
+The earlier ids were R1.1 ... R11.4, the macro-requirement in the id. The macro-requirements (R1 ... R11)
 keep their ids, they are the trustworthiness dimensions; an objective's dimension is read from
 its Macro_Requirement column, never from its id. `objective_id_renames.csv` is the table every
 stored id was migrated with.

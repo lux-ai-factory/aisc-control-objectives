@@ -1,7 +1,7 @@
-"""An assessment runs on an objective profile version (2026-10-01).
+"""An assessment runs on an objective profile version.
 
-None means the built-in Full AI Act profile. The mapper, the editor, the score, the tiers and the
-selection see only the profile's objectives. Switching profile, or taking a profile's newer version,
+None means the built-in Full AI Act profile. The mapper, the editor, the scores, the key objectives
+and the selection see only the profile's objectives. Switching profile, or taking a profile's newer version,
 drops the mappings and selected objectives outside it, and says which. A new card version's
 assessment starts on the previous one's profile.
 """

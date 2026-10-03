@@ -1,7 +1,6 @@
-"""Test helpers for the isolation (one database per project), 2026-09-25.
+"""Test helpers for one database per project.
 
-Stage 2 of docs/superpowers/isolation-2026-09-25 (02-tests.md). Nothing here is
-product code: it makes a throwaway cluster look like the platform, with real
+Nothing here is product code: it makes a throwaway cluster look like the platform, with real
 project databases made by the platform's own template runner
 (`platform_service.projectdb.provision`), and builds the service the way it is
 deployed (`server.build_app()`, from the environment).
@@ -13,11 +12,11 @@ Postgres lives) and a URL that was not set explicitly. They write
 database (made by init/platform-db.sql), and make and drop `project_<hex>`
 databases in it.
 
-Until the platform template has 0006_project_system.sql and
-0008_control_objectives.sql (WP P1), `stand_in_for_missing_template` makes
-exactly what I1.5 / I2.1 say those files make, so that the control-objectives
-tests fail on control-objectives, not on P1. Once the real files exist the
-template runner has made them first and the stand-in does nothing.
+When the platform template lacks 0006_project_system.sql or
+0008_control_objectives.sql, `stand_in_for_missing_template` makes what those
+files make, so that the control-objectives tests fail on control-objectives,
+not on the platform. When the real files exist the template runner has made
+them first and the stand-in does nothing.
 """
 
 from __future__ import annotations
@@ -40,11 +39,11 @@ PLATFORM_DIR = HERE.parents[2] / "platform"
 ISSUER = "http://keycloak:8080/realms/aisc"
 ROOT = "/control-objectives"
 
-#: I1.8: the example pid of the spec, and its database, in every language's tests.
+#: An example pid and its database name, the same in every service's tests.
 EXAMPLE_PID = "3f2b8c1e-0d4a-4e7b-9a55-1c2d3e4f5a6b"
 EXAMPLE_DB = "project_3f2b8c1e0d4a4e7b9a551c2d3e4f5a6b"
 
-#: I2.6: what report_ro and dashboard_ro may SELECT in control_objectives.
+#: What report_ro and dashboard_ro may SELECT in control_objectives.
 READER_TABLES = ("project", "graph", "risk", "mapped_objective", "mapping_run", "objective_selection")
 READERS = ("report_ro", "dashboard_ro")
 
@@ -256,8 +255,8 @@ def deployed_app(monkeypatch, cluster: Cluster, *, root_path: str = "",
                  platform_url: str | None = None, seen_llm_projects: list | None = None):
     """The service as composed by `server.build_app()`, pointed at the cluster.
 
-    Env (the isolation contract, 02-tests.md decisions): `DATABASE_URL` is the
-    `platform` database (membership only, I5.1); `PROJECT_DATABASE_URL` is the
+    Env: `DATABASE_URL` is the `platform` database (membership only);
+    `PROJECT_DATABASE_URL` is the
     template for a project database, `{database}` replaced by `project_<hex>`.
     No model is ever reached: the mapper is a fake and the ollama URL is a
     closed port.

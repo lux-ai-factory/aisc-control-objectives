@@ -1,15 +1,12 @@
-"""Isolation (one database per project): control objectives, against real
-project databases.
+"""One database per project: control objectives, against real project databases.
 
-Stage 2 of docs/superpowers/isolation-2026-09-25 (01-specs.md sections 5, 17,
-18). Two or more platform projects are made in a throwaway cluster, each with
+Two or more platform projects are made in a throwaway cluster, each with
 its own `project_<hex>` database made by the platform's template runner, and
 the service is built as deployed (`server.build_app()`, env `DATABASE_URL` on
 `platform` for membership and `PROJECT_DATABASE_URL` with `{database}`).
 
-Section 3 below mirrors, at the `/p/{pid}/api` paths, every case of
-tests/test_api_auth.py whose route moves (I18.2); test_api_auth.py itself is
-changed only in its paths by WP O1.
+Section 3 below repeats, at the `/p/{pid}/api` paths and against real project
+databases, every case of tests/test_api_auth.py whose route is under a project.
 """
 
 from __future__ import annotations
@@ -107,7 +104,7 @@ def _api(pid, aid=None, tail=""):
     return f"/p/{pid}/api/projects" + (f"/{aid}" if aid else "") + tail
 
 
-# ── 1. placement: an assessment lives in its project's database ────────────
+# 1. Placement: an assessment lives in its project's database
 
 
 def test_I1_1_I5_1_an_assessment_is_written_into_its_projects_database(cluster, projects, two):
@@ -140,7 +137,7 @@ def test_I5_3_I1_6_I1_7_the_assessment_table_in_a_project_database(cluster, proj
         "SELECT confrelid::regclass::text, confdeltype FROM pg_constraint"
         " WHERE conrelid = 'control_objectives.project'::regclass AND contype = 'f'",
     )
-    # its card version (cascading), and since 2026-10-01 the profile version it runs on (restricted)
+    # its card version (cascading) and the profile version it runs on (restricted)
     assert sorted(keys) == [("control_objectives.objective_profile_version", "r"), ("project.system", "c")], keys
     unique = _rows(
         cluster, database,
@@ -158,7 +155,7 @@ def test_I5_4_the_database_is_at_the_baseline_and_readers_get_their_reads(cluste
 
     a, _, _, _ = two
     database = projects.database(a)
-    # the head: the ledger's history (2026-10-03), on the earlier revisions and the baseline
+    # the head revision
     baseline = (Path(__file__).resolve().parents[1] / "alembic" / "versions"
                 / "20261003000000_ledger_history.py").read_text()
     revision = re.search(r"^revision\s*=\s*['\"]([^'\"]+)", baseline, re.M).group(1)
@@ -179,12 +176,11 @@ def test_I5_4_the_database_is_at_the_baseline_and_readers_get_their_reads(cluste
         ) == [(False,)], reader
 
 
-# ── 2. cross-project: every route that takes an id, under the other pid ───
+# 2. Cross-project: every route that takes an id, under the other pid
 
 
 def _id_routes(pid, aid, risk="r1"):
-    """Every route that addresses an assessment by id (route inventory,
-    02-tests.md; the risk and control matrix, 2026-10-01): the pages and forms and the JSON API."""
+    """Every route that addresses an assessment by id: the pages and forms and the JSON API."""
     return [
         ("GET", f"/p/{pid}/projects/{aid}", {}),
         ("POST", f"/p/{pid}/projects/{aid}/map", {}),
@@ -277,7 +273,7 @@ def test_I5_2_I5_1_a_project_that_does_not_exist_is_404_without_a_database(
     assert not cluster.database_exists("project_" + ghost.replace("-", ""))
 
 
-# ── 3. I18.2: every test_api_auth.py case whose route moved ────────────────
+# 3. Every test_api_auth.py case whose route is under a project
 
 
 def _gated(pid, aid):
@@ -401,7 +397,7 @@ def test_I18_2_a_stranger_is_told_nothing_exists(cluster, projects, two, client,
 
 def test_I18_2_a_member_of_one_project_cannot_reach_anothers_by_id(two, client, token):
     """test_api_auth: test_a_member_of_one_project_cannot_reach_anothers_assessment_by_id,
-    now with the id under the caller's own pid (EDITOR is in A only; B's id)."""
+    with the id under the caller's own pid (EDITOR is in A only; B's id)."""
     a, b, _, bid = two
     headers = token(EDITOR)
     assert client.get(_api(a, bid), headers=headers).status_code == 404
@@ -421,7 +417,7 @@ def test_I18_2_pages_open_by_pid_or_slug_and_behind_the_root_path(two, client, r
     assert rooted.get(f"{ROOT}/p/{slug}/projects/{aid}", headers=token(VIEWER)).status_code == 200
 
 
-# ── 4. I5.3 numbers, I5.6 the mapper's project ─────────────────────────────
+# 4. Version numbers, and the mapper's project
 
 
 def test_I5_3_a_newer_version_in_project_system_makes_it_read_only(projects, two, client, token):
@@ -441,7 +437,7 @@ def test_I5_3_a_start_with_a_version_not_in_project_system_stores_nothing(
     a = projects.make(members={EDITOR: "editor"})
     latest[a] = str(uuid.uuid4())  # the platform names a version this database lacks
     response = client.post(f"/p/{a}/projects", data={"name": "x"}, headers=token(EDITOR))
-    # a 4xx that says so (decision, 02-tests.md: 409), never an unhandled 500
+    # a 4xx that says so (409), never an unhandled 500
     assert 400 <= response.status_code < 500, (response.status_code, response.text[:200])
     table = _rows(cluster, projects.database(a), "SELECT to_regclass('control_objectives.project')")[0][0]
     if table is not None:
@@ -457,7 +453,7 @@ def test_I5_6_the_mapper_resolves_its_llm_with_the_databases_pid(
     assert seen_llm_projects == [a, b]
 
 
-# ── 5. I5.1 membership before the database; I5.5 first open; I17.1 pools ───
+# 5. Membership before the database; migration on first open; pool limits
 
 
 def test_I5_1_a_stranger_or_a_viewers_write_never_opens_the_database(
@@ -566,7 +562,7 @@ def test_I2_5_I17_1_a_dropped_database_is_evicted_and_answers_404(cluster, proje
     assert not cluster.database_exists(projects.database(a)), "a request re-created it"
 
 
-# ── 6. I5.5 the migrate one-shot ────────────────────────────────────────────
+# 6. The migrate one-shot
 
 
 def test_I5_5_migrate_projects_upgrades_what_it_may_enter_and_skips_the_rest(cluster, projects):
@@ -595,7 +591,7 @@ def test_I5_5_migrate_projects_upgrades_what_it_may_enter_and_skips_the_rest(clu
         env=env, capture_output=True, text=True, timeout=300,
     )
     assert again.returncode == 0, again.stdout + again.stderr
-    # I18.7: it prints no credential
+    # it prints no credential
     assert "control_objectives_rw:control_objectives_rw" not in run.stdout + run.stderr
 
 

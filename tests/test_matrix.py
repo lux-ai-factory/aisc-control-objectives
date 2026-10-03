@@ -1,4 +1,4 @@
-"""Step 2 as a risk and control matrix (2026-10-01).
+"""Step 2 as a risk and control matrix.
 
 The page is three parts: the profile line, the **risk register** (one row per risk: impact,
 likelihood, the rating in its band, the optional rationale; the AIRO chain folded away) and the
@@ -31,7 +31,7 @@ def rate_form(http, pid, assessment, **pairs):
     return http.post(f"/p/{pid}/projects/{assessment}/severity", data=data)
 
 
-# ── rating ──────────────────────────────────────────────────────────────────
+# Rating
 
 def test_the_register_form_saves_impact_and_likelihood(client, start, platform_project):
     http, _ = client
@@ -69,7 +69,7 @@ def test_the_register_lists_risks_by_rating_with_their_band(client, start, platf
     assert re.search(r'<details class="co-chain">', register)
 
 
-# ── the matrix: one row per risk, its objectives as chips (2026-10-02) ──────
+# The matrix: one row per risk, its objectives as chips
 
 def matrix_of(page: str) -> str:
     return re.search(r'<table class="co-matrix">(.*?)</table>', page, re.S).group(1)
@@ -123,7 +123,7 @@ def test_a_chips_colour_says_key_and_who_mapped_it(client, start, platform_proje
 
 def test_the_legend_names_only_what_differs_from_the_default(client, start, platform_project):
     """Blue is a key objective, a yellow ring an AI suggestion; grey without a ring is the default
-    and needs no entry (2026-10-02)."""
+    and needs no entry."""
     http, _ = client
     page = page_of(http, platform_project, start())
     legend = re.search(r'<ul class="co-legend">(.*?)</ul>', page, re.S).group(1)
@@ -193,7 +193,7 @@ def test_tiers_and_the_selection_are_gone(client, start, platform_project):
     assert http.post(_api(platform_project, a, "/selection"), json={"objective_ids": []}).status_code == 404
 
 
-# ── key objectives ──────────────────────────────────────────────────────────
+# Key objectives
 
 def test_key_is_set_by_default_and_the_assessor_can_change_it(client, start, platform_project):
     http, _ = client
@@ -222,7 +222,7 @@ def test_the_key_form_saves_exactly_the_ticked_objectives(client, start, platfor
     assert keys["O2"] and keys["O11"] and not keys["O1"] and not keys["O4"]
 
 
-# ── in scope is in the matrix ───────────────────────────────────────────────
+# In scope is in the matrix
 
 def test_what_is_in_the_matrix_is_in_scope_in_catalogue_order(client, start, platform_project):
     http, _ = client
@@ -236,7 +236,7 @@ def test_what_is_in_the_matrix_is_in_scope_in_catalogue_order(client, start, pla
 
 
 
-# ── the register's dropdowns, and who mapped a row (2026-10-02) ─────────────
+# The register's dropdowns, and who mapped a row
 
 def test_an_unrated_part_shows_three_preselected(client, start, platform_project):
     http, _ = client
@@ -276,7 +276,7 @@ def test_the_key_script_is_served(client):
 
 
 
-# ── the risk in full (2026-10-02) ───────────────────────────────────────────
+# The risk in full
 
 def test_the_register_and_the_matrix_write_the_risk_in_full(client, start, platform_project, graph):
     http, _ = client

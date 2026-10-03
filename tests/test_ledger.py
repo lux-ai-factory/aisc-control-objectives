@@ -1,4 +1,4 @@
-"""S1-S3: step 2 in the ledger (phase 6). Every write records its event with the project database's
+"""Step 2 in the ledger. Every write records its event with the project database's
 ledger.emit, in the write's own transaction; an AI mapping keeps the previous run and an assessor's own
 rows (mapping_archive) and is one run in the ledger; authors are kept by subject. The scratch database
 gets the platform's real ledger template (platform/project-template/0020_ledger_outbox.sql)."""
@@ -52,7 +52,7 @@ def archive(repository):
 HEADERS = {"X-AISC-Request-Id": REQUEST}
 
 
-# S3: every action of an assessment emits, in its transaction ------------------------------------
+# Every action of an assessment emits, in its transaction
 
 def test_each_assessment_action_records_its_event_citing_the_request(client, start, platform_project, repository):
     http, _ = client
@@ -132,7 +132,7 @@ def test_a_request_id_that_is_not_a_uuid_is_never_cited(client, start, platform_
     assert [r["request_id"] for r in outbox(repository)] == [None]
 
 
-# S1: an AI run keeps the previous run and an assessor's own rows --------------------------------
+# An AI run keeps the previous run and an assessor's own rows
 
 def test_mapping_again_keeps_the_previous_run_and_the_persons_rows(client, start, platform_project, repository):
     http, _ = client
@@ -160,7 +160,7 @@ def test_a_second_run_archives_the_first_once(client, start, platform_project, r
 
 def test_a_failed_ai_run_is_recorded_as_a_code_never_its_text(start, repository, objectives):
     """The mapper's own failure is caught into the run (map_risks maps the other risks); the ledger gets
-    ai.mapping.failed with a code, never the error's text, which can quote a key or a card (phase 5 M5)."""
+    ai.mapping.failed with a code, never the error's text, which can quote a key or a card."""
     from aisc_control_objectives import ledger
     from aisc_control_objectives.api import ledger_events
     from aisc_control_objectives.projects import Projects
@@ -189,7 +189,7 @@ def test_each_model_call_of_a_run_is_recorded():
     assert [c["purpose"] for c in calls.calls] == ["mapping", "mapping"]
 
 
-# S2: authors by subject -------------------------------------------------------------------------
+# Authors by subject
 
 def test_the_library_keeps_the_authors_subject_beside_the_name(repository, objectives):
     from aisc_control_objectives.library import Library
@@ -230,7 +230,7 @@ def test_library_actions_record_their_events(client, platform_project, repositor
     assert (edited["before"]["text"], edited["after"]["text"]) == ("Keep a log.", "Keep a full log.")
 
 
-# phase 6 review (20-phase6-review.md) -----------------------------------------------------------
+# Ordering, model calls, failures and item chains
 
 class CallingMapper:
     """A mapper that calls its model, as RiskMapper does (`_complete`): its calls become ai.llm_call."""
@@ -249,7 +249,7 @@ class CallingMapper:
 
 
 def test_m1_a_mapping_records_its_request_before_its_first_model_call(start, repository, objectives, mapper):
-    """M1: a long run's start must not wait for its calls (the relay's 5-minute window): it is written in a
+    """A long run's start must not wait for its calls (the relay's 5-minute window): it is written in a
     transaction of its own before the first call; each call and the outcome follow, in the save's."""
     from aisc_control_objectives import ledger
     from aisc_control_objectives.api import ledger_events
@@ -270,12 +270,12 @@ def test_m1_a_mapping_records_its_request_before_its_first_model_call(start, rep
     assert calls and set(actions[1:-1]) == {"ai.llm_call"}
     assert {r["run_id"] for r in rows} == {rows[0]["run_id"]}
     first = calls[0]["details"]
-    assert first["purpose"] == "mapping" and first["round"] == 1 and first["property"].startswith("risk")  # m8
+    assert first["purpose"] == "mapping" and first["round"] == 1 and first["property"].startswith("risk")
 
 
 def test_m4_a_route_mapping_records_each_model_call(repository, objectives, mapper, graph, platform_project,
                                                     system_version):
-    """M4: through the route, with a mapper that calls its model (the client fixture's has no `_complete`)."""
+    """Through the route, with a mapper that calls its model (the client fixture's has no `_complete`)."""
     from fastapi.testclient import TestClient
 
     from aisc_control_objectives.api.app import create_app
@@ -292,8 +292,8 @@ def test_m4_a_route_mapping_records_each_model_call(repository, objectives, mapp
 
 
 def test_m2_a_model_that_cant_be_had_records_the_request_and_its_failure(start, repository, objectives, mapper):
-    """m2: the project's model can't be resolved: the request is recorded with a failed run
-    (model_unreachable), then refused as before."""
+    """The project's model cannot be resolved: the request is recorded with a failed run
+    (model_unreachable), then refused."""
     from aisc_control_objectives import ledger
     from aisc_control_objectives.api import ledger_events
     from aisc_control_objectives.projects import ModelUnavailable, Projects
@@ -346,7 +346,7 @@ def test_m4_a_failure_after_a_runs_events_leaves_no_run_and_no_event(start, repo
 
 
 def test_m1_minor_a_completed_runs_content_is_never_empty(start, repository, objectives):
-    """m1: a card with no mapped risk still sends content (the registry's content_required)."""
+    """A card with no mapped risk still sends content (the registry's content_required)."""
     from aisc_control_objectives import ledger
     from aisc_control_objectives.api import ledger_events
     from aisc_control_objectives.projects import Projects
@@ -377,7 +377,7 @@ def chain_breaks(rows) -> list:
 
 
 def test_m3_the_item_chains_hold_in_normal_use(client, start, platform_project, repository):
-    """M3: a rating and its comment in one save, a rating again, the next card version rated, keys set
+    """A rating and its comment in one save, a rating again, the next card version rated, keys set
     twice over different matrices, a risk mapped by hand twice: no chain break."""
     http, _ = client
     a = start()
@@ -401,7 +401,7 @@ def test_m3_the_item_chains_hold_in_normal_use(client, start, platform_project, 
 def test_m2_a_new_card_versions_assessment_names_the_profile_it_starts_on(client, start, platform_project,
                                                                           repository, objectives, graph,
                                                                           system_version):
-    """M2: the inherited profile is set in the start's own transaction, and its event names it."""
+    """The inherited profile is set in the start's own transaction, and its event names it."""
     from aisc_control_objectives.library import Library
     from test_library import fields
 
@@ -482,7 +482,7 @@ def test_m4_the_routes_store_the_authors_subject(repository, objectives, mapper,
 
 
 def test_m9_an_objectives_item_is_its_set_and_its_id(client, platform_project, repository):
-    """m9: a set deleted and made again with the same code numbers its objectives again; the item names
+    """A set deleted and made again with the same code numbers its objectives again; the item names
     the set, so the new objective's history doesn't continue the deleted one's."""
     http, _ = client
     base = f"/p/{platform_project}/api"
