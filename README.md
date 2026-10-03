@@ -3,252 +3,277 @@
 
   <h1>AISC Control Objectives</h1>
 
-  <p><b>A catalogue of 50 EU AI Act control objectives, and where a given system should start.</b></p>
+  <p><b>Step 2 of AISC: from an AI system's risks to the control objectives to work on first.</b></p>
 </div>
 
-This is the AI Safety and Compliance (AISC) module that turns an assessed system's **AI Card** into a place to begin: it takes the risks the card carries into a risk register the assessor rates (impact x likelihood), builds a risk and control matrix of the control objectives that mitigate each one (by hand, or suggested by a model), and marks the key objectives to start with.
+## What it is
 
-Every objective in the catalogue stays owed. Nothing here rules anything out. What it produces is **no more than seven key objectives** by default, so an assessor has a week of work to open rather than another list of fifty; the assessor can change which are key.
+This is step 2, **control objectives**, of the AISC (AI Assessment Sandbox Configurator). AISC
+assesses an AI system in six steps: 1 qualification, 2 control objectives, 3 install plugins and
+tools, 4 execute tests and address controls, 5 analyse results on the dashboard, 6 compose the
+report. This service takes the AI Card that step 1 (the qualification app) produced for one
+version of the system, turns the risks on the card into a **risk register** that the assessor
+rates (impact x likelihood), and builds a **risk and control matrix**: which of the 50 EU AI Act
+control objectives mitigate each risk, mapped by a model, by a person, or both. From the ratings
+it scores every objective and proposes up to seven **key objectives** to start with; the assessor
+can change which are key. What the matrix holds is what step 4 works on.
+
+A project can also write its own **objective sets** and pick **objective profiles** (a choice of
+objectives from the built-in set and its own sets); an assessment runs on one profile.
+
+## How it works
 
 ```mermaid
 flowchart LR
-    A["AI Card<br/>(the filled AIRO graph)"] --> B["Rank the risks<br/>1 to 5, by a person"]
-    B --> C["Map risks to objectives<br/>(one model call per risk)"]
-    C --> D["Scores and key objectives<br/>(computed, never stored)"]
+    A["AI Card of one version<br/>(from qualification)"] --> B["Risk register<br/>impact x likelihood, by a person"]
+    B --> C["Map risks to objectives<br/>(one model call per risk, or by hand)"]
+    C --> D["Scores and key objectives<br/>(computed on every read)"]
+    D --> E["Step 4 works on<br/>what the matrix holds"]
 ```
 
-## Features
+- **A FastAPI service** (`src/aisc_control_objectives/`, port 8090) that serves server-rendered
+  pages and a JSON API. The catalogue of objectives is a CSV shipped in the package.
+- **Who may do what.** Behind the gateway (Caddy, oauth2-proxy, Keycloak) every request carries a
+  Keycloak token. The service verifies it (`shared/identity`, the `aisc_identity` package of the
+  aisc repo) and reads project membership from the `platform` database (`core.project`,
+  `core.project_member`). Only the catalogue (`/objectives`, `/api/control-objectives`,
+  `/api/macro-requirements`, `/api/config`), `/static/*` and `/health` are public. Under
+  `/p/{project}` a viewer may read and an editor may change.
+- **One database per project.** A project's assessments, sets and profiles live in the schema
+  `control_objectives` of that project's own Postgres database, `project_<pid without hyphens>`.
+  The service connects to a project database only after membership is decided
+  (`projectdb.ProjectDatabases.open`), and migrates it with Alembic the first time it opens it.
+- **Starting an assessment** asks the platform (`PLATFORM_URL`) for the project's latest AI card
+  version and qualification (`QUALIFICATION_URL`) for that version's card, with the caller's own
+  token. One assessment per card version; an older version's assessment is read-only.
+- **The mapping** (`risk_mapping.py`) asks the model, one risk at a time, which objectives
+  mitigate it, each claim resting on a literal quote of the risk. Deterministic checks reject
+  unknown ids, quotes that are not in the risk, missing quotes and duplicates; what failed goes
+  back to the model, at most three attempts (`rounds.py`). Every outcome is published with its
+  findings, so a person can correct it on the page. The model is reached through
+  [BAF](https://pypi.org/project/besser-agentic-framework/) (`llm.py`, `baf_llm.py`); the
+  project's own model and key, chosen on the platform, take precedence over the service's own.
+- **Scores** (`prioritising.py`, no model): an objective scores the sum of the ratings
+  (impact x likelihood, 1 to 25) of the risks mapped to it. Ratings fall in the bands Low 1-4,
+  Medium 5-9, High 10-16, Critical 17-25; an unrated part counts 3. By default the key objectives
+  are the first seven driven by at least one High or Critical risk, never a voluntary one. Scores
+  and default keys are never stored, so a changed rating can never leave a stale score.
+- **The ledger.** With `LEDGER_MODE` set to `record` or `enforce`, every write also records an
+  event through the project database's `ledger.emit`, in the same transaction (`ledger.py`). The
+  platform relays those events to the immudb ledger.
 
-- **A catalogue, served.** 50 sub-requirements under 11 macro requirements (R1 Human Agency and Oversight through R11 Record-keeping and Documentation Retention), each with its legal basis, assessment mode, standards grounding and caveats.
-- **One agentic step, guarded.** The model's every claim rests on a literal span of the risk it read. Quotes are verified deterministically; failures go back to the model with the findings, and the rounds are bounded.
-- **Ranking is the person's job.** Which risk matters for this system is the one judgement no model makes here.
-- **Nothing derived is stored.** Scores and default key objectives are recomputed from the card, the ratings and the matrix on every read, so a changed rating can never leave a stale score behind. Only the assessor's own key choices are stored.
-- **Server-rendered pages** in the qualification app's own design tokens, so the modules read as one platform.
-- **Persisted in Postgres**, on the qualification app's schema blueprint, with the uploaded card kept as the bytes that were uploaded.
+## Install and run
 
-## Getting started
+### Inside the AISC stack (the usual way)
 
-### Prerequisites
+The service is the `control-objectives` service of the aisc repo's
+`docker-compose.development.yml`, with a one-shot `control-objectives-migrate` that brings every
+project database to the head revision before it starts. It has no published port: Caddy serves it
+at `/control-objectives` behind the gateway.
 
-- Python 3.12+
-- PostgreSQL (the platform's instance will do)
-- An API key for one hosted model provider, or [Ollama](https://ollama.com) for a model on your own machine
-
-### Install and run
+From the root of the aisc repo (the repo this one is a submodule of, at `apps/control-objectives`):
 
 ```bash
-uv pip install -e '.[dev]'
-
-# who is in which project: the platform database
-export DATABASE_URL=postgresql://user:password@localhost:5432/platform
-# each project's own database; {database} becomes project_<pid without hyphens>
-export PROJECT_DATABASE_URL=postgresql://user:password@localhost:5432/{database}
-python -m aisc_control_objectives.migrate_projects   # every project database, to head
-
-python -m aisc_control_objectives.server        # http://localhost:8090
+./scripts/secrets.sh     # once: writes env.secrets and env.runtime (the service needs PLATFORM_RISK_MAPPER_TOKEN)
+docker compose -p aisc --env-file env.runtime -f docker-compose.plugin_downloader.yml \
+  -f docker-compose-infra.development.yml -f docker-compose.development.yml up -d --build
 ```
 
-Then open `/` for the way in, `/objectives` for the catalogue, `/projects` to assess a system.
+Then open http://localhost:8100, sign in, open a project and choose step 2. To rebuild only this
+service after a change, add `control-objectives` at the end of the same `up -d --build` command.
 
-### Point it at a model
+The compose file defaults the model to `ollama` / `mistral:latest` on the host
+(`host.docker.internal:11434`), which needs no key. For a hosted model, set
+`CONTROL_OBJECTIVES_LLM_PROVIDER`, `CONTROL_OBJECTIVES_LLM_MODEL` and the provider's key
+(`OPENAI_API_KEY`, `ANTHROPIC_API_KEY` or `MISTRAL_API_KEY` are passed through) in the env file
+you start the stack with. A project can also choose its own model and key on the platform's
+"Models and API keys" page.
 
-The model is reached **BAF's way** ([besser-agentic-framework](https://pypi.org/project/besser-agentic-framework/)), the same framework, version and variables the qualification app's ontology filler uses, so the platform has one mechanism and one place a model is named.
+### Standalone, for development
+
+Prerequisites: Python 3.12, [uv](https://docs.astral.sh/uv/), this repo checked out inside the aisc
+repo (for `shared/identity`), and a Postgres with the platform database and project databases made
+by the platform, for example a development AISC stack. Do not point a development server at the
+live stack's database.
 
 ```bash
-# in .env (git-ignored; copy .env.example)
-BAF_LLM_PROVIDER=openai
-BAF_LLM_MODEL=gpt-4o
-OPENAI_API_KEY=sk-...
+cd apps/control-objectives
+uv sync --extra dev
+export PYTHONPATH=../../shared/identity          # the aisc_identity package
+export DATABASE_URL=postgresql://<role>:<password>@<host>:<port>/platform
+export PROJECT_DATABASE_URL=postgresql://<role>:<password>@<host>:<port>/{database}
+export AUTH_ENABLED=false AUTH_DEV_ROLES=admin    # no Keycloak: a fake "development" admin
+uv run python -m aisc_control_objectives.migrate_projects   # every project database, to head
+uv run python -m aisc_control_objectives.server             # http://localhost:8090
 ```
 
-Thirteen providers are wired (`src/aisc_control_objectives/llm.py`): anthropic, compatible, deepseek, google, groq, meta, mistral, ollama, openai, openrouter, qwen, together, xai. **Each reads its own variable**, never a shared one. `ollama` and `compatible` need no credential at all.
+`/objectives` is the catalogue; `/p/<project pid or slug>` opens a project. `/` redirects to the
+launcher (`LAUNCHER_URL`). Starting an assessment also needs `PLATFORM_URL` and
+`QUALIFICATION_URL`.
 
-> [!NOTE]
-> The committed `control-objectives.toml` asks for `openai` / `gpt-4o`. Environment variables override it, so a deployment never has to edit the file.
+For the model, copy `.env.example` to `.env` (git-ignored, read at startup; variables already in
+the environment win) and set `BAF_LLM_PROVIDER`, `BAF_LLM_MODEL` and the provider's key. The
+committed `control-objectives.toml` names `openai` / `gpt-4o`; the service refuses to start if the
+provider it is configured with needs a key that is not set. The providers are anthropic,
+compatible, deepseek, google, groq, meta, mistral, ollama, openai, openrouter, qwen, together and
+xai; each reads its own key variable, and `ollama` and `compatible` need none.
 
-## Assessing a system
-
-A project is one system, and it starts with that system's **AI Card** exported from the qualification app: `ai-card.json`, or `ontology.jsonld` if that is what you have. Both are the same card (the qualification app's position is that the filled AIRO graph *is* the card), and the graph is where the risks live.
-
-### 1. Rank the risks
-
-Each AIRO chain on the card (the risk, its source, the vulnerability that source exploits, the consequence, the impact and who bears it, the declared control and its follow-up) is a row of the risk register and gets a rating from the assessor: impact and likelihood, 1 to 5 each, whose product (1 to 25) falls in the 5x5 bands Low 1-4, Medium 5-9, High 10-16, Critical 17-25. An unrated part counts 3; an optional rationale goes with it.
-
-### 2. Map the risks to objectives
-
-`risk_mapping.map_risks`, one model call per risk: which objectives in the catalogue would mitigate *this* risk, each claim resting on a verbatim span of that risk's own chain. The proposal then goes through deterministic controls, and only what survives them is published:
-
-| Finding | What it caught |
-|---|---|
-| `unknown-objective` | an id that is not in the catalogue |
-| `quote-not-in-risk` | a "quote" that is not a literal span of the risk (the usual failure: the model quotes the objective's own text) |
-| `quote-missing` | a claim with nothing behind it |
-| `duplicate-objective` | the same objective claimed twice for one risk |
-| `risk-unmapped` | a risk the model returned nothing for |
-
-Failing items go back to the model with their findings, at most three attempts. The loop ends `clean`, `fixpoint` (the same findings twice running), `cap` (the round limit) or `failed` (no answer, or not the shape asked for), and **every exit publishes**, findings attached: the project page is where a person corrects it, and withholding a flawed answer leaves them nothing to correct.
-
-A person can map a risk instead, or correct what the model proposed: each risk on the project page has
-an editor listing all fifty objectives by dimension. An objective kept from the model stays the
-model's, with its quote; one the person adds is theirs (`mapped_objective.source`, `ai` or `person`).
-Mapping with AI again replaces the whole mapping, edits by hand included.
-
-### 3. Score the objectives, mark the key ones
-
-`prioritising.prioritise`, no model involved. An objective scores the sum of the ratings of the
-risks mapped to it:
-
-    S(o) = sum of (impact x likelihood) over the risks r mapped to o
-
-They are ranked by S, then by the highest single rating, then a directly binding duty before one
-only grounded in standards, then catalogue order. By default the **key** objectives are the first
-seven driven by at least one High or Critical risk (never a voluntary one); the assessor turns key on
-or off for any objective, and that choice is stored. What the matrix holds is what goes forward to
-step 4, Collect evidence.
-
-> [!IMPORTANT]
-> Re-rate a risk and the scores move, with no model call and no cost.
-
-## The data
-
-The objectives are domain data, authored outside this repo and shipped with the package as a CSV (`src/aisc_control_objectives/data/ai_act_control_objectives.csv`). One row per objective:
-
-| Column | Meaning |
-|---|---|
-| `ID` | `O1` ... `O50`, in catalogue order (until 2026-10-01 `R1.1` ... `R11.4`; the table is `data/objective_id_renames.csv`) |
-| `Macro_Requirement` | `R1 Human Agency and Oversight` |
-| `Legal_Basis` | `AI Act Art. 14`, `AI Act Arts. 18, 19; GDPR Art. 5(1)(e)`, ... |
-| `Sub_Requirement_Label` | short name of the sub-requirement |
-| `Control_Objective` | the objective itself |
-| `Assessment_Mode` | `Control` (36), `Test` (9), `Control + Test` (5) |
-| `Target` | kept from the CSV, not represented |
-| `Standards_Grounding` | e.g. `ISO/IEC 42001 Ann. A.9` |
-| `Grounding_Tier_Flag` | `Tier 3`, `Binding + Tier 3`, ... |
-| `Notes` | caveats: `GAP:`, `CONDITIONAL:`, `VOLUNTARY:`, `Paired:` |
-
-Two conventions the code relies on:
-
-- **A paired objective needs both.** `Control + Test` means an organisational control *and* a technical test, so the two partitions overlap: 41 objectives need a control, 14 need a test, 5 are in both.
-- **`VOLUNTARY:` is the author's own judgement**, not one made here, and it is what flags an objective non-binding.
-
-Swapping in a newer export is a file swap: replace the CSV, or point `CONTROL_OBJECTIVES_FILE` at another one. A renamed or missing column fails at load time rather than silently yielding empty objectives. Every project records the sha256 of the catalogue it was assessed against, so a re-export cannot quietly change an old assessment's scores.
-
-## HTTP API
-
-FastAPI, port `8090`, interactive docs at `/docs`. The pages are `/`, `/objectives`, `/projects` and `/projects/{id}`; the JSON API mirrors them.
-
-| Method and path | Purpose |
-|---|---|
-| `GET /health` | liveness |
-| `GET /api/config` | the effective `RunConfig` (which model) |
-| `GET /api/control-objectives` | every objective, in catalogue order (`O9` before `O10`) |
-| `GET /api/control-objectives?mode=control\|test` | the control / test partition |
-| `GET /api/control-objectives/{id}` | one objective, 404 if unknown |
-| `GET /api/macro-requirements` | R1 through R11 with their objectives nested |
-| `GET /p/{project}/api/projects`, `GET /p/{project}/api/projects/{id}` | the project's assessments (`{project}` is its pid or slug) |
-| `POST /p/{project}/api/projects/{id}/ratings` | rate the risks, body `{"risk2": {"impact": 5, "likelihood": 4}, ...}` |
-| `POST /p/{project}/api/projects/{id}/severity` | the route from before the matrix: `{"risk2": 5}` sets the impact |
-| `POST /p/{project}/api/projects/{id}/key` | the assessor's key choices, body `{"O1": true, "O7": false}` |
-| `POST /p/{project}/api/projects/{id}/map` | run the mapping (one model call per risk) |
-| `POST /p/{project}/api/projects/{id}/risks/{risk}/mapping` | a person maps one risk, body `{"objective_ids": ["O1", ...]}` (replaces that risk's mapping; kept rows stay the AI's, added ones are the person's; unknown ids 422) |
-| `DELETE /p/{project}/api/projects/{id}` | delete an assessment and everything under it |
-
-**Scope.** What the matrix holds goes forward to step 4 (Collect evidence), where tests and controls are linked to it: every objective mapped to at least one risk, in catalogue order, whoever mapped it. The payload's `selected` lists them. There is no separate selection since the risk and control matrix (2026-10-01).
-
-An assessment is started from the page (`POST /p/{project}/projects`), of the project's latest AI card version. Everything under `/p/{project}` needs a signed-in member of that project (an editor to change anything), and is answered from that project's own database: an id of another project is a 404.
-
-Every objective is served with its derived fields: `macro_id`, `macro_title`, `requires_control`, `requires_test`, `legal_bases`.
-
-## Storage
-
-Postgres, one database per project (`project_<pid without hyphens>`, schema `control_objectives`), on the qualification app's blueprint: a table per real thing, `JSONB` only where nothing queries inside, cascading deletes from the project, and Alembic migrations in place of its Prisma ones.
-
-| Table | Holds |
-|---|---|
-| `project` | one assessment of one AI card version (`system_id`, a row of `project.system` in the same database), with the catalogue digest it was assessed against |
-| `graph` | the uploaded card, **as the bytes that were uploaded**, with their sha256 |
-| `risk` | one AIRO chain flattened, with the assessor's rating (impact, likelihood) and rationale on it |
-| `mapped_objective` | one objective a risk was mapped to, with the quote behind it |
-| `mapping_run` | how the run went: findings, per-risk stops, attempts, the model that bought it |
-
-Verdicts, scores and default key objectives are deliberately **not** stored: they are a pure function of the catalogue, the ranking and the mapping, so writing them down would only let them go stale.
+The `Dockerfile` builds the same image the stack uses. The image does not contain
+`aisc_identity`: compose mounts `shared/identity` at `/app/shared/identity` and sets
+`PYTHONPATH=/app/src:/app/shared/identity`, and a `docker run` outside compose has to do the same.
 
 ## Configuration
 
-Three layers, lowest to highest: **built-in defaults, then `control-objectives.toml`, then `CONTROL_OBJECTIVES_*` / `BAF_*` environment variables**.
+Precedence for the model: built-in defaults, then `control-objectives.toml`, then the environment.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `DATABASE_URL` | local `platform` database | the platform database, read for membership only |
-| `PROJECT_DATABASE_URL` | `DATABASE_URL` with `{database}` | a project's own database, `{database}` replaced by `project_<hex>` |
-| `CONTROL_OBJECTIVES_CONFIG_FILE` | `<repo>/control-objectives.toml` | config file path |
-| `CONTROL_OBJECTIVES_FILE` | bundled CSV | serve a different objectives export |
-| `BAF_LLM_PROVIDER` | `mistral` | which provider, BAF's name for it |
-| `BAF_LLM_MODEL` | `mistral-large-latest` | which model |
-| `BAF_LLM_BASE_URL` | *(unset)* | endpoint for `ollama` / `compatible` |
-| `<PROVIDER>_API_KEY` | *(unset)* | the key, under the provider's own name |
-| `CONTROL_OBJECTIVES_PORT` | `8090` | port |
-| `CONTROL_OBJECTIVES_ROOT_PATH` | *(empty)* | sub-path when behind a reverse proxy |
-| `CONTROL_OBJECTIVES_CORS_ORIGINS` | *(permissive)* | comma-separated allowlist |
+| `DATABASE_URL` | `postgresql+psycopg://control_objectives_rw:...@localhost:5432/platform` | The `platform` database, read for membership only. `postgresql://` is accepted. |
+| `PROJECT_DATABASE_URL` | `DATABASE_URL` with its database replaced by `{database}` | Template of a project database's URL; `{database}` becomes `project_<hex>`. |
+| `AUTH_ENABLED` | `true` | Verify Keycloak tokens. `false` runs every request as a fake `development` caller. |
+| `AUTH_DEV_ROLES` | *(empty)* | Realm roles of the fake caller when auth is off, e.g. `admin`. |
+| `KEYCLOAK_ISSUER` | *(unset)* | Token issuer; required when auth is on. |
+| `KEYCLOAK_JWKS_URL` | *(unset)* | Where Keycloak's signing keys are read; required when auth is on. |
+| `PLATFORM_URL` | *(unset)* | The platform service: latest card version, and the project's model choice. |
+| `PLATFORM_INTERNAL_TOKEN` | *(unset)* | Service token for the platform's internal model-choice route. Without it (or `PLATFORM_URL`) every project uses the service's own model. |
+| `LLM_RESOLVE_TIMEOUT` | `5` | Seconds the platform may take to say which model a project uses. |
+| `QUALIFICATION_URL` | *(unset)* | The qualification app, which serves a version's card as JSON-LD. |
+| `LAUNCHER_URL` | `http://localhost:8100/` | Where projects are chosen; `/` and the header link there. |
+| `BAF_LLM_PROVIDER` | `provider` in the TOML, else `mistral` | Which model provider, by BAF's name. |
+| `BAF_LLM_MODEL` | `model` in the TOML, else `mistral-large-latest` | Which model. |
+| `BAF_LLM_BASE_URL` | *(unset)* | Endpoint for `ollama` (optional) or `compatible` (required). |
+| `BAF_LLM_API_KEY` | *(unset)* | Token of a `compatible` endpoint, if it wants one. |
+| `<PROVIDER>_API_KEY` | *(unset)* | The provider's own key: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `MISTRAL_API_KEY`, `GOOGLE_API_KEY`, `GROQ_API_KEY`, `DEEPSEEK_API_KEY`, `OPENROUTER_API_KEY`, `QWEN_API_KEY`, `TOGETHER_API_KEY`, `XAI_API_KEY`, `META_API_KEY`. |
+| `CONTROL_OBJECTIVES_CONFIG_FILE` | `<repo>/control-objectives.toml` | The TOML config file. |
+| `CONTROL_OBJECTIVES_FILE` | the bundled CSV | Serve a different export of the objectives. |
+| `CONTROL_OBJECTIVES_PORT` | `8090` | Port to serve on. |
+| `CONTROL_OBJECTIVES_ROOT_PATH` | *(empty)* | Sub-path behind a reverse proxy (`/control-objectives` in the stack). |
+| `CONTROL_OBJECTIVES_CORS_ORIGINS` | *(any origin)* | Comma-separated CORS allowlist. |
+| `LEDGER_MODE` | `off` | `record` or `enforce` writes a ledger event with every change. |
 
-A `.env` next to the repo root is loaded at startup if present (plain `KEY=VALUE` lines, an `export ` prefix and quotes are fine). Existing environment variables always win.
+In the stack, compose sets these from `CONTROL_OBJECTIVES_DATABASE_URL`,
+`CONTROL_OBJECTIVES_PROJECT_DATABASE_URL`, `CONTROL_OBJECTIVES_LLM_PROVIDER`,
+`CONTROL_OBJECTIVES_LLM_MODEL`, `CONTROL_OBJECTIVES_LLM_BASE_URL`, `PLATFORM_RISK_MAPPER_TOKEN` and
+`LEDGER_MODE`, and from `env.development` in this repo.
 
-## Project structure
+### The objectives data
+
+The objectives ship as `src/aisc_control_objectives/data/ai_act_control_objectives.csv`, one row
+per objective, authored outside this repo. The columns are `ID` (`O1` ... `O50`),
+`Macro_Requirement` (`R1 Human Agency and Oversight` ... `R11`, the trustworthiness dimension),
+`Legal_Basis`, `Sub_Requirement_Label`, `Control_Objective`, `Assessment_Mode` (`Control`, `Test`
+or `Control + Test`), `Target`, `Standards_Grounding`, `Grounding_Tier_Flag` and `Notes` (tags
+`GAP:`, `CONDITIONAL:`, `VOLUNTARY:`, `Paired:`). A `Control + Test` objective needs both a
+control and a test; `VOLUNTARY:` marks an objective as non-binding. A missing column or a cell
+that breaks these rules fails at load time, naming the row. Each assessment records the sha256 of
+the catalogue it was made with. The ids were `R1.1` ... `R11.4` before; `data/objective_id_renames.csv`
+maps them.
+
+## HTTP API
+
+Interactive docs at `/docs`. The JSON API of a project is under `/p/{project}/api`, where
+`{project}` is the project's pid or slug.
+
+| Method and path | Purpose |
+|---|---|
+| `GET /health` | Liveness. |
+| `GET /api/config` | The model the service is configured with. |
+| `GET /api/control-objectives[?mode=control\|test]` | The built-in objectives, in catalogue order. |
+| `GET /api/control-objectives/{id}` | One objective, 404 if unknown. |
+| `GET /api/macro-requirements` | R1 ... R11 with their objectives. |
+| `GET /p/{project}/api/projects`, `GET .../projects/{id}` | The project's assessments, or one. |
+| `POST .../projects/{id}/ratings` | `{"risk2": {"impact": 5, "likelihood": 4}}`; a part left out keeps its value. |
+| `POST .../projects/{id}/severity` | `{"risk2": 5}` sets the impact only. |
+| `POST .../projects/{id}/severity-comments` | `{"risk2": "why"}`; a blank comment clears it. |
+| `POST .../projects/{id}/map` | Map every risk with the model (one call per risk). |
+| `POST .../projects/{id}/risks/{risk}/mapping` | `{"objective_ids": ["O1", ...]}`: a person's mapping of one risk. |
+| `POST .../projects/{id}/key` | `{"O1": true, "O7": false}`: the assessor's key choices. |
+| `POST .../projects/{id}/profile` | Run the assessment on another objective profile. |
+| `DELETE .../projects/{id}` | Delete an assessment and everything under it. |
+| `GET/POST .../sets`, `.../sets/{id}/...`, `GET/POST .../profiles`, `.../profiles/{id}/...` | The project's objective sets and profiles. |
+
+An assessment is started from the page (`POST /p/{project}/projects`), on the project's latest AI
+card version. In each payload, `selected` lists the objectives that go forward to step 4: every
+objective in the matrix, in catalogue order.
+
+## Storage
+
+Postgres, schema `control_objectives` in each project database. The main tables: `project` (one
+assessment of one card version, `system_id` pointing at `project.system`, which the platform
+owns), `graph` (the card as the bytes that were served, with their sha256), `risk` (one AIRO chain,
+with the assessor's rating and comment), `mapped_objective` (an objective a risk is mapped to, its
+quote and who mapped it), `mapping_run` (how the last AI run went), `objective_selection` (what
+goes to step 4), `objective_key`, the objective set and profile tables, and `mapping_archive`
+(append-only copies of what a mapping change replaced). The readers `report_ro` and
+`dashboard_ro` get SELECT on these tables.
+
+## Tests
+
+```bash
+uv run --extra dev pytest -q -p no:cacheprovider tests
+```
+
+Most tests need a real Postgres (not SQLite). They drop and recreate the database that
+`CONTROL_OBJECTIVES_TEST_DATABASE_URL` names, so give them a throwaway one, for example:
+
+```bash
+docker run --rm -d --name co-test-pg -p 127.0.0.1:55432:5432 \
+  -e POSTGRES_USER=test -e POSTGRES_PASSWORD=test postgres:15-alpine
+export CONTROL_OBJECTIVES_TEST_DATABASE_URL=postgresql+psycopg://test:test@127.0.0.1:55432/co_test
+uv run --extra dev pytest -q -p no:cacheprovider tests
+docker rm -f co-test-pg
+```
+
+> [!WARNING]
+> Never point the tests at the live stack's Postgres (port 5432). The fixtures refuse port 5432,
+> and the database names `platform`, `postgres` and `project_*`, but a copy of the data on another
+> port is not protected.
+
+Without the variable the tests that need a database fail at setup and the rest run. Some tests
+skip unless more is there: the one-database-per-project tests (`test_isolation_project_databases.py`)
+need the throwaway cluster made like the platform's (the aisc repo's `init/*.sql` applied, so it
+has a `platform` database with `core`) and the aisc `platform/` checkout beside this repo; the
+ledger tests need `platform/project-template/0020_ledger_outbox.sql`; `test_chain.py` runs only
+inside `scripts/test-pipeline-chain.sh` (it needs `CHAIN_JSON`).
+
+Lint: `uv run --extra dev ruff check src tests` (it currently reports findings in the existing code).
+
+## Layout
 
 ```
 src/aisc_control_objectives/
-  data/ai_act_control_objectives.csv   the objectives themselves (domain data)
-  models/                              control_objective.py · ontology.py (the AI Card)
-  control_objectives.py                loading and validating the catalogue
-  risk_mapping.py                      the agentic step, and its controls
-  rounds.py                            the review loop policy, shared and stated once
-  prioritising.py                      ratings in, scores and key objectives out (no model)
-  projects.py                          the flow the routes call
-  db/                                  tables.py · repository.py
-  api/app.py                           routes, pages and JSON
-  rendering.py, templates/, static/    the server-rendered pages
-  skills/                              the model's instructions, in markdown
-  llm.py, config.py, settings.py, server.py
-alembic/versions/                      timestamped migrations
-tests/                                 pytest, against a real Postgres
+  server.py              composition root and entry point
+  api/                   routes: pages and JSON (app.py), sets and profiles, ledger events
+  access.py, projectdb.py  who may be here; the one way into a project database
+  projects.py            the assessment flow the routes call
+  risk_mapping.py, rounds.py, skills/   the model step, its checks, and its instructions (markdown)
+  prioritising.py        ratings in, scores and key objectives out
+  library.py             objective sets and profiles
+  db/                    tables and the repository
+  models/                the objective and the AI Card (AIRO graph) models
+  data/                  the objectives CSV and the id renames
+  templates/, static/, rendering.py   the server-rendered pages
+  llm.py, baf_llm.py, config.py, settings.py, ledger.py, upstream.py
+alembic/                 migrations of a project database's control_objectives schema
+tests/                   pytest
+frontend/                an earlier standalone React frontend; it calls an API that no longer exists and is not deployed
+docs/                    SPEC.md and INTEGRATION_AISC.md describe an earlier design; docs/history/ is the record
 ```
 
-The skill the model runs under is `src/aisc_control_objectives/skills/mapping-a-risk-to-control-objectives.md`: markdown, so its behaviour can be changed without touching Python.
+## Contributing
 
-## Testing
+- Work on `feat/unified-modules`, the only branch in use.
+- **Schema changes need a migration.** Change `db/tables.py`, then add a revision under
+  `alembic/versions/` (file names are timestamps). Migrations run per project database: the
+  service runs them on first open, `python -m aisc_control_objectives.migrate_projects` runs
+  them for every project, and by hand it is
+  `uv run alembic -x url=postgresql+psycopg://.../project_<hex> upgrade head` (the `platform`
+  database is refused). Never edit the `revision` / `down_revision` of an existing file.
+- `baf_llm.py` is shared with the qualification app's card agent
+  (`apps/qualification/services/agents/fill/baf_llm.py`); a test in the aisc repo
+  (`scripts/tests/test_llm_keys.py`) requires the two to be byte-identical.
+- The model's instructions are markdown in `src/aisc_control_objectives/skills/`; change how the
+  mapping reasons there rather than in Python.
+- Nothing derived is stored: scores and default key objectives are recomputed on every read.
 
-```bash
-pytest
-```
-
-192 tests. They run against a **real Postgres**, not SQLite, because testing on a different engine from production is how you find out `text[]` does not exist on the day you deploy. Each run creates and drops its own database, so `CONTROL_OBJECTIVES_TEST_DATABASE_URL` must name a scratch database on a throwaway Postgres: the suite refuses to run without it, on port 5432, or against `platform`, `postgres` or a `project_` database. The isolation tests also make real project databases in that cluster's `platform` (made by the repository's `init/*.sql`).
-
-## Deployment
-
-The `Dockerfile` follows the AISC app pattern: a self-contained container joined to the platform networks, the package installed editable so config resolves against `/app`.
-
-```bash
-docker build -t aisc-control-objectives .
-docker run -p 8090:8090 --env-file .env -e DATABASE_URL=... aisc-control-objectives
-```
-
-`env.development` holds the settings for running inside the platform compose (served behind Caddy under `/control-objectives`, which is what `CONTROL_OBJECTIVES_ROOT_PATH` is for).
-
-> [!WARNING]
-> Run `python -m aisc_control_objectives.migrate_projects` (the `control-objectives-migrate` one-shot) before starting the service. The service also migrates a project database the first time it opens it.
-
-## Not here yet
-
-**What the card says about each objective** (claims, admissions, silence) is a separate, model-backed layer that is not built.
-
-> [!NOTE]
-> `frontend/` still speaks to a retired plan API.
-
-## Documentation
-
-| Where | What it is |
-|---|---|
-| this README | how to run and configure the service; the current contract |
-| `docs/SPEC.md` | what the service is specified to do |
-| `docs/INTEGRATION_AISC.md` | how it is wired into the AISC platform compose |
-| `docs/history/` | session notes and superseded design documents, kept as a record. They describe a pipeline that no longer exists; do not read them as guidance. |
+See `CONTRIBUTING.md` for the contribution terms.

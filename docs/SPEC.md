@@ -1,5 +1,10 @@
 # Control Objectives to Select Tests & Datasets — Specification
 
+> [!WARNING]
+> Out of date. This specifies an earlier design (an assessment plan of catalogue tests and
+> datasets, made from the system card) that the service no longer implements. The README
+> describes what it does now.
+
 Status: **draft for review** — see §12 Open questions before implementation starts.
 
 ## 0. Hard constraint: strictly additive (v1)

@@ -1,5 +1,10 @@
 # Integrating the service as an aisc submodule
 
+> [!WARNING]
+> Out of date. This was the plan for wiring an earlier version of the service (the test and
+> dataset plan API, LiteLLM, the catalogue) into aisc, before it was done. The service is now
+> part of the stack; the README's "Inside the AISC stack" section describes how it runs.
+
 This repo is **prepared** to drop into the `aisc` platform
 (`/home/listuser/aisc`) as a submodule under `apps/control-objectives`, matching the pattern
 the other apps follow (`apps/qualification`, `apps/controls`). **None of the
