@@ -20,6 +20,7 @@ recomputed: the uploaded bytes, the ratings, and what the mapping cost.
 from __future__ import annotations
 
 import copy
+import logging
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -31,6 +32,8 @@ from aisc_control_objectives.library import FULL_AI_ACT, Library
 from aisc_control_objectives.models.ontology import Ontology
 from aisc_control_objectives.prioritising import Priority, Severity, prioritise
 from aisc_control_objectives.risk_mapping import MappedObjective, Mapping, Mapper, MappingRun, map_risks
+
+_log = logging.getLogger(__name__)
 
 #: platform project pid -> (the mapper to use for it, "<provider>/<model>" of its model)
 MapperFor = Callable[[str], tuple[Mapper, str]]
@@ -117,10 +120,8 @@ class Projects:
             project=project, name=name or ontology.system_name,
             ontology=ontology, jsonld=jsonld, system_id=system_id, record=record,
         )
-        # a new card version's assessment starts on the profile the previous one ran on
-        previous = self._repository.previous_of(record)
-        if previous is not None and previous.profile_version_id is not None:
-            self._repository.set_profile(record.id, previous.profile_version_id, keep=set())
+        # (a new card version's assessment starts on the profile the previous one ran on: the repository
+        # sets it in the start's own transaction)
         return self.view(record.id)
 
     # ── the objective profile ─────────────────────────────────────────────
@@ -187,32 +188,36 @@ class Projects:
         self._repository.save_keys(project_id, {oid: bool(v) for oid, v in keys.items()}, record=record)
         return self.view(project_id)
 
-    def map_risks_of(self, project_id: str, on_save=None) -> ProjectView:
+    def map_risks_of(self, project_id: str, on_start=None, on_save=None) -> ProjectView:
         """The one agentic step: which objectives mitigate each risk.
 
         The model is the one chosen by the project whose database the
-        assessment is in (I5.6). `on_save`, the caller's ledger events, gets the run (its id, outcome,
-        model and each model call) inside the save's transaction (ledger phase 6); a run that raises is
-        recorded too, in a transaction of its own, then raised again."""
+        assessment is in (I5.6). The caller's ledger events (ledger phase 6):
+        - `on_start(session, run_id)` records the request, in a transaction of its own, before the first
+          model call: a long run must not push it past the relay's window (review M1);
+        - `on_save(session, outcome)` records the run (its id, outcome, model and each model call) inside the
+          save's transaction. A run that raises, or a model that can't be had (review m2), is recorded in a
+          transaction of its own, then raised again."""
         from aisc_control_objectives import ledger
 
         record = self._repository.get(project_id)
+        run_id, calls = str(uuid.uuid4()), ledger.Calls()
         mapper, model = self._mapper, self._model
+        if on_start is not None:
+            self._repository.recording(lambda session: on_start(session, run_id))
         if self._mapper_for is not None:
             try:
                 mapper, model = self._mapper_for(record.project)
             except (ResolveError, ValueError) as exc:
+                self._record_failure(on_save, {"run_id": run_id, "run": None, "error": "model_unreachable",
+                                               "model": None, "calls": calls})
                 raise ModelUnavailable(str(exc)) from exc
-        run_id, calls = str(uuid.uuid4()), ledger.Calls()
-        if hasattr(mapper, "_complete"):                              # each model call, timed, for ai.llm_call
-            mapper = copy.copy(mapper)
-            mapper._complete = calls.recording(mapper._complete, "mapping")
+        mapper = calls.watching(mapper)                               # each model call, timed, for ai.llm_call
         try:
             run = map_risks(record.ontology.risks, mapper, self._catalogue_for(record))
-        except Exception as exc:
-            if on_save is not None:
-                outcome = {"run_id": run_id, "run": None, "error": str(exc), "model": model, "calls": calls}
-                self._repository.recording(lambda session: on_save(session, outcome))
+        except Exception:
+            self._record_failure(on_save, {"run_id": run_id, "run": None, "error": "mapping_error", "model": model,
+                                           "calls": calls})
             raise
         outcome = {"run_id": run_id, "run": run, "error": run.error, "model": model, "calls": calls}
         self._repository.save_mapping_run(
@@ -220,6 +225,16 @@ class Projects:
             record=None if on_save is None else (lambda session, change: on_save(session, {**change, **outcome})),
         )
         return self.view(project_id)
+
+    def _record_failure(self, on_save, outcome: dict) -> None:
+        """A run that ended before its save, recorded on its own. A failure to record it is logged and
+        never hides the run's own error, which the caller raises next (review m11)."""
+        if on_save is None:
+            return
+        try:
+            self._repository.recording(lambda session: on_save(session, outcome))
+        except Exception:                                              # noqa: BLE001
+            _log.exception("the failed run %s could not be recorded", outcome["run_id"])
 
     def map_by_hand(self, project_id: str, risk_id: str, objective_ids: list[str], on_save=None) -> ProjectView:
         """A person's mapping of one risk (replaces that risk's mapping, 2026-10-01).

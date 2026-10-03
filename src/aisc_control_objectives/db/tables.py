@@ -227,7 +227,7 @@ class MappingArchive(Base):
     deleted assessment's history stays with the project's database."""
 
     __tablename__ = "mapping_archive"
-    __table_args__ = (CheckConstraint("reason IN ('ai_run', 'profile', 'by_hand')", name="ck_mapping_archive_reason"),)
+    __table_args__ = (CheckConstraint("reason IN ('ai_run', 'profile', 'by_hand', 'deleted')", name="ck_mapping_archive_reason"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     project_id: Mapped[str] = mapped_column(String(32), nullable=False, index=True)

@@ -469,7 +469,11 @@ class Library:
         picks = [oid for oid in picks if oid not in dropped]
         self._check_picks(picks)
         with self._sessions.begin() as session:
-            row = session.get(tables.ObjectiveProfile, profile_id)
+            # locked, and its last number read under the lock: two saves at once take turns, each its own
+            # number (phase 6 review m7)
+            row = session.get(tables.ObjectiveProfile, profile_id, with_for_update=True)
+            last = session.scalar(select(func.max(tables.ObjectiveProfileVersion.number))
+                                  .where(tables.ObjectiveProfileVersion.profile_id == profile_id))
             named_before = {"name": row.name, "description": row.description}
             if name is not None:
                 if not name.strip():
@@ -477,7 +481,7 @@ class Library:
                 row.name = name.strip()
             if description is not None:
                 row.description = description.strip()
-            number = current.current.number + 1
+            number = (last or 0) + 1
             self._add_version(session, profile_id, number, picks, who, who_sub)
             if record is not None:
                 record(session, {"number": number, "picks": picks, "dropped": dropped, "before": named_before,

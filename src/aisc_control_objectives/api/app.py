@@ -311,7 +311,8 @@ def _register_pages(app, objectives, projects_of, view_in, source_name, root_pat
                 project=pid, name=name, jsonld=jsonld, raw=raw, system_id=latest["pid"],
                 record=lambda s, c: ledger.emit(s, "assessment.started", item_type="assessment", item_id=c["id"],
                                                 card_version=latest["pid"],
-                                                details={"card_version": latest["pid"], "risks": c["risks"]}),
+                                                details={"card_version": latest["pid"], "risks": c["risks"],
+                                                         "profile_version": c["profile_version"]}),
             )
         except IntegrityError as exc:
             if getattr(exc.orig, "sqlstate", None) == "23503":
@@ -347,9 +348,9 @@ def _register_pages(app, objectives, projects_of, view_in, source_name, root_pat
         if (why := _read_only(projects, view)) is not None:
             return PlainTextResponse(why, status_code=409)
         try:
-            projects.map_risks_of(project_id, on_save=lambda s, o: (
-                ledger.emit(s, "ai.mapping.requested", item_type="assessment", item_id=project_id, run_id=o["run_id"]),
-                ledger_events.mapping_outcome(s, project_id, o)))
+            projects.map_risks_of(project_id, on_start=lambda s, run_id: ledger.emit(
+                s, "ai.mapping.requested", item_type="assessment", item_id=project_id, run_id=run_id),
+                on_save=lambda s, o: ledger_events.mapping_outcome(s, project_id, o))
         except ModelUnavailable as exc:
             return PlainTextResponse(str(exc), status_code=502)
         return RedirectResponse(
@@ -367,7 +368,8 @@ def _register_pages(app, objectives, projects_of, view_in, source_name, root_pat
         try:
             projects.map_by_hand(project_id, risk_id, [str(v) for v in form.getlist("objective")],
                                  on_save=lambda s, c: ledger.emit(
-                                     s, "mapping.risk.edited", item_type="risk", item_id=risk_id,
+                                     s, "mapping.risk.edited", item_type="risk_mapping",
+                item_id=ledger_events.risk_item(project_id, risk_id),
                                      before=c["before"], after=c["after"],
                                      details={"added": sorted(set(c["after"]) - set(c["before"])),
                                               "removed": sorted(set(c["before"]) - set(c["after"]))}))
@@ -527,9 +529,9 @@ def _register_project_api(app, projects_of, view_in):
         projects = projects_of(request)
         _latest_or_409(projects, view_in(request, project_id))
         try:
-            return payload(projects.map_risks_of(project_id, on_save=lambda s, o: (
-                ledger.emit(s, "ai.mapping.requested", item_type="assessment", item_id=project_id, run_id=o["run_id"]),
-                ledger_events.mapping_outcome(s, project_id, o))))
+            return payload(projects.map_risks_of(project_id, on_start=lambda s, run_id: ledger.emit(
+                s, "ai.mapping.requested", item_type="assessment", item_id=project_id, run_id=run_id),
+                on_save=lambda s, o: ledger_events.mapping_outcome(s, project_id, o)))
         except ModelUnavailable as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
 
@@ -543,7 +545,8 @@ def _register_project_api(app, projects_of, view_in):
         _latest_or_409(projects, view_in(request, project_id))
         try:
             return payload(projects.map_by_hand(project_id, risk_id, objective_ids, on_save=lambda s, c: ledger.emit(
-                s, "mapping.risk.edited", item_type="risk", item_id=risk_id, before=c["before"], after=c["after"],
+                s, "mapping.risk.edited", item_type="risk_mapping",
+                item_id=ledger_events.risk_item(project_id, risk_id), before=c["before"], after=c["after"],
                 details={"added": sorted(set(c["after"]) - set(c["before"])),
                          "removed": sorted(set(c["before"]) - set(c["after"]))})))
         except ValueError as exc:

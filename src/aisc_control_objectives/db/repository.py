@@ -173,11 +173,16 @@ class ProjectRepository:
                 name=name,
                 objectives_digest=self._objectives_digest,
             )
+            # a new card version's assessment starts on the profile the previous one ran on, in this same
+            # transaction, so its start event can say so (phase 6 review M2)
+            previous = session.execute(_PREVIOUS_ASSESSMENT, {"sid": system_id}).scalar()
+            if previous is not None:
+                row.profile_version_id = session.get(tables.Project, previous).profile_version_id
             session.add(row)
             self._attach_card(session, row, ontology, jsonld)
             session.flush()
             if record is not None:
-                record(session, {"id": row.id, "risks": len(row.risks)})
+                record(session, {"id": row.id, "risks": len(row.risks), "profile_version": row.profile_version_id})
             return self._to_record(session, row)
 
     def rate(self, project_id: str, impact: dict[str, int], likelihood: dict[str, int],
@@ -200,24 +205,32 @@ class ProjectRepository:
                 after = {"impact": row.rating_impact, "likelihood": row.rating_likelihood,
                          "comment": row.severity_comment}
                 if after != before:
-                    changed.append({"risk": row.risk_id, "before": before, "after": after})
+                    changed.append({"assessment": project_id, "risk": row.risk_id, "before": before, "after": after})
             if record is not None and changed:
                 record(session, changed)
 
     def save_keys(self, project_id: str, keys: dict[str, bool], record=None) -> None:
         """Record the assessor's key choices (objective id -> key), replacing earlier ones for those ids."""
         with self._sessions.begin() as session:
-            before, after = {}, {}
+            # the whole key map before and after, read in this transaction, so one save's after is the
+            # next one's before whatever ids each names (phase 6 review M3)
+            before = self._keys_of(session, project_id)
             for objective_id, key in keys.items():
                 found = session.get(tables.ObjectiveKey, (project_id, objective_id))
-                before[objective_id] = None if found is None else found.key
-                after[objective_id] = key
                 if found is None:
                     session.add(tables.ObjectiveKey(project_id=project_id, objective_id=objective_id, key=key))
                 else:
                     found.key = key
+            session.flush()
+            after = self._keys_of(session, project_id)
             if record is not None and before != after:
                 record(session, {"before": before, "after": after})
+
+    @staticmethod
+    def _keys_of(session: Session, project_id: str) -> dict[str, bool]:
+        return {k.objective_id: k.key for k in session.scalars(
+            select(tables.ObjectiveKey).where(tables.ObjectiveKey.project_id == project_id)
+            .order_by(tables.ObjectiveKey.objective_id))}
 
     def save_selection(self, project_id: str, objective_ids: list[str]) -> None:
         """Replace the objectives this assessment takes forward."""
@@ -343,7 +356,12 @@ class ProjectRepository:
                 held = {"system_id": str(project.system_id), "name": project.name,
                         "risks": [{"risk": r.risk_id, "impact": r.rating_impact, "likelihood": r.rating_likelihood,
                                    "comment": r.severity_comment,
-                                   "mapped": [m.objective_id for m in r.mapped]} for r in project.risks]}
+                                   "mapped": [m.objective_id for m in r.mapped]} for r in project.risks],
+                        "keys": self._keys_of(session, project_id),
+                        "selected": None if project.selection is None else list(project.selection.objective_ids)}
+                # the mapping's rows (quote, rationale, source) and its run, kept as a change keeps them
+                # (phase 6 review m5); the archive has no key to the assessment, so it outlives it
+                self._archive(session, project, "deleted")
                 session.delete(project)
                 if record is not None:
                     record(session, held)

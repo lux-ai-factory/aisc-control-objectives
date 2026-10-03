@@ -398,3 +398,22 @@ def test_severity_becomes_impact_and_the_scope_is_the_matrix(database_url):
         assert selected == ["O2", "O10"]
     finally:
         drop()
+
+
+@pytest.mark.parametrize("change", [
+    "UPDATE control_objectives.mapping_archive SET reason = 'by_hand'",
+    "DELETE FROM control_objectives.mapping_archive",
+    "TRUNCATE control_objectives.mapping_archive",
+])
+def test_the_mapping_archive_is_append_only(migrated, change):
+    """Ledger phase 6 (review M4, m4): what a change replaced is kept; no row is changed or removed,
+    not even by truncating the table. (Its owner can still drop the trigger: the ledger's frozen copies
+    are the check on that.)"""
+    from sqlalchemy.exc import DBAPIError
+
+    with migrated.begin() as connection:
+        connection.execute(text("INSERT INTO control_objectives.mapping_archive (project_id, reason, rows)"
+                                " VALUES ('a1', 'ai_run', '[]')"))
+    with pytest.raises(DBAPIError, match="immutable|append-only"):
+        with migrated.begin() as connection:
+            connection.execute(text(change))

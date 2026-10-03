@@ -13,6 +13,7 @@ from fastapi import Body, HTTPException, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
 
 from aisc_control_objectives import ledger
+from aisc_control_objectives.api import ledger_events
 from aisc_control_objectives.library import BUILTIN_CODE, FIELDS
 from aisc_control_objectives.rendering import (
     render_profile_page,
@@ -94,7 +95,8 @@ def register_library(app, projects_of, root_path: str) -> None:
     async def add_objective_form(project: str, set_id: str, request: Request):
         try:
             made = library(request).add_objective(set_id, await form_fields(request), record=lambda s, c: ledger.emit(
-                s, "objective.added", item_type="objective", item_id=c["id"], details={"set": set_id},
+                s, "objective.added", item_type="objective",
+                item_id=ledger_events.objective_item(set_id, c["id"]), details={"set": set_id},
                 content=c["after"]))
         except ValueError as exc:
             return PlainTextResponse(f"Invalid objective: {exc}", status_code=400)
@@ -106,7 +108,8 @@ def register_library(app, projects_of, root_path: str) -> None:
     async def edit_objective_form(project: str, set_id: str, objective_id: str, request: Request):
         try:
             library(request).edit_objective(set_id, objective_id, await form_fields(request), record=lambda s, c: ledger.emit(
-                s, "objective.edited", item_type="objective", item_id=objective_id, details={"set": set_id},
+                s, "objective.edited", item_type="objective",
+                item_id=ledger_events.objective_item(set_id, objective_id), details={"set": set_id},
                 content=c["after"], before=c["before"], after=c["after"]))
         except ValueError as exc:
             return PlainTextResponse(f"Invalid objective: {exc}", status_code=400)
@@ -121,7 +124,7 @@ def register_library(app, projects_of, root_path: str) -> None:
         try:
             getattr(library(request), action)(set_id, objective_id, record=lambda s, c: ledger.emit(
                 s, "objective.retired" if action == "retire" else "objective.restored", item_type="objective",
-                item_id=objective_id, details={"set": set_id}))
+                item_id=ledger_events.objective_item(set_id, objective_id), details={"set": set_id}))
         except LookupError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return page(project, f"/sets/{set_id}#obj-{objective_id}")
@@ -233,7 +236,8 @@ def register_library(app, projects_of, root_path: str) -> None:
     def add_objective(project: str, set_id: str, request: Request, values: dict = Body(...)) -> dict:
         try:
             return {"id": library(request).add_objective(set_id, values, record=lambda s, c: ledger.emit(
-                s, "objective.added", item_type="objective", item_id=c["id"], details={"set": set_id},
+                s, "objective.added", item_type="objective",
+                item_id=ledger_events.objective_item(set_id, c["id"]), details={"set": set_id},
                 content=c["after"]))}
         except (ValueError, LookupError) as exc:
             raise refused(exc) from exc
@@ -243,7 +247,8 @@ def register_library(app, projects_of, root_path: str) -> None:
                        values: dict = Body(...)) -> dict:
         try:
             library(request).edit_objective(set_id, objective_id, values, record=lambda s, c: ledger.emit(
-                s, "objective.edited", item_type="objective", item_id=objective_id, details={"set": set_id},
+                s, "objective.edited", item_type="objective",
+                item_id=ledger_events.objective_item(set_id, objective_id), details={"set": set_id},
                 content=c["after"], before=c["before"], after=c["after"]))
             return _set_view(library(request).get_set(set_id))
         except (ValueError, LookupError) as exc:
@@ -256,7 +261,7 @@ def register_library(app, projects_of, root_path: str) -> None:
         try:
             getattr(library(request), action)(set_id, objective_id, record=lambda s, c: ledger.emit(
                 s, "objective.retired" if action == "retire" else "objective.restored", item_type="objective",
-                item_id=objective_id, details={"set": set_id}))
+                item_id=ledger_events.objective_item(set_id, objective_id), details={"set": set_id}))
             return _set_view(library(request).get_set(set_id))
         except LookupError as exc:
             raise refused(exc) from exc
