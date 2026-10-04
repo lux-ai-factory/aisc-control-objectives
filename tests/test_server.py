@@ -78,3 +78,44 @@ class TestDotenv:
         (tmp_path / ".env").write_text("A_KEY=from the file\n")
         server._load_dotenv()
         assert os.environ["A_KEY"] == "from the shell"
+
+
+class _RecordingLLM:
+    def __init__(self):
+        self.calls = []
+
+    def predict(self, message, parameters=None, session=None, system_message=None):
+        self.calls.append(parameters)
+        return "{}"
+
+
+def test_the_startup_mapper_asks_for_a_reproducible_mapping(monkeypatch):
+    """A mapping is repeatable: the risk mapper's completer asks for temperature 0.0."""
+    from aisc_control_objectives import llm as llm_module
+
+    fake = _RecordingLLM()
+    monkeypatch.setattr(llm_module, "build_llm", lambda provider, model: fake)
+    server._build_completer(RunConfig(provider="ollama", model="mistral:latest"))("s", "u")
+    assert fake.calls == [{"temperature": 0.0}]
+
+
+def test_a_projects_mapper_asks_for_a_reproducible_mapping(monkeypatch):
+    from aisc_control_objectives import baf_llm
+
+    fake = _RecordingLLM()
+    complete = server.reproducible(baf_llm.completer(fake))
+    complete("s", "u")
+    assert fake.calls == [{"temperature": 0.0}]
+    source = (server.__file__ and open(server.__file__).read())
+    assert "RiskMapper(complete=reproducible(baf_llm.completer(llm))" in source
+
+
+def test_the_shared_llm_file_is_qualifications():
+    """baf_llm.py is one file in two services: byte-identical to qualification's copy."""
+    from pathlib import Path
+
+    here = Path(__file__).resolve().parents[1] / "src/aisc_control_objectives/baf_llm.py"
+    there = Path(__file__).resolve().parents[2] / "qualification/services/agents/fill/baf_llm.py"
+    if not there.exists():
+        pytest.skip("not in the aisc checkout")
+    assert here.read_bytes() == there.read_bytes()

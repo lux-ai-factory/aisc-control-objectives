@@ -277,10 +277,13 @@ def completer(llm) -> Completer:
     system message separately, which is the same thing said its way.
     """
 
-    def complete(system: str, user: str, temperature: float = 0.0) -> str:
+    def complete(system: str, user: str, temperature: float | None = None) -> str:
+        # No temperature unless one is asked for: some models (OpenAI's
+        # reasoning ones) refuse every value but their default, and with none
+        # given BAF falls back to the LLM's own parameters.
         return llm.predict(
             user,
-            parameters={"temperature": temperature},
+            parameters=None if temperature is None else {"temperature": temperature},
             system_message=system,
         )
 

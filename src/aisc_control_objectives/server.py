@@ -83,6 +83,14 @@ def _load_dotenv() -> None:
         os.environ.setdefault(key.strip(), value)
 
 
+def reproducible(complete):
+    """A completer that asks the model for temperature 0.0: the same card and catalogue give the same
+    mapping. (The shared completer sends no temperature unless asked, since some models refuse any.)"""
+    def mapping(system: str, user: str) -> str:
+        return complete(system, user, temperature=0.0)
+    return mapping
+
+
 def _build_completer(config: RunConfig):
     """The one way to a model: a BAF wrapper, per aisc_control_objectives.llm.
 
@@ -91,7 +99,7 @@ def _build_completer(config: RunConfig):
     """
     from aisc_control_objectives.llm import build_llm, completer
 
-    return completer(build_llm(config.provider, config.model))
+    return reproducible(completer(build_llm(config.provider, config.model)))
 
 
 def build_app():
@@ -115,7 +123,7 @@ def build_app():
         startup one. Asked at every map, so a changed choice applies to the next."""
         chosen = baf_llm.config_for(pid, "risk_mapper", fallback=startup)
         llm = baf_llm.build_llm(chosen, agent_name="control_objectives_llm")
-        return (RiskMapper(complete=baf_llm.completer(llm), catalogue=objectives),
+        return (RiskMapper(complete=reproducible(baf_llm.completer(llm)), catalogue=objectives),
                 f"{chosen.provider}/{chosen.model}")
 
     # Each project's assessments are in its own database, opened per request

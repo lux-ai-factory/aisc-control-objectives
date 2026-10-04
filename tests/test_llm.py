@@ -112,10 +112,13 @@ class TestCompleter:
         assert call["system_message"] == "the rules"
         assert call["message"] == "the card"
 
-    def test_a_draft_is_reproducible_by_default(self):
+    def test_no_temperature_is_sent_unless_asked_for(self):
+        """The shared completer (the same file as qualification's) sends none by default: some models
+        (OpenAI's reasoning ones) refuse every value but their own. The risk mapper asks for 0.0 itself
+        (tests/test_server.py)."""
         llm = FakeLLM()
         completer(llm)("s", "u")
-        assert llm.calls[0]["parameters"]["temperature"] == 0
+        assert llm.calls[0]["parameters"] is None
 
     def test_temperature_can_be_raised(self):
         llm = FakeLLM()
