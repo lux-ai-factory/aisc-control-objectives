@@ -13,7 +13,6 @@ from __future__ import annotations
 import os
 
 import httpx
-
 from aisc_identity.headers import GATEWAY_TOKEN_HEADER
 
 TIMEOUT = 10.0

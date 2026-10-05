@@ -48,6 +48,10 @@ ALEMBIC_INI, ALEMBIC_DIR = APP_ROOT / "alembic.ini", APP_ROOT / "alembic"
 #: Project databases held open at once.
 MAX_OPEN_PROJECTS = 20
 
+#: One migration at a time in this process: Alembic keeps its context and op proxies in module
+#: globals, so two databases migrated at once in two threads would overwrite each other's.
+_MIGRATING = threading.Lock()
+
 
 def database_name(pid: str) -> str:
     """`project_` + the pid, lower case, without hyphens. Anything else is a ValueError."""
@@ -206,7 +210,8 @@ class ProjectDatabases:
                     return engine
             engine = pooled_engine(project_url(self._template, name))
             try:
-                self._migrate(engine)
+                with _MIGRATING:
+                    self._migrate(engine)
             except Exception as exc:
                 engine.dispose()
                 if is_missing_database(exc):

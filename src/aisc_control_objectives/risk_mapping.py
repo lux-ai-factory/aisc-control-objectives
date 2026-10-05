@@ -128,6 +128,10 @@ class RiskMapper:
         self._catalogue = catalogue
         self._skill = skill if skill is not None else load_skill(self.SKILL)
 
+    def for_catalogue(self, catalogue: ControlObjectiveCatalogue) -> RiskMapper:
+        """The same model and skill, shown `catalogue`: the one its proposals are checked against."""
+        return RiskMapper(self._complete, catalogue, self._skill)
+
     def _catalogue_text(self) -> str:
         return "\n".join(
             f"{o.id} | {o.macro_requirement} | {o.sub_requirement_label} | {o.text}"
@@ -184,9 +188,17 @@ def _map_one(
 
     # Keep only what survived the controls: an objective that does not exist,
     # or that nothing in the risk supports, is not a mapping.
+    # A duplicate rejects the repeat, not the objective: its first copy stays unless a finding of its
+    # own (unknown id, quote missing or not in the risk) rejects it.
     mapping = round_.proposal
-    rejected = {finding.objective_id for finding in round_.findings if finding.objective_id}
-    mapping.objectives = [o for o in mapping.objectives if o.objective_id not in rejected]
+    rejected = {f.objective_id for f in round_.findings if f.objective_id and f.flag != "duplicate-objective"}
+    kept, seen = [], set()
+    for o in mapping.objectives:
+        if o.objective_id in rejected or o.objective_id in seen:
+            continue
+        seen.add(o.objective_id)
+        kept.append(o)
+    mapping.objectives = kept
     mapping.stop = round_.stop
     return mapping, round_.findings, round_.stop, round_.error, round_.attempts
 

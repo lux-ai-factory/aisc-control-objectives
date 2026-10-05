@@ -213,3 +213,47 @@ def system_version(repository):
         return pid
 
     return make
+
+
+# The step 2 fixtures: an app on the test repository with a fake mapper, the MCAS card, and a
+# factory of assessments. A test module may define its own `client` or `graph`, which wins.
+
+@pytest.fixture()
+def mapper():
+    from step2_support import SwitchableMapper
+
+    return SwitchableMapper()
+
+
+@pytest.fixture()
+def client(repository, objectives, mapper):
+    from fastapi.testclient import TestClient
+
+    from aisc_control_objectives.api.app import create_app
+    from aisc_control_objectives.config import RunConfig
+    from aisc_control_objectives.projects import Projects
+
+    projects = Projects(repository, objectives, mapper, model="fake/model")
+    return TestClient(create_app(objectives, projects, base_config=RunConfig()),
+                      follow_redirects=False), projects
+
+
+@pytest.fixture()
+def graph(fixtures_dir):
+    import json
+
+    return json.loads((fixtures_dir / "mcas.ontology.jsonld").read_text())
+
+
+@pytest.fixture()
+def start(client, graph, platform_project, system_version):
+    """An assessment of card version `number`, as its id."""
+    _, projects = client
+
+    import json
+
+    def make(number: int = 1) -> str:
+        version = system_version(platform_project, number)
+        return projects.create(platform_project, "MCAS", json.dumps(graph), graph, version).record.id
+
+    return make

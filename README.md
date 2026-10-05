@@ -42,15 +42,18 @@ flowchart LR
 - **One database per project.** A project's assessments, sets and profiles live in the schema
   `control_objectives` of that project's own Postgres database, `project_<pid without hyphens>`.
   The service connects to a project database only after membership is decided
-  (`projectdb.ProjectDatabases.open`), and migrates it with Alembic the first time it opens it.
+  (`projectdb.ProjectDatabases.open`), and migrates it with Alembic the first time it opens it,
+  one database at a time (Alembic's context is global to the process).
 - **Starting an assessment** asks the platform (`PLATFORM_URL`) for the project's latest AI card
   version and qualification (`QUALIFICATION_URL`) for that version's card, with the caller's own
   token. One assessment per card version; an older version's assessment is read-only.
-- **The mapping** (`risk_mapping.py`) asks the model, one risk at a time, which objectives
-  mitigate it, each claim resting on a literal quote of the risk. Deterministic checks reject
-  unknown ids, quotes that are not in the risk, missing quotes and duplicates; what failed goes
-  back to the model, at most three attempts (`rounds.py`). Every outcome is published with its
-  findings, so a person can correct it on the page. The model is reached through
+- **The mapping** (`risk_mapping.py`) asks the model, one risk at a time, which of the
+  assessment's objectives (its profile's) mitigate it, each claim resting on a literal quote of
+  the risk. Deterministic checks reject unknown ids, quotes that are not in the risk, missing
+  quotes and repeats; what failed goes back to the model, at most three attempts (`rounds.py`).
+  Every outcome is published with its findings, so a person can correct it on the page. A run is
+  saved only over the assessment it read: if a newer card version, another profile or a person's
+  mapping came meanwhile, it saves nothing and answers 409. The model is reached through
   [BAF](https://pypi.org/project/besser-agentic-framework/) (`llm.py`, `baf_llm.py`); the
   project's own model and key, chosen on the platform, take precedence over the service's own.
 - **Scores** (`prioritising.py`, no model): an objective scores the sum of the ratings
@@ -60,7 +63,9 @@ flowchart LR
   and default keys are never stored, so a changed rating can never leave a stale score.
 - **The ledger.** With `LEDGER_MODE` set to `record` or `enforce`, every write also records an
   event through the project database's `ledger.emit`, in the same transaction (`ledger.py`). The
-  platform relays those events to the immudb ledger.
+  platform relays those events to the immudb ledger. A mapping run in which some risks failed is
+  `ai.mapping.completed` with what it saved and `failed_risks`; one in which every risk failed, or
+  that saved nothing, is `ai.mapping.failed` with a code.
 
 ## Install and run
 
@@ -185,11 +190,11 @@ Interactive docs at `/docs`. The JSON API of a project is under `/p/{project}/ap
 | `POST .../projects/{id}/ratings` | `{"risk2": {"impact": 5, "likelihood": 4}}`; a part left out keeps its value. |
 | `POST .../projects/{id}/severity` | `{"risk2": 5}` sets the impact only. |
 | `POST .../projects/{id}/severity-comments` | `{"risk2": "why"}`; a blank comment clears it. |
-| `POST .../projects/{id}/map` | Map every risk with the model (one call per risk). |
+| `POST .../projects/{id}/map` | Map every risk with the model (one call per risk); 409 if the assessment changed meanwhile. |
 | `POST .../projects/{id}/risks/{risk}/mapping` | `{"objective_ids": ["O1", ...]}`: a person's mapping of one risk. |
 | `POST .../projects/{id}/key` | `{"O1": true, "O7": false}`: the assessor's key choices. |
 | `POST .../projects/{id}/profile` | Run the assessment on another objective profile. |
-| `DELETE .../projects/{id}` | Delete an assessment and everything under it. |
+| `DELETE .../projects/{id}` | Delete an assessment and everything under it; 409 for an older version's. |
 | `GET/POST .../sets`, `.../sets/{id}/...`, `GET/POST .../profiles`, `.../profiles/{id}/...` | The project's objective sets and profiles. |
 
 An assessment is started from the page (`POST /p/{project}/projects`), on the project's latest AI
@@ -229,6 +234,9 @@ docker rm -f co-test-pg
 > and the database names `platform`, `postgres` and `project_*`, but a copy of the data on another
 > port is not protected.
 
+From the aisc repo, `scripts/lib/co-tests.sh` does all of this: a throwaway Postgres with the
+platform's roles and databases, the suite, then the container removed.
+
 Without the variable the tests that need a database fail at setup and the rest run. Some tests
 skip unless more is there: the one-database-per-project tests (`test_isolation_project_databases.py`)
 need the throwaway cluster made like the platform's (the aisc repo's `init/*.sql` applied, so it
@@ -236,7 +244,8 @@ has a `platform` database with `core`) and the aisc `platform/` checkout beside 
 ledger tests need `platform/project-template/0020_ledger_outbox.sql`; `test_chain.py` runs only
 inside `scripts/test-pipeline-chain.sh` (it needs `CHAIN_JSON`).
 
-Lint: `uv run --extra dev ruff check src tests` (it currently reports findings in the existing code).
+Lint: `uv run --extra dev ruff check src tests` (clean). The step 2 fixtures (`client`, `graph`,
+`mapper`, `start`) are in `tests/conftest.py`, their helpers in `tests/step2_support.py`.
 
 ## Layout
 
@@ -256,7 +265,6 @@ src/aisc_control_objectives/
   llm.py, baf_llm.py, config.py, settings.py, ledger.py, upstream.py
 alembic/                 migrations of a project database's control_objectives schema
 tests/                   pytest
-frontend/                an earlier standalone React frontend; it calls an API that no longer exists and is not deployed
 docs/                    SPEC.md and INTEGRATION_AISC.md describe an earlier design; docs/history/ is the record
 ```
 

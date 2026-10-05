@@ -44,14 +44,16 @@ def comments(changed: list[dict]) -> list[dict]:
 
 
 def keys(change: dict) -> dict:
-    """objective.key.set: which objectives became key, which stopped being key."""
-    before, after = change["before"], change["after"]
+    """objective.key.set: which objectives became key, which stopped being key. Compared with what was
+    key before the save (`was_key`: the assessor's choice, else the default), not with the explicit
+    choices only, which would miss an objective key by default and unticked."""
+    before, after = change.get("was_key", change["before"]), change["after"]
     return {"added": sorted(o for o, k in after.items() if k and not before.get(o)),
             "removed": sorted(o for o, k in after.items() if not k and before.get(o))}
 
 
 #: Why a run failed, as the ledger says it: a code from this list, never the error's text.
-FAILURES = ("mapping_error", "model_unreachable")
+FAILURES = ("mapping_error", "model_unreachable", "assessment_changed")
 
 
 def mapping_outcome(session, project_id: str, outcome: dict) -> None:
@@ -59,14 +61,23 @@ def mapping_outcome(session, project_id: str, outcome: dict) -> None:
     run_id, model = outcome["run_id"], outcome.get("model") or None
     outcome["calls"].emit_all(session, run_id, model)
     run = outcome.get("run")
-    if run is None or outcome.get("error"):
+    # the risks whose model calls failed; the others were mapped and saved
+    failed = sorted(rid for rid, m in run.mappings.items() if m.stop == "failed") if run is not None else []
+    if run is None or (outcome.get("error") and len(failed) == len(run.mappings)):
         # a code, never the error's text: it can quote a key in a URL or a card's personal data, and
         # immudb keeps what it is given for ever
         code = outcome.get("error") if run is None and outcome.get("error") in FAILURES else "mapping_error"
+        details = {"error": code, "attempts": run.attempts if run is not None else 0}
+        if failed:
+            details["failed_risks"] = failed
         ledger.emit(session, "ai.mapping.failed", item_type="assessment", item_id=project_id, run_id=run_id,
-                    model=model, details={"error": code, "attempts": run.attempts if run is not None else 0})
+                    model=model, details=details)
     else:
+        # What was saved, also when some risks failed: the ledger and the matrix say the same.
         # {"risks": ...}: never empty, so a card with no mapped risk is still content
+        details = {"attempts": run.attempts}
+        if outcome.get("error"):
+            details |= {"error": "mapping_error", "failed_risks": failed}
         ledger.emit(session, "ai.mapping.completed", item_type="assessment", item_id=project_id, run_id=run_id,
-                    model=model, details={"attempts": run.attempts},
+                    model=model, details=details,
                     content={"risks": {rid: [o.objective_id for o in m.objectives] for rid, m in run.mappings.items()}})

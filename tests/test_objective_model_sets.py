@@ -8,9 +8,9 @@ from aisc_control_objectives.models.control_objective import ControlObjective
 
 
 def made(**over):
-    fields = dict(id="BNK3", macro_requirement="R2 Technical Robustness and Safety", legal_basis="Internal policy 7",
-                  sub_requirement_label="Model change approval", text="Every model change is approved.",
-                  assessment_mode="Control", target="G", standards_grounding="", grounding_tier_flag="")
+    fields = {"id": "BNK3", "macro_requirement": "R2 Technical Robustness and Safety", "legal_basis": "Internal policy 7",
+                  "sub_requirement_label": "Model change approval", "text": "Every model change is approved.",
+                  "assessment_mode": "Control", "target": "G", "standards_grounding": "", "grounding_tier_flag": ""}
     fields.update(over)
     return ControlObjective(**fields)
 

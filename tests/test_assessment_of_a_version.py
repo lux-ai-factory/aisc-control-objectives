@@ -387,6 +387,24 @@ def test_s7_7_a_new_catalogue_changes_the_digest_of_new_assessments_only(
 # The start flow's errors: nothing is stored
 
 
+def test_s7_2_deleting_a_non_latest_assessment_is_409_and_keeps_it(
+    client, repository, platform_project, system_version, upstream, card_v1, card_v2
+):
+    """An older version's assessment is kept as it was (code review 2026-10-05): DELETE answered 204
+    to any editor, while every other write is 409 once a newer version exists."""
+    v1 = system_version(platform_project, 1)
+    upstream.version(platform_project, v1, 1, card_v1)
+    a1 = _assessment_id(_start(client, platform_project))
+    v2 = system_version(platform_project, 2)
+    upstream.version(platform_project, v2, 2, card_v2)
+
+    gone = client.delete(f"/p/{platform_project}/api/projects/{a1}", headers={"Authorization": AUTH})
+
+    assert gone.status_code == 409
+    assert "read-only" in gone.text
+    assert repository.get(a1) is not None
+
+
 def test_no_version_yet_is_409_and_nothing_is_stored(client, repository, platform_project, upstream):
     """409 "No AI card for the latest version yet"."""
     upstream.latest[platform_project] = None

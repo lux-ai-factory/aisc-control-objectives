@@ -5,15 +5,12 @@ gets the platform's real ledger template (platform/project-template/0020_ledger_
 from __future__ import annotations
 
 import json
-import uuid
 from pathlib import Path
 
 import pytest
 from sqlalchemy import text
 
-from test_objective_selection import (  # noqa: F401  (fixtures)
-    _api, client, graph, in_order, mapper, start,
-)
+from step2_support import _api
 
 TEMPLATE = Path(__file__).resolve().parents[3] / "platform" / "project-template" / "0020_ledger_outbox.sql"
 REQUEST = "a6a6a6a6-0000-4000-8000-000000000001"
@@ -177,6 +174,34 @@ def test_a_failed_ai_run_is_recorded_as_a_code_never_its_text(start, repository,
     assert [r["action"] for r in rows] == ["ai.mapping.requested", "ai.mapping.failed"]
     assert rows[1]["details"]["error"] == "mapping_error" and rows[0]["run_id"] == rows[1]["run_id"]
     assert "Jane" not in json.dumps(rows) and "AIza" not in json.dumps(rows)
+
+
+def test_a_partly_failed_run_records_what_it_saved(start, repository, objectives):
+    """One risk's provider call fails, the others are mapped and saved (code review 2026-10-05): the
+    ledger said ai.mapping.failed with no content, so it held no record of the mappings now live. It
+    records ai.mapping.completed with them, the error's code and the risks that failed."""
+    from aisc_control_objectives import ledger
+    from aisc_control_objectives.api import ledger_events
+    from aisc_control_objectives.projects import Projects
+    from test_projects import FakeMapper
+
+    class FailsOnRisk1(FakeMapper):
+        def propose(self, risk, findings=()):
+            if risk.id == "risk1":
+                raise RuntimeError("provider timeout for Jane Doe")
+            return super().propose(risk, findings)
+
+    a = start()
+    projects = Projects(repository, objectives, FailsOnRisk1(), model="fake/model")
+    projects.map_risks_of(a, on_start=lambda s, run_id: ledger.emit(
+        s, "ai.mapping.requested", item_type="assessment", item_id=a, run_id=run_id),
+        on_save=lambda s, o: ledger_events.mapping_outcome(s, a, o))
+    rows = outbox(repository)
+    assert [r["action"] for r in rows] == ["ai.mapping.requested", "ai.mapping.completed"]
+    done = rows[1]
+    assert done["details"]["error"] == "mapping_error" and done["details"]["failed_risks"] == ["risk1"]
+    assert done["content"]["risks"]["risk0"] == FakeMapper.BY_RISK["risk0"]
+    assert "Jane" not in json.dumps(rows)
 
 
 def test_each_model_call_of_a_run_is_recorded():
@@ -497,3 +522,22 @@ def test_m9_an_objectives_item_is_its_set_and_its_id(client, platform_project, r
     rows = outbox(repository, "objective.")
     assert {r["item_id"] for r in rows} == set(items) and len(set(items)) == 2
     assert chain_breaks(rows) == []
+
+
+def test_unticking_a_default_key_objective_is_recorded_as_removed(client, start, platform_project, repository):
+    """objective.key.set compared explicit choices only (code review 2026-10-05): an objective key by
+    default, unticked on the first save, was never reported as removed, and every default left ticked
+    was reported as added. It is now compared with what was key before the save."""
+    http, _ = client
+    a = start()
+    http.post(_api(platform_project, a, "/map"))
+    http.post(_api(platform_project, a, "/ratings"),
+              json={f"risk{i}": {"impact": 5, "likelihood": 5} for i in range(5)})
+    body = http.get(_api(platform_project, a)).json()
+    defaults = [p["objective_id"] for p in body["priorities"] if p["key"]]
+    assert defaults, "the fixture should make some objective key by default"
+    dropped, *kept = defaults
+    form = {dropped: False, **dict.fromkeys(kept, True)}
+    assert http.post(_api(platform_project, a, "/key"), json=form).status_code == 200
+    event = [r for r in outbox(repository) if r["action"] == "objective.key.set"][-1]
+    assert event["details"] == {"added": [], "removed": [dropped]}

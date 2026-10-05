@@ -240,3 +240,28 @@ class TestTheMapper:
         example = json.loads(blocks[-1].removeprefix("json").strip())
         assert set(example) == {"risk_id", "objectives"}
         assert {"objective_id", "quote", "rationale"} <= set(example["objectives"][0])
+
+
+class StubbornMapper:
+    """Always proposes the same mapping, whatever the findings say."""
+
+    def __init__(self, mapping):
+        self.mapping = mapping
+
+    def propose(self, risk, findings=()):
+        return self.mapping.model_copy(deep=True)
+
+
+def test_a_duplicated_objective_keeps_its_supported_first_copy(objectives):
+    """A duplicate is the repeat, not the objective (code review 2026-10-05): every id a finding
+    named was dropped, so an objective proposed twice with a good quote lost both copies."""
+    run = map_risks([RUBBER_STAMP], StubbornMapper(_mapping(_good("O1"), _good("O1"))), objectives)
+    kept = [o.objective_id for o in run.mappings["risk2"].objectives]
+    assert kept == ["O1"]
+    assert [f.flag for f in run.findings] == ["duplicate-objective"]
+
+
+def test_an_objective_with_a_finding_of_its_own_is_still_dropped(objectives):
+    bad = _good("O1", quote="the model was trained on Martian data")
+    run = map_risks([RUBBER_STAMP], StubbornMapper(_mapping(bad, _good("O2"))), objectives)
+    assert [o.objective_id for o in run.mappings["risk2"].objectives] == ["O2"]

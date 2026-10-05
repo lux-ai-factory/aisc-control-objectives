@@ -8,9 +8,7 @@ replaces the whole mapping, a person's edits included.
 """
 from __future__ import annotations
 
-from test_objective_selection import (  # noqa: F401  (fixtures)
-    _api, client, graph, in_order, mapper, start,
-)
+from step2_support import _api
 
 
 def _payload(http, platform_project, assessment):

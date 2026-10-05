@@ -10,8 +10,8 @@ from __future__ import annotations
 import pytest
 
 from aisc_control_objectives.library import FULL_AI_ACT, Library
+from step2_support import _api
 from test_library import fields
-from test_objective_selection import _api, client, graph, mapper, start  # noqa: F401
 
 
 @pytest.fixture
@@ -147,3 +147,28 @@ def test_the_page_offers_a_newer_version_only_when_there_is_one(client, start, p
     library.save_profile(bank["profile"].id, ["O1", "BNK1"], who="alice")
     page = http.get(f"/p/{platform_project}/projects/{assessment}").text
     assert "Version 2 is out." in page and "Take version 2" in page
+
+
+def test_the_mappers_prompt_lists_the_profiles_objectives(client, start, platform_project, bank, objectives):
+    """The model is shown the catalogue its proposals are checked against: the profile's (code review
+    2026-10-05). It was shown the built-in catalogue, so a profile's own objectives were never
+    proposed and the ones the profile dropped were proposed and refused, round after round."""
+    import json
+    import re
+
+    from aisc_control_objectives.risk_mapping import RiskMapper
+
+    http, projects = client
+    prompts: list[str] = []
+
+    def complete(_skill, prompt):
+        prompts.append(prompt)
+        risk_id = prompt.split("\n", 1)[0].removeprefix("Risk id: ").strip()
+        return json.dumps({"risk_id": risk_id, "objectives": []})
+
+    projects._mapper = RiskMapper(complete=complete, catalogue=objectives, skill="map")
+    assessment = start()
+    _use(http, platform_project, assessment, bank["profile"].id)
+    assert http.post(_api(platform_project, assessment, "/map")).status_code == 200
+    listed = {m.group(1) for p in prompts for m in re.finditer(r"^(\w+) \| ", p, re.M)}
+    assert prompts and listed == {"O1", "O7", "BNK1"}

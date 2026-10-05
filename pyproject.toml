@@ -61,6 +61,11 @@ ignore = [
     "UP047", # explicit TypeVars are kept on purpose; PEP 695 syntax is not a goal here
 ]
 
+[tool.ruff.lint.per-file-ignores]
+# byte-identical to apps/qualification/services/agents/fill/baf_llm.py (test_server.py checks it):
+# a rewrite would have to be made in both copies at once
+"src/aisc_control_objectives/baf_llm.py" = ["UP041"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 # aisc_identity is shared by every Python service: mounted into the container

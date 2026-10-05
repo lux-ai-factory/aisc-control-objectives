@@ -407,6 +407,11 @@ class ProjectRepository:
             ).all()
             return [self._to_record(session, row) for row in rows]
 
+    def count(self) -> int:
+        """How many assessments this project has: one query, nothing read back."""
+        with self._sessions() as session:
+            return session.scalar(select(func.count()).select_from(tables.Project)) or 0
+
     def orphan_rows(self) -> int:
         """Rows whose project is gone: should always be zero, and a test says so."""
         with self._sessions() as session:

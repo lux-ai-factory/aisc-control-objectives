@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import re
 
-from test_objective_selection import FakeMapper, _api, client, graph, mapper, start  # noqa: F401
+from step2_support import FakeMapper, _api
 
 
 def page_of(http, pid, assessment) -> str:
@@ -136,6 +136,7 @@ def test_the_legend_names_only_what_differs_from_the_default(client, start, plat
 
 def test_the_ring_is_yellow_and_only_on_ai_suggestions():
     from pathlib import Path
+
     import aisc_control_objectives
     base = (Path(aisc_control_objectives.__file__).parent / "templates/_base.html.j2").read_text()
     ai = re.search(r"\.co-chip--ai \{([^}]*)\}", base).group(1)

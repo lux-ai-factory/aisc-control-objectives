@@ -31,7 +31,13 @@ from aisc_control_objectives.db.repository import ProjectRecord, ProjectReposito
 from aisc_control_objectives.library import FULL_AI_ACT, Library
 from aisc_control_objectives.models.ontology import Ontology
 from aisc_control_objectives.prioritising import Priority, Severity, prioritise
-from aisc_control_objectives.risk_mapping import MappedObjective, Mapping, Mapper, MappingRun, map_risks
+from aisc_control_objectives.risk_mapping import (
+    MappedObjective,
+    Mapper,
+    Mapping,
+    MappingRun,
+    map_risks,
+)
 
 _log = logging.getLogger(__name__)
 
@@ -41,6 +47,16 @@ MapperFor = Callable[[str], tuple[Mapper, str]]
 
 class ModelUnavailable(RuntimeError):
     """The project's model could not be had; nothing was saved."""
+
+
+class AssessmentChanged(RuntimeError):
+    """The assessment changed while the model was mapping it; the run was not saved."""
+
+
+def _mapping_state(record: ProjectRecord) -> tuple:
+    """What a run must find unchanged before it saves: the profile, the mappings, the selection."""
+    run = record.mapping_run.model_dump_json() if record.mapping_run is not None else None
+    return record.profile_version_id, run, record.selected
 
 
 @dataclass
@@ -183,6 +199,13 @@ class Projects:
         unknown = sorted(oid for oid in keys if catalogue.by_id(oid) is None)
         if unknown:
             raise ValueError(f"not in this assessment's objective profile: {', '.join(unknown)}")
+        if record is not None:
+            # what was key before the save, defaults included, for the event's added and removed
+            was_key = {p.objective_id: p.key for p in self.view(project_id).priorities}
+            given = record
+
+            def record(session, change):
+                return given(session, {**change, "was_key": was_key})
         self._repository.save_keys(project_id, {oid: bool(v) for oid, v in keys.items()}, record=record)
         return self.view(project_id)
 
@@ -210,13 +233,24 @@ class Projects:
                 self._record_failure(on_save, {"run_id": run_id, "run": None, "error": "model_unreachable",
                                                "model": None, "calls": calls})
                 raise ModelUnavailable(str(exc)) from exc
+        catalogue = self._catalogue_for(record)
+        # the model is shown the catalogue its proposals are checked against: the profile's
+        if hasattr(mapper, "for_catalogue"):
+            mapper = mapper.for_catalogue(catalogue)
         mapper = calls.watching(mapper)                               # each model call, timed, for ai.llm_call
         try:
-            run = map_risks(record.ontology.risks, mapper, self._catalogue_for(record))
+            run = map_risks(record.ontology.risks, mapper, catalogue)
         except Exception:
             self._record_failure(on_save, {"run_id": run_id, "run": None, "error": "mapping_error", "model": model,
                                            "calls": calls})
             raise
+        # The run took its model calls' time: saved only over the assessment it read. A newer card
+        # version, another profile or a person's mapping meanwhile is not overwritten.
+        fresh = self._repository.get(project_id)
+        if not self._repository.is_latest(fresh) or _mapping_state(fresh) != _mapping_state(record):
+            self._record_failure(on_save, {"run_id": run_id, "run": None, "error": "assessment_changed",
+                                           "model": model, "calls": calls})
+            raise AssessmentChanged("the assessment changed while the model was mapping it: map again")
         outcome = {"run_id": run_id, "run": run, "error": run.error, "model": model, "calls": calls}
         self._repository.save_mapping_run(
             project_id, run, model=model, selected=self._scope(record, run), run_id=run_id,
@@ -277,6 +311,10 @@ class Projects:
     def view(self, project_id: str) -> ProjectView | None:
         record = self._repository.get(project_id)
         return self._derive(record) if record else None
+
+    def count(self) -> int:
+        """How many assessments this project has, without deriving any."""
+        return self._repository.count()
 
     def list(self) -> list[ProjectView]:
         """The assessments of this project, and no other's (the database is the project)."""

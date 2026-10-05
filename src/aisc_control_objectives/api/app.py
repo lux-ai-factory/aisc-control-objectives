@@ -36,17 +36,16 @@ from fastapi.responses import (
 )
 from sqlalchemy.exc import DBAPIError, IntegrityError
 
-from aisc_control_objectives import ledger
-from aisc_control_objectives.api import ledger_events
-from aisc_control_objectives import projectdb, upstream
+from aisc_control_objectives import ledger, projectdb, upstream
 from aisc_control_objectives.access import REFUSALS, ProjectAccess
+from aisc_control_objectives.api import ledger_events
 from aisc_control_objectives.api.library_routes import register_library
 from aisc_control_objectives.config import RunConfig
 from aisc_control_objectives.control_objectives import ControlObjectiveCatalogue
 from aisc_control_objectives.db.repository import ProjectRepository
 from aisc_control_objectives.models.control_objective import ControlObjective, MacroRequirement
 from aisc_control_objectives.models.ontology import Ontology
-from aisc_control_objectives.projects import ModelUnavailable, Projects
+from aisc_control_objectives.projects import AssessmentChanged, ModelUnavailable, Projects
 from aisc_control_objectives.rendering import (
     DEFAULT_LAUNCHER_URL,
     STATIC,
@@ -246,7 +245,7 @@ def _register_pages(app, objectives, projects_of, view_in, source_name, root_pat
     def project_home_page(project: str, request: Request) -> HTMLResponse:
         return HTMLResponse(
             render_home_page(
-                objectives, len(projects_of(request).list()), root_path=root_path, project=project
+                objectives, projects_of(request).count(), root_path=root_path, project=project
             )
         )
 
@@ -353,6 +352,8 @@ def _register_pages(app, objectives, projects_of, view_in, source_name, root_pat
                 on_save=lambda s, o: ledger_events.mapping_outcome(s, project_id, o))
         except ModelUnavailable as exc:
             return PlainTextResponse(str(exc), status_code=502)
+        except AssessmentChanged as exc:
+            return PlainTextResponse(str(exc), status_code=409)
         return RedirectResponse(
             url=_assessment_url(root_path, project, project_id), status_code=303
         )
@@ -534,6 +535,8 @@ def _register_project_api(app, projects_of, view_in):
                 on_save=lambda s, o: ledger_events.mapping_outcome(s, project_id, o)))
         except ModelUnavailable as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
+        except AssessmentChanged as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     @app.post("/p/{project}/api/projects/{project_id}/risks/{risk_id}/mapping")
     def map_by_hand(
@@ -627,6 +630,7 @@ def _register_project_api(app, projects_of, view_in):
 
     @app.delete("/p/{project}/api/projects/{project_id}", status_code=204)
     def delete_project(project: str, project_id: str, request: Request) -> None:
-        view_in(request, project_id)
+        # an older version's assessment is kept as it was, like every other write to it
+        _latest_or_409(projects_of(request), view_in(request, project_id))
         projects_of(request).delete(project_id, record=lambda s, held: ledger.emit(
             s, "assessment.deleted", item_type="assessment", item_id=project_id, content=held))

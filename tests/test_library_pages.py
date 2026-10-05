@@ -7,7 +7,6 @@ import pytest
 
 from aisc_control_objectives.library import FULL_AI_ACT
 from test_library import fields
-from test_objective_selection import client, graph, mapper  # noqa: F401
 
 
 @pytest.fixture

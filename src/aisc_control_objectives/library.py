@@ -337,15 +337,19 @@ class Library:
             if record is not None:
                 record(session, held)
 
-    def available(self) -> ControlObjectiveCatalogue:
-        """What a profile can pick: the built-in set and every set's latest published version."""
-        with self._sessions() as session:
-            picked = list(self._builtin)
-            for row in session.scalars(select(tables.ObjectiveSet)).all():
-                latest = self._latest_version(session, row.id)
-                if latest is not None:
-                    picked += [self._objective(i.objective_id, i) for i in self._items(session, latest.id)]
-            return ControlObjectiveCatalogue(picked)
+    def available(self, session: Session | None = None) -> ControlObjectiveCatalogue:
+        """What a profile can pick: the built-in set and every set's latest published version. Read in
+        `session` when the caller has one open: a second connection inside its transaction could wait
+        for the pool (two connections a project) behind another save doing the same."""
+        if session is None:
+            with self._sessions() as own:
+                return self.available(own)
+        picked = list(self._builtin)
+        for row in session.scalars(select(tables.ObjectiveSet)).all():
+            latest = self._latest_version(session, row.id)
+            if latest is not None:
+                picked += [self._objective(i.objective_id, i) for i in self._items(session, latest.id)]
+        return ControlObjectiveCatalogue(picked)
 
     def _latest_by_code(self, session: Session) -> dict[str, int]:
         out = {}
@@ -414,7 +418,7 @@ class Library:
 
     def _add_version(self, session: Session, profile_id: str, number: int, picks: list[str], who: str,
                      who_sub: str = "") -> str:
-        available = self.available()
+        available = self.available(session)
         latest = self._latest_by_code(session)
         version = tables.ObjectiveProfileVersion(id=_new_id(), profile_id=profile_id, number=number, created_by=who,
                                                  created_by_sub=who_sub)

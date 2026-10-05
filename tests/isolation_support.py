@@ -97,7 +97,7 @@ class Cluster:
                 " WHERE usename = %s AND datname IS NOT NULL GROUP BY datname",
                 (role,),
             ).fetchall()
-        return {name: count for name, count in rows}
+        return dict(rows)
 
 
 def cluster_or_skip() -> Cluster:

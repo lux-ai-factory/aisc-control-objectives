@@ -1,79 +1,15 @@
 """Which control objectives the project takes forward to step 4.
 
 What goes forward is what the risk and control matrix holds: every objective
-mapped to at least one risk, in catalogue order, whoever mapped it. The fixtures here are shared
-by the other step 2 tests.
+mapped to at least one risk, in catalogue order, whoever mapped it. The step 2 fixtures (mapper,
+client, graph, start) are in conftest.py, their helpers in step2_support.py.
 """
 
 from __future__ import annotations
 
-import json
-
-import pytest
-from fastapi.testclient import TestClient
-
-from aisc_control_objectives.api.app import create_app
-from aisc_control_objectives.config import RunConfig
-from aisc_control_objectives.projects import Projects
-from aisc_control_objectives.risk_mapping import MappedObjective, Mapping
-from test_projects import FakeMapper
-
-
-class SwitchableMapper:
-    """FakeMapper whose answers the test can change between two mappings."""
-
-    def __init__(self):
-        self.by_risk = {rid: list(oids) for rid, oids in FakeMapper.BY_RISK.items()}
-
-    def propose(self, risk, findings=()):
-        return Mapping(
-            risk_id=risk.id,
-            objectives=[
-                MappedObjective(objective_id=oid, quote=risk.text[:30], rationale="because")
-                for oid in self.by_risk.get(risk.id, [])
-            ],
-        )
-
-
-def in_order(ids) -> list[str]:
-    """Catalogue order, as the selection is kept: O9 before O10."""
-    return sorted(ids, key=lambda oid: int(oid[1:]))
-
+from step2_support import FakeMapper, SwitchableMapper, _api, in_order  # noqa: F401
 
 MAPPED = in_order({oid for oids in FakeMapper.BY_RISK.values() for oid in oids})
-
-
-@pytest.fixture()
-def mapper():
-    return SwitchableMapper()
-
-
-@pytest.fixture()
-def client(repository, objectives, mapper):
-    projects = Projects(repository, objectives, mapper, model="fake/model")
-    return TestClient(create_app(objectives, projects, base_config=RunConfig()),
-                      follow_redirects=False), projects
-
-
-@pytest.fixture()
-def graph(fixtures_dir):
-    return json.loads((fixtures_dir / "mcas.ontology.jsonld").read_text())
-
-
-@pytest.fixture()
-def start(client, graph, platform_project, system_version):
-    """An assessment of card version `number`, as its id."""
-    _, projects = client
-
-    def make(number: int = 1) -> str:
-        version = system_version(platform_project, number)
-        return projects.create(platform_project, "MCAS", json.dumps(graph), graph, version).record.id
-
-    return make
-
-
-def _api(platform_project, assessment, suffix=""):
-    return f"/p/{platform_project}/api/projects/{assessment}{suffix}"
 
 
 def _selected(http, platform_project, assessment) -> list[str]:
@@ -150,7 +86,59 @@ def test_each_objective_in_the_matrix_shows_its_dimension(client, start, platfor
 
 def test_every_dimension_has_its_colour():
     from pathlib import Path
+
     import aisc_control_objectives
     base = (Path(aisc_control_objectives.__file__).parent / "templates/_base.html.j2").read_text()
     for n in range(1, 12):
         assert f".co-dim--r{n} " in base, n
+
+
+class _MeanwhileMapper(SwitchableMapper):
+    """Does something to the assessment while the model 'thinks', once, on the first risk."""
+
+    def __init__(self, meanwhile):
+        super().__init__()
+        self.meanwhile, self.done = meanwhile, False
+
+    def propose(self, risk, findings=()):
+        if not self.done:
+            self.done = True
+            self.meanwhile()
+        return super().propose(risk, findings)
+
+
+def test_a_run_saves_nothing_when_a_person_mapped_by_hand_meanwhile(client, start, platform_project):
+    """A run takes minutes; it read the assessment before its model calls and saved over whatever
+    happened meanwhile (code review 2026-10-05). It now checks again before saving, and stops."""
+    http, projects = client
+    a = start()
+    projects._mapper = _MeanwhileMapper(lambda: projects.map_by_hand(a, "risk0", ["O5"]))
+    r = http.post(_api(platform_project, a, "/map"))
+    assert r.status_code == 409 and "changed" in r.text
+    after = http.get(_api(platform_project, a)).json()
+    assert [o["objective_id"] for o in after["mapping_run"]["mappings"]["risk0"]["objectives"]] == ["O5"]
+
+
+def test_a_run_saves_nothing_when_a_newer_card_version_came_meanwhile(client, start, platform_project,
+                                                                      system_version):
+    http, projects = client
+    a = start()
+    projects._mapper = _MeanwhileMapper(lambda: system_version(platform_project, 2))
+    r = http.post(_api(platform_project, a, "/map"))
+    assert r.status_code == 409
+    assert http.get(_api(platform_project, a)).json()["mapping_run"] is None
+
+
+def test_the_home_page_counts_assessments_without_deriving_them(client, start, platform_project, monkeypatch):
+    """The home page shows how many assessments there are; it derived every one (card parse, scores,
+    profile queries) to count them (code review 2026-10-05). A count is one query."""
+    http, projects = client
+    start(1)
+    start(2)
+    assert projects.count() == 2
+
+    def no_list(*_a, **_k):
+        raise AssertionError("the home page derived every assessment")
+
+    monkeypatch.setattr(type(projects), "list", no_list)
+    assert http.get(f"/p/{platform_project}").status_code == 200

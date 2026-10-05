@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from test_objective_selection import _api, client, graph, mapper, start  # noqa: F401
+from step2_support import _api
 
 
 def _page(http, platform_project, assessment) -> str:

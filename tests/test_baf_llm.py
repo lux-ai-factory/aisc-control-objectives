@@ -85,7 +85,7 @@ def test_s3_2_llm_config_is_frozen_with_optional_key_and_base_url(m):
 def test_s3_2_s5_3_llm_config_never_shows_its_key(m):
     key = new_key()
     c = m.LlmConfig("openai", "gpt-4o-mini", api_key=key, base_url=None)
-    for text in (repr(c), str(c), f"{c}", "%r" % (c,)):
+    for text in (repr(c), str(c), f"{c}", "%r" % (c,)):  # noqa: UP031 (the % form is one of those checked)
         assert key not in text
         assert "api_key=<set>" in text
     assert "api_key=None" in repr(m.LlmConfig("ollama", "gemma3"))

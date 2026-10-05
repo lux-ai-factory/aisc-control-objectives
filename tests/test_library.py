@@ -16,9 +16,9 @@ ALICE = "alice"
 
 
 def fields(**over):
-    base = dict(dimension="R2", label="Model change approval", text="Every model change is approved before use.",
-                legal_basis="Internal policy 7", assessment_mode="Control", target="G",
-                standards_grounding="", grounding_tier_flag="", notes="")
+    base = {"dimension": "R2", "label": "Model change approval", "text": "Every model change is approved before use.",
+                "legal_basis": "Internal policy 7", "assessment_mode": "Control", "target": "G",
+                "standards_grounding": "", "grounding_tier_flag": "", "notes": ""}
     base.update(over)
     return base
 
@@ -62,8 +62,8 @@ def test_objectives_are_numbered_in_their_set(library, bnk):
 
 
 @pytest.mark.parametrize("bad, why", [
-    (dict(dimension="R12"), "dimension"), (dict(dimension=""), "dimension"),
-    (dict(label=" "), "label"), (dict(text=""), "text"), (dict(assessment_mode="Maybe"), "mode"),
+    ({"dimension": "R12"}, "dimension"), ({"dimension": ""}, "dimension"),
+    ({"label": " "}, "label"), ({"text": ""}, "text"), ({"assessment_mode": "Maybe"}, "mode"),
 ])
 def test_an_objective_needs_a_dimension_a_label_a_text_and_a_mode(library, bnk, bad, why):
     with pytest.raises(ValueError, match=why):
@@ -158,3 +158,19 @@ def test_a_newer_set_version_is_offered_and_taken_only_on_saving(library, bnk):
     assert [o.id for o in library.catalogue_of(view.current.id)] == ["O1", "BNK1"]
     assert library.catalogue_of(view.current.id).by_id("BNK1").sub_requirement_label == "Model change sign-off"
     assert [o.id for o in library.catalogue_of(first.id)] == ["O1", "BNK1", "BNK2"]
+
+
+def test_a_profile_is_saved_on_one_connection(repository, objectives):
+    """Saving a profile version read what may be picked on a second connection while its transaction
+    held the first (code review 2026-10-05). A project engine has two, so two saves at once waited
+    on each other for pool_timeout and failed. On a pool of one, a save must still go through."""
+    from sqlalchemy import create_engine
+
+    one = create_engine(repository.engine.url, pool_size=1, max_overflow=0, pool_timeout=2)
+    try:
+        library = Library(one, objectives)
+        made = library.create_profile("One connection", "", ["O1"], who=ALICE)
+        version, _ = library.save_profile(made.id, ["O1", "O7"], who=ALICE)
+        assert version.number == 2
+    finally:
+        one.dispose()
