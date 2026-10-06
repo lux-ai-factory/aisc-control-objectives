@@ -120,7 +120,8 @@ class _RiskView:
 
     @property
     def band(self) -> str:
-        return band(self.rating)
+        """Low ... Critical; "Not rated" until both parts are."""
+        return band(self.rating) if self.rating else "Not rated"
 
     @property
     def rated(self) -> bool:

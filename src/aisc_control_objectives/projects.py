@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from aisc_control_objectives.baf_llm import ResolveError
 from aisc_control_objectives.control_objectives import ControlObjectiveCatalogue
 from aisc_control_objectives.db.repository import ProjectRecord, ProjectRepository
-from aisc_control_objectives.library import Library
+from aisc_control_objectives.library import DEFAULT_PROFILE, Library
 from aisc_control_objectives.models.ontology import Ontology
 from aisc_control_objectives.prioritising import Priority, Severity, prioritise
 from aisc_control_objectives.risk_mapping import (
@@ -99,6 +99,7 @@ class Projects:
         mapper: Mapper,
         model: str = "",
         mapper_for: MapperFor | None = None,
+        default_profile: str = DEFAULT_PROFILE,
     ):
         """`mapper` and `model` are the service's own (its environment). With
         `mapper_for`, each map asks it for the mapper of the assessment's project
@@ -107,6 +108,8 @@ class Projects:
         `repository` is None in the service as deployed: each request works on
         the repository of the one project database it was let into, `bound()`."""
         self._repository = repository
+        #: The profile a project's first assessment starts on.
+        self._default_profile = default_profile
         self._catalogue = catalogue
         self._mapper = mapper
         self._model = model
@@ -133,6 +136,7 @@ class Projects:
         record = self._repository.create(
             project=project, name=name or ontology.system_name,
             ontology=ontology, jsonld=jsonld, system_id=system_id, record=record,
+            default_profile_version_id=self.library.pinned_version(self._default_profile),
         )
         # A new card version's assessment starts on the profile the previous one ran on: the
         # repository sets it in the same transaction.

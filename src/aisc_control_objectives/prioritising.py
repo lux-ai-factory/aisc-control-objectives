@@ -32,9 +32,9 @@ from aisc_control_objectives.models.control_objective import ControlObjective
 from aisc_control_objectives.models.ontology import OntologyRisk
 from aisc_control_objectives.risk_mapping import Mapping
 
-#: What an unrated impact or likelihood counts: the middle of the scale, so the matrix orders
-#: before anybody has rated anything (an unrated risk is 3 x 3 = 9, Medium).
-DEFAULT_PART = 3
+#: What a risk counts before both its impact and its likelihood are rated: nothing. Ratings start
+#: empty (workshop feedback 2026-10-06): a guessed Medium would read as the assessor's.
+UNRATED = 0
 
 #: The longest comment a rating may carry.
 MAX_COMMENT = 1000
@@ -84,8 +84,10 @@ class Severity(BaseModel):
         return comments
 
     def of(self, risk_id: str) -> int:
-        """The rating, 1 to 25; an unrated part counts DEFAULT_PART."""
-        return self.impact.get(risk_id, DEFAULT_PART) * self.likelihood.get(risk_id, DEFAULT_PART)
+        """The rating, 1 to 25, once both parts are rated; UNRATED before."""
+        if risk_id not in self.impact or risk_id not in self.likelihood:
+            return UNRATED
+        return self.impact[risk_id] * self.likelihood[risk_id]
 
     def rated(self, risk_id: str) -> bool:
         return risk_id in self.impact or risk_id in self.likelihood
@@ -114,7 +116,7 @@ class Priority(BaseModel):
 
 
 def _rated_list(ratings: list[int]) -> str:
-    words = [f"{r} ({band(r)})" for r in ratings]
+    words = [f"{r} ({band(r)})" if r else "not rated" for r in ratings]
     return words[0] if len(words) == 1 else ", ".join(words[:-1]) + " and " + words[-1]
 
 
@@ -123,7 +125,8 @@ def _score(objective: ControlObjective, driving: list[tuple[int, OntologyRisk]],
     if driving:
         ratings = [rating for rating, _ in driving]
         n = len(driving)
-        reasons = [f"mitigates {n} risk{'s' if n != 1 else ''} rated {_rated_list(ratings)}: score {sum(ratings)}"
+        rated_as = _rated_list(ratings) if any(ratings) else "not rated yet"
+        reasons = [f"mitigates {n} risk{'s' if n != 1 else ''} rated {rated_as}: score {sum(ratings)}"
                    f" (highest: {driving[0][1].text[:90]})"]
         score = float(sum(ratings))
     else:

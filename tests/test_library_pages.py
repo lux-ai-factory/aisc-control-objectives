@@ -142,6 +142,6 @@ def test_the_full_ai_act_profile_reads_but_does_not_change(http, platform_projec
 
 def test_the_fairness_and_human_oversight_profile_reads_but_does_not_change(http, platform_project):
     page = http.get(f"/p/{platform_project}/profiles/{FAIRNESS_OVERSIGHT}").text
-    assert "Fairness and human oversight" in page and 'type="submit"' not in page
+    assert "Annex IV reduced" in page and 'type="submit"' not in page
     assert "O21" in page and "O50" not in page
-    assert "Fairness and human oversight" in http.get(f"/p/{platform_project}/profiles").text
+    assert "Annex IV reduced" in http.get(f"/p/{platform_project}/profiles").text

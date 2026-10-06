@@ -59,10 +59,11 @@ def test_the_register_lists_risks_by_rating_with_their_band(client, start, platf
     page = page_of(http, platform_project, a)
     register = re.search(r'<table class="co-register">(.*?)</table>', page, re.S).group(1)
     rows = re.findall(r'<tr id="risk-(\w+)"', register)
-    assert rows[:2] == ["risk2", "risk4"] and rows[-1] == "risk0"
+    assert rows[:3] == ["risk2", "risk4", "risk0"]      # the unrated ones after every rated one
     assert re.search(r'<span class="co-rating co-rating--critical">20</span>', register)
     assert re.search(r'<span class="co-rating co-rating--high">12</span>', register)
-    assert re.search(r'<span class="co-rating co-rating--medium">9</span>', register)      # unrated: 3 x 3
+    assert re.search(r'<span class="co-rating co-rating--not-rated">–</span>\s*<span class="co-band">Not rated</span>',
+                     register)
     assert 'name="impact:risk2"' in register and 'name="likelihood:risk2"' in register
     assert 'name="comment:risk2"' in register
     # the AIRO chain folds away in its row
@@ -92,7 +93,7 @@ def test_one_row_per_risk_by_rating(client, start, platform_project):
     rate_form(http, platform_project, a, risk2=(5, 4), risk4=(4, 3), risk0=(1, 1))
     http.post(_api(platform_project, a, "/map"))
     rows = rows_of(matrix_of(page_of(http, platform_project, a)))
-    assert len(rows) == 5 and rows[:2] == ["risk2", "risk4"] and rows[-1] == "risk0"
+    assert len(rows) == 5 and rows[:3] == ["risk2", "risk4", "risk0"]
 
 
 def test_a_risks_objectives_are_chips_in_rank_order(client, start, platform_project):
@@ -239,7 +240,9 @@ def test_what_is_in_the_matrix_is_in_scope_in_catalogue_order(client, start, pla
 
 # The register's dropdowns, and who mapped a row
 
-def test_an_unrated_part_shows_three_preselected(client, start, platform_project):
+def test_an_unrated_part_starts_empty_and_a_rated_one_shows_its_value(client, start, platform_project):
+    """Ratings start empty (workshop feedback 2026-10-06): no 3 preselected; posting the form with an
+    empty part leaves that part unrated."""
     http, _ = client
     a = start()
     rate_form(http, platform_project, a, risk2=(5, 4))
@@ -247,10 +250,10 @@ def test_an_unrated_part_shows_three_preselected(client, start, platform_project
     row = re.search(r'<tr id="risk-risk0">(.*?)</tr>', page, re.S).group(1)
     for part in ("impact", "likelihood"):
         select = re.search(rf'<select class="co-select" name="{part}:risk0"[^>]*>(.*?)</select>', row, re.S).group(1)
-        assert re.search(r'<option value="3" selected>3</option>', select), part
-        assert 'value=""' not in select
+        assert '<option value="" selected>' in select, part
+        assert re.search(r'<option value="\d" selected>', select) is None, part
     rated = re.search(r'<tr id="risk-risk2">(.*?)</tr>', page, re.S).group(1)
-    assert re.search(r'<option value="4" selected>4</option>', rated)
+    assert re.search(r'<option value="4" selected>4</option>', rated) and 'value=""' not in rated
 
 
 def test_the_register_counts_risks_with_both_parts_saved(client, start, platform_project):

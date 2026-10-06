@@ -110,3 +110,13 @@ def test_the_ai_button_has_a_question_mark_pop_up_and_no_sentence(client, start,
     assert re.search(r'<button type="button" class="co-help" popovertarget="ai-help"[^>]*>\?</button>', page)
     popup = re.search(r'<div id="ai-help" class="co-help-pop" popover>(.*?)</div>', page, re.S).group(1)
     assert "replaces the whole matrix" in popup and "quote" in popup
+
+
+def test_the_register_starts_with_every_rating_empty(client, start, platform_project):
+    http, _ = client
+    assessment = start()
+    page = http.get(f"/p/{platform_project}/projects/{assessment}").text
+    register = page.split('id="register"', 1)[1].split('id="matrix"', 1)[0]
+    assert '<option value="" selected>' in register
+    assert re.search(r'<option value="\d" selected>', register) is None
+    assert "Not rated" in register and "counts 3" not in register

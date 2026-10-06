@@ -38,7 +38,7 @@ def test_a_person_maps_a_risk_with_no_ai_run(client, start, platform_project):
     # what is in the matrix goes forward, in catalogue order
     assert body["selected"] == ["O5", "O10"]
     by_id = {p["objective_id"]: p for p in body["priorities"]}
-    assert by_id["O5"]["score"] == 9 and by_id["O5"]["risk_ids"] == ["risk0"]      # unrated: 3 x 3
+    assert by_id["O5"]["score"] == 0 and by_id["O5"]["risk_ids"] == ["risk0"]      # unrated: counts nothing
 
 
 def test_editing_after_the_ai_keeps_its_rows_and_adds_the_persons(client, start, platform_project):

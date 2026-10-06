@@ -39,11 +39,39 @@ def _use(http, pid, assessment, profile_id):
     return http.post(_api(pid, assessment, "/profile"), json={"profile_id": profile_id})
 
 
-def test_an_assessment_starts_on_full_ai_act(client, start, platform_project):
+@pytest.fixture
+def served(repository, objectives, mapper, graph, platform_project, system_version):
+    """Projects with the service's own default profile, as server.py builds it, and a way to start."""
+    import json
+
+    from aisc_control_objectives.projects import Projects
+
+    projects = Projects(repository, objectives, mapper, model="fake/model")
+
+    def start(number: int = 1) -> str:
+        version = system_version(platform_project, number)
+        return projects.create(platform_project, "MCAS", json.dumps(graph), graph, version).record.id
+
+    return projects, start
+
+
+def test_an_assessment_starts_on_the_reduced_profile(served):
+    """A first assessment works with the ten objectives of Annex IV reduced; Full AI Act is one
+    Change profile away, and a later card version keeps the profile its previous one ran on."""
+    projects, start = served
+    first = projects.view(start())
+    assert first.profile == {"id": FAIRNESS_OVERSIGHT, "version": None, "label": "Annex IV reduced",
+                             "update": None}
+    assert len(first.priorities) == 10
+    switched = projects.use_profile(first.record.id, FULL_AI_ACT)
+    assert len(switched.priorities) == 50
+    assert len(projects.view(start(2)).priorities) == 50
+
+
+def test_the_suite_starts_on_full_ai_act(client, start, platform_project):
     http, _ = client
     body = _body(http, platform_project, start())
-    assert body["profile"] == {"id": FULL_AI_ACT, "version": None, "label": "Full AI Act", "update": None}
-    assert len(body["priorities"]) == 50
+    assert body["profile"]["id"] == FULL_AI_ACT and len(body["priorities"]) == 50
 
 
 def test_on_a_profile_only_its_objectives_are_scored(client, start, platform_project, bank):
@@ -92,7 +120,7 @@ def test_the_short_built_in_profile_leaves_ten_objectives_in_step_two(client, st
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["profile"] == {"id": FAIRNESS_OVERSIGHT, "version": None,
-                               "label": "Fairness and human oversight", "update": None}
+                               "label": "Annex IV reduced", "update": None}
     assert sorted(p["objective_id"] for p in body["priorities"]) == sorted(
         ["O1", "O2", "O3", "O4", "O11", "O17", "O19", "O21", "O22", "O23"])
     page = http.get(f"/p/{platform_project}/projects/{assessment}").text

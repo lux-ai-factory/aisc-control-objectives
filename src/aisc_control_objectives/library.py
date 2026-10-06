@@ -10,9 +10,10 @@ Two levels, like the qualification app's question sets and questionnaires:
   offered, and taken only when the profile is saved again. An assessment pins one profile version.
 
 The built-in set (O1 ... O50) and the Full AI Act profile are the packaged CSV: the same for every
-project, read-only, and not stored. A second built-in profile, Fairness and human oversight, is a
-short list for workshops; it is read-only too, and stored in the project's database the first time
-an assessment takes it, because an assessment pins a stored profile version.
+project, read-only, and not stored. A second built-in profile, Annex IV reduced, is a short list of
+ten and the one a first assessment starts on (workshop feedback 2026-10-06); it is read-only too, and
+stored in the project's database the first time an assessment takes it, because an assessment pins a
+stored profile version.
 """
 
 from __future__ import annotations
@@ -36,10 +37,12 @@ FULL_AI_ACT_NAME = "Full AI Act"
 #: The built-in short profile: the human oversight (Art. 14) and fairness objectives, and the three
 #: they lean on: dataset quality (O11), instructions for use (O17), explainability (O19).
 FAIRNESS_OVERSIGHT = "fairness-oversight"
-FAIRNESS_OVERSIGHT_NAME = "Fairness and human oversight"
+FAIRNESS_OVERSIGHT_NAME = "Annex IV reduced"
 FAIRNESS_OVERSIGHT_PICKS = ("O1", "O2", "O3", "O4", "O11", "O17", "O19", "O21", "O22", "O23")
 #: Who a stored built-in profile reads as made by.
 BUILT_IN = "built-in"
+#: The profile a project's first assessment starts on; a later card version's keeps its previous one's.
+DEFAULT_PROFILE = FAIRNESS_OVERSIGHT
 
 CODE = re.compile(r"^[A-Z]{2,6}$")
 MODES = ("Control", "Test", "Control + Test")
@@ -389,7 +392,7 @@ class Library:
 
     def _short_profile(self) -> ProfileSummary:
         return ProfileSummary(id=FAIRNESS_OVERSIGHT, name=FAIRNESS_OVERSIGHT_NAME,
-                              description="Human oversight and fairness objectives, for a short assessment.",
+                              description="Ten objectives for a short assessment: human oversight, fairness, and the data quality, instructions and explanations they rely on.",
                               read_only=True, objectives=len(FAIRNESS_OVERSIGHT_PICKS), number=None)
 
     def _updates(self, items, latest: dict[str, int]) -> dict[str, tuple[int, int]]:

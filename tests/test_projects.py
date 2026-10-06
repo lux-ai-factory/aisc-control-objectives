@@ -23,7 +23,9 @@ from step2_support import FakeMapper  # noqa: F401  (imported from here by older
 
 @pytest.fixture()
 def projects(repository, objectives):
-    return Projects(repository, objectives, FakeMapper(), model="fake/model")
+    from aisc_control_objectives.library import FULL_AI_ACT
+
+    return Projects(repository, objectives, FakeMapper(), model="fake/model", default_profile=FULL_AI_ACT)
 
 
 @pytest.fixture()
@@ -125,13 +127,16 @@ class TestMappingAndKeys:
         assert mapped["mapping_run"]["model"] == "fake/model"
 
     def test_rating_the_risks_moves_the_key_objectives(self, platform_project, client, mapped):
+        def both(**parts):      # a risk counts once impact and likelihood are both rated
+            return {risk: {"impact": n, "likelihood": n} for risk, n in parts.items()}
+
         oversight = client.post(
-            f"/p/{platform_project}/api/projects/{mapped['id']}/severity",
-            json={"risk2": 5, "risk1": 5, "risk4": 1, "risk0": 1, "risk3": 1},
+            f"/p/{platform_project}/api/projects/{mapped['id']}/ratings",
+            json=both(risk2=5, risk1=5, risk4=1, risk0=1, risk3=1),
         ).json()
         poisoning = client.post(
-            f"/p/{platform_project}/api/projects/{mapped['id']}/severity",
-            json={"risk2": 1, "risk1": 1, "risk4": 5, "risk3": 5, "risk0": 1},
+            f"/p/{platform_project}/api/projects/{mapped['id']}/ratings",
+            json=both(risk2=1, risk1=1, risk4=5, risk3=5, risk0=1),
         ).json()
         first = {p["objective_id"] for p in oversight["priorities"] if p["key"]}
         second = {p["objective_id"] for p in poisoning["priorities"] if p["key"]}

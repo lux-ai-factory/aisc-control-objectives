@@ -57,7 +57,7 @@
       <span class="n">{{ view.fully_rated }} of {{ record.ontology.risks | length }} rated</span>
     </summary>
     <p class="qf-help">Rate each risk's impact and likelihood, 1 to 5. The rating is their product:
-       Low 1-4, Medium 5-9, High 10-16, Critical 17-25. An unrated part counts 3.</p>
+       Low 1-4, Medium 5-9, High 10-16, Critical 17-25. A risk counts in the scores once both are rated.</p>
     {%- if not read_only %}<form id="ratings" method="post" action="{{ project_base }}/projects/{{ record.id }}/severity">{% endif %}
     <table class="co-register">
       <thead><tr><th>Risk</th><th>Impact</th><th>Likelihood</th><th>Rating</th><th>Rationale <span>(optional)</span></th></tr></thead>
@@ -69,15 +69,15 @@
         <td>
           {%- if read_only %}{{ value or "not rated" }}
           {%- else %}
-          {#- an unrated part shows 3, what it counts as; saving the ratings stores it -#}
-          {%- set shown = 3 if value is none else value %}
+          {#- an unrated part starts empty; saving leaves an empty one unrated -#}
           <select class="co-select" name="{{ part }}:{{ risk.risk.id }}" aria-label="{{ part | capitalize }} of {{ risk.risk.short_label or risk.risk.id }}">
-            {%- for n in [5, 4, 3, 2, 1] %}<option value="{{ n }}"{% if shown == n %} selected{% endif %}>{{ n }}</option>{% endfor %}
+            {%- if value is none %}<option value="" selected>–</option>{% endif %}
+            {%- for n in [5, 4, 3, 2, 1] %}<option value="{{ n }}"{% if value == n %} selected{% endif %}>{{ n }}</option>{% endfor %}
           </select>
           {%- endif %}
         </td>
         {%- endfor %}
-        <td><span class="co-rating co-rating--{{ risk.band | lower }}">{{ risk.rating }}</span>
+        <td><span class="co-rating co-rating--{{ risk.band | lower | replace(' ', '-') }}">{{ risk.rating or "–" }}</span>
           <span class="co-band">{{ risk.band }}</span></td>
         <td>
           {%- if read_only %}{% if risk.comment %}<p class="co-sev-comment">{{ risk.comment }}</p>{% endif %}
@@ -156,7 +156,7 @@
       <tr class="co-mrow" data-risk="{{ risk.risk.id }}">
         <td class="co-m-risk">{{ risk.risk.text }}
           {%- for finding in risk.findings %}<p class="co-note co-note--flag"><b>{{ finding.flag }}:</b> {{ finding.detail }}</p>{% endfor %}</td>
-        <td><span class="co-rating co-rating--{{ risk.band | lower }}">{{ risk.rating }}</span></td>
+        <td><span class="co-rating co-rating--{{ risk.band | lower | replace(' ', '-') }}">{{ risk.rating or "–" }}</span></td>
         <td class="co-chips">
           {%- for chip in chips[risk.risk.id] %}
           {%- set o = chip.objective %}

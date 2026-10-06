@@ -130,7 +130,7 @@ def test_the_fairness_and_human_oversight_profile_is_built_in_and_read_only(libr
     three they lean on: dataset quality, instructions for use, explainability."""
     listed = library.profiles()
     assert [(p.id, p.read_only) for p in listed[:2]] == [(FULL_AI_ACT, True), (FAIRNESS_OVERSIGHT, True)]
-    assert listed[1].name == "Fairness and human oversight" and listed[1].objectives == 10
+    assert listed[1].name == "Annex IV reduced" and listed[1].objectives == 10
     assert library.get_profile(FAIRNESS_OVERSIGHT).picks == WORKSHOP_TEN
     with pytest.raises(ValueError, match="built-in"):
         library.save_profile(FAIRNESS_OVERSIGHT, ["O1"], who=ALICE)
@@ -144,9 +144,9 @@ def test_the_built_in_short_profile_is_stored_once_when_first_used(library):
     first = library.pinned_version(FAIRNESS_OVERSIGHT)
     assert library.pinned_version(FAIRNESS_OVERSIGHT) == first
     assert [o.id for o in library.catalogue_of(first)] == WORKSHOP_TEN
-    assert library.profile_version_label(first) == "Fairness and human oversight"
+    assert library.profile_version_label(first) == "Annex IV reduced"
     assert library.version_info(first) == {"id": FAIRNESS_OVERSIGHT, "version": None,
-                                           "label": "Fairness and human oversight", "update": None}
+                                           "label": "Annex IV reduced", "update": None}
     listed = library.profiles()
     assert [p.id for p in listed].count(FAIRNESS_OVERSIGHT) == 1 and listed[1].read_only
 

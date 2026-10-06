@@ -231,9 +231,12 @@ def client(repository, objectives, mapper):
 
     from aisc_control_objectives.api.app import create_app
     from aisc_control_objectives.config import RunConfig
+    from aisc_control_objectives.library import FULL_AI_ACT
     from aisc_control_objectives.projects import Projects
 
-    projects = Projects(repository, objectives, mapper, model="fake/model")
+    # the mapping and matrix tests work on all fifty objectives; the service's own default (Annex IV
+    # reduced) is tested by test_assessment_profile's `served` fixture, built as the server builds it
+    projects = Projects(repository, objectives, mapper, model="fake/model", default_profile=FULL_AI_ACT)
     return TestClient(create_app(objectives, projects, base_config=RunConfig()),
                       follow_redirects=False), projects
 

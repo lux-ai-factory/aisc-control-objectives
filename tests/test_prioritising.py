@@ -1,7 +1,7 @@
 """Which control objectives matter most: the scores behind the risk and control matrix.
 
 Each risk is rated impact (1-5) x likelihood (1-5), 1 to 25, in the 5x5 bands risk teams know: Low
-1-4, Medium 5-9, High 10-16, Critical 17-25. An unrated impact or likelihood counts 3. An objective
+1-4, Medium 5-9, High 10-16, Critical 17-25. A risk is unrated until both are set, and counts 0. An objective
 scores the sum of the ratings of the risks mapped to it; it is ranked by score, then its highest
 single rating, then a binding duty first, then catalogue order. The **key** objectives are, by
 default, the first seven driven by at least one High or Critical risk; the assessor can turn key on
@@ -39,9 +39,17 @@ def test_a_rating_is_impact_times_likelihood():
     assert rated(r1=(5, 4)).of("r1") == 20
 
 
-def test_an_unrated_impact_or_likelihood_counts_three():
-    assert Severity().of("r1") == 9
-    assert rated(r1=(5, None)).of("r1") == 15
+def test_a_risk_has_no_rating_until_both_parts_are_rated():
+    """Ratings start empty: an unrated risk is 0, not a guessed Medium, and adds nothing to a score."""
+    assert Severity().of("r1") == 0
+    assert rated(r1=(5, None)).of("r1") == 0
+    assert rated(r1=(None, 4)).of("r1") == 0
+
+
+def test_an_objective_driven_only_by_unrated_risks_scores_nothing_but_stays_mapped(objectives):
+    got = by_id(objectives, rated(r2=(5, 4)), {"r1": maps("r1", "O1"), "r2": maps("r2", "O2")})
+    assert got["O1"].score == 0 and got["O1"].risk_ids == ["r1"] and "not rated" in got["O1"].reasons[0]
+    assert got["O2"].score == 20
 
 
 @pytest.mark.parametrize("field", ["impact", "likelihood"])

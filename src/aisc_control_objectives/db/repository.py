@@ -158,7 +158,7 @@ class ProjectRepository:
 
     def create(
         self, project: str | None, name: str, ontology: Ontology, jsonld: str, *, system_id: str,
-        record=None,
+        record=None, default_profile_version_id: str | None = None,
     ) -> ProjectRecord:
         """`system_id` is the AI card version (a row of this database's
         project.system) the assessment is of: one assessment per version, which
@@ -177,6 +177,8 @@ class ProjectRepository:
             previous = session.execute(_PREVIOUS_ASSESSMENT, {"sid": system_id}).scalar()
             if previous is not None:
                 row.profile_version_id = session.get(tables.Project, previous).profile_version_id
+            else:
+                row.profile_version_id = default_profile_version_id
             session.add(row)
             self._attach_card(session, row, ontology, jsonld)
             session.flush()
