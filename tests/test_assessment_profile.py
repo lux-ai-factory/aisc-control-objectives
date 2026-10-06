@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from aisc_control_objectives.library import FULL_AI_ACT, Library
+from aisc_control_objectives.library import FAIRNESS_OVERSIGHT, FULL_AI_ACT, Library
 from step2_support import _api
 from test_library import fields
 
@@ -83,6 +83,20 @@ def test_switching_drops_what_is_outside_the_new_profile(client, start, platform
     back = _use(http, platform_project, assessment, FULL_AI_ACT).json()
     assert back["profile"]["id"] == FULL_AI_ACT and back["dropped"] == []
     assert len(back["priorities"]) == 50
+
+
+def test_the_short_built_in_profile_leaves_ten_objectives_in_step_two(client, start, platform_project):
+    http, _ = client
+    assessment = start()
+    r = _use(http, platform_project, assessment, FAIRNESS_OVERSIGHT)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["profile"] == {"id": FAIRNESS_OVERSIGHT, "version": None,
+                               "label": "Fairness and human oversight", "update": None}
+    assert sorted(p["objective_id"] for p in body["priorities"]) == sorted(
+        ["O1", "O2", "O3", "O4", "O11", "O17", "O19", "O21", "O22", "O23"])
+    page = http.get(f"/p/{platform_project}/projects/{assessment}").text
+    assert f'<option value="{FAIRNESS_OVERSIGHT}"' in page
 
 
 def test_a_new_card_version_starts_on_the_previous_profile(client, start, platform_project, bank):

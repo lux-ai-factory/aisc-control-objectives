@@ -5,7 +5,7 @@ import re
 
 import pytest
 
-from aisc_control_objectives.library import FULL_AI_ACT
+from aisc_control_objectives.library import FAIRNESS_OVERSIGHT, FULL_AI_ACT
 from test_library import fields
 
 
@@ -138,3 +138,10 @@ def test_a_profile_is_picked_on_its_pages(http, platform_project):
 def test_the_full_ai_act_profile_reads_but_does_not_change(http, platform_project):
     page = http.get(f"/p/{platform_project}/profiles/{FULL_AI_ACT}").text
     assert "Full AI Act" in page and "O50" in page and 'type="submit"' not in page
+
+
+def test_the_fairness_and_human_oversight_profile_reads_but_does_not_change(http, platform_project):
+    page = http.get(f"/p/{platform_project}/profiles/{FAIRNESS_OVERSIGHT}").text
+    assert "Fairness and human oversight" in page and 'type="submit"' not in page
+    assert "O21" in page and "O50" not in page
+    assert "Fairness and human oversight" in http.get(f"/p/{platform_project}/profiles").text

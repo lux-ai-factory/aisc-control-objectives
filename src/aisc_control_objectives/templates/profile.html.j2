@@ -7,7 +7,7 @@
   {%- set read_only = view and view.profile.read_only %}
   <div class="co-header">
     <h1>{{ view.profile.name if view else "New profile" }}</h1>
-    <p>{% if read_only %}Built-in, read-only: every objective of the built-in AI Act set. Make a profile of your own to choose.
+    <p>{% if read_only %}Built-in, read-only. {{ view.profile.description }} Make a profile of your own to choose.
        {%- elif view %}Version {{ view.current.number }} · {{ view.picks | length }} objectives{% if view.profile.description %} · {{ view.profile.description }}{% endif %}
        {%- else %}Pick the objectives an assessment should work with.{% endif %}</p>
   </div>
@@ -25,7 +25,7 @@
   <details class="qf-section co-fold" open>
     <summary class="co-macro-head"><h2>Objectives</h2><span class="n">{{ view.picks | length }}</span></summary>
     <ul class="co-versions">
-      {%- for o in builtin %}<li><b>{{ o.id }}</b> {{ o.sub_requirement_label }}</li>{% endfor %}
+      {%- for o in builtin if o.id in view.picks %}<li><b>{{ o.id }}</b> {{ o.sub_requirement_label }}</li>{% endfor %}
     </ul>
   </details>
   {%- else %}

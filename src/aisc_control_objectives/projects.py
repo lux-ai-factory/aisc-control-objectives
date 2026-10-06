@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from aisc_control_objectives.baf_llm import ResolveError
 from aisc_control_objectives.control_objectives import ControlObjectiveCatalogue
 from aisc_control_objectives.db.repository import ProjectRecord, ProjectRepository
-from aisc_control_objectives.library import FULL_AI_ACT, Library
+from aisc_control_objectives.library import Library
 from aisc_control_objectives.models.ontology import Ontology
 from aisc_control_objectives.prioritising import Priority, Severity, prioritise
 from aisc_control_objectives.risk_mapping import (
@@ -154,13 +154,10 @@ class Projects:
         """Run the assessment on a profile's current version (switching, or taking a newer
         version). Mappings and selected objectives outside it are dropped; the view says which."""
         library = self.library
-        if profile_id == FULL_AI_ACT:
-            version_id = None
-        else:
-            try:
-                version_id = library.get_profile(profile_id).current.id
-            except LookupError as exc:
-                raise ValueError(f"no profile {profile_id}") from exc
+        try:
+            version_id = library.pinned_version(profile_id)
+        except LookupError as exc:
+            raise ValueError(f"no profile {profile_id}") from exc
         keep = {o.id for o in library.catalogue_of(version_id)}
         dropped = self._repository.set_profile(project_id, version_id, keep, record=record)
         view = self.view(project_id)

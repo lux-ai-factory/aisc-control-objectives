@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from aisc_control_objectives.library import FULL_AI_ACT, Library
+from aisc_control_objectives.library import FAIRNESS_OVERSIGHT, FULL_AI_ACT, Library
 
 ALICE = "alice"
 
@@ -120,6 +120,35 @@ def test_the_full_ai_act_profile_is_built_in(library):
     profiles = library.profiles()
     assert profiles[0].id == FULL_AI_ACT and profiles[0].read_only and profiles[0].objectives == 50
     assert [o.id for o in library.catalogue_of(None)] == [f"O{n}" for n in range(1, 51)]
+
+
+WORKSHOP_TEN = ["O1", "O2", "O3", "O4", "O11", "O17", "O19", "O21", "O22", "O23"]
+
+
+def test_the_fairness_and_human_oversight_profile_is_built_in_and_read_only(library):
+    """A short list for a workshop: the human oversight (Art. 14) and fairness objectives, and the
+    three they lean on: dataset quality, instructions for use, explainability."""
+    listed = library.profiles()
+    assert [(p.id, p.read_only) for p in listed[:2]] == [(FULL_AI_ACT, True), (FAIRNESS_OVERSIGHT, True)]
+    assert listed[1].name == "Fairness and human oversight" and listed[1].objectives == 10
+    assert library.get_profile(FAIRNESS_OVERSIGHT).picks == WORKSHOP_TEN
+    with pytest.raises(ValueError, match="built-in"):
+        library.save_profile(FAIRNESS_OVERSIGHT, ["O1"], who=ALICE)
+
+
+def test_the_built_in_short_profile_is_stored_once_when_first_used(library):
+    """An assessment pins a stored profile version, so the first use writes it to the project's
+    database; later uses take the same version. Listing it writes nothing."""
+    library.profiles()
+    assert library.get_profile(FAIRNESS_OVERSIGHT).current.id is None
+    first = library.pinned_version(FAIRNESS_OVERSIGHT)
+    assert library.pinned_version(FAIRNESS_OVERSIGHT) == first
+    assert [o.id for o in library.catalogue_of(first)] == WORKSHOP_TEN
+    assert library.profile_version_label(first) == "Fairness and human oversight"
+    assert library.version_info(first) == {"id": FAIRNESS_OVERSIGHT, "version": None,
+                                           "label": "Fairness and human oversight", "update": None}
+    listed = library.profiles()
+    assert [p.id for p in listed].count(FAIRNESS_OVERSIGHT) == 1 and listed[1].read_only
 
 
 def test_a_profile_picks_from_the_built_in_set_and_published_sets(library, bnk):

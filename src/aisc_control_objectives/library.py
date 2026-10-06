@@ -10,7 +10,9 @@ Two levels, like the qualification app's question sets and questionnaires:
   offered, and taken only when the profile is saved again. An assessment pins one profile version.
 
 The built-in set (O1 ... O50) and the Full AI Act profile are the packaged CSV: the same for every
-project, read-only, and not stored.
+project, read-only, and not stored. A second built-in profile, Fairness and human oversight, is a
+short list for workshops; it is read-only too, and stored in the project's database the first time
+an assessment takes it, because an assessment pins a stored profile version.
 """
 
 from __future__ import annotations
@@ -21,6 +23,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from aisc_control_objectives.control_objectives import ControlObjectiveCatalogue
@@ -30,6 +33,13 @@ from aisc_control_objectives.models.control_objective import BUILTIN_CODE, Contr
 #: The built-in profile: every objective of the built-in set.
 FULL_AI_ACT = "full-ai-act"
 FULL_AI_ACT_NAME = "Full AI Act"
+#: The built-in short profile: the human oversight (Art. 14) and fairness objectives, and the three
+#: they lean on: dataset quality (O11), instructions for use (O17), explainability (O19).
+FAIRNESS_OVERSIGHT = "fairness-oversight"
+FAIRNESS_OVERSIGHT_NAME = "Fairness and human oversight"
+FAIRNESS_OVERSIGHT_PICKS = ("O1", "O2", "O3", "O4", "O11", "O17", "O19", "O21", "O22", "O23")
+#: Who a stored built-in profile reads as made by.
+BUILT_IN = "built-in"
 
 CODE = re.compile(r"^[A-Z]{2,6}$")
 MODES = ("Control", "Test", "Control + Test")
@@ -377,17 +387,24 @@ class Library:
                               description="Every objective of the built-in AI Act set.",
                               read_only=True, objectives=len(self._builtin), number=None)
 
+    def _short_profile(self) -> ProfileSummary:
+        return ProfileSummary(id=FAIRNESS_OVERSIGHT, name=FAIRNESS_OVERSIGHT_NAME,
+                              description="Human oversight and fairness objectives, for a short assessment.",
+                              read_only=True, objectives=len(FAIRNESS_OVERSIGHT_PICKS), number=None)
+
     def _updates(self, items, latest: dict[str, int]) -> dict[str, tuple[int, int]]:
         pins = {i.set_code: i.set_version_number for i in items if i.set_code != BUILTIN_CODE}
         return {code: (pinned, latest[code]) for code, pinned in pins.items()
                 if code in latest and latest[code] > pinned}
 
     def profiles(self) -> list[ProfileSummary]:
-        """The built-in Full AI Act profile, then the project's by name."""
+        """The built-in profiles, Full AI Act first, then the project's by name."""
         with self._sessions() as session:
             latest = self._latest_by_code(session)
-            out = [self._builtin_profile()]
-            for row in session.scalars(select(tables.ObjectiveProfile).order_by(tables.ObjectiveProfile.name)).all():
+            out = [self._builtin_profile(), self._short_profile()]
+            for row in session.scalars(select(tables.ObjectiveProfile)
+                                       .where(tables.ObjectiveProfile.id != FAIRNESS_OVERSIGHT)
+                                       .order_by(tables.ObjectiveProfile.name)).all():
                 current = self._profile_versions(session, row.id)[0]
                 items = self._profile_items(session, current.id)
                 out.append(ProfileSummary(id=row.id, name=row.name, description=row.description, read_only=False,
@@ -399,6 +416,9 @@ class Library:
         if profile_id == FULL_AI_ACT:
             return ProfileView(profile=self._builtin_profile(), current=ProfileVersion(None, None), versions=[],
                                picks=[o.id for o in self._builtin])
+        if profile_id == FAIRNESS_OVERSIGHT:
+            return ProfileView(profile=self._short_profile(), current=ProfileVersion(None, None), versions=[],
+                               picks=list(FAIRNESS_OVERSIGHT_PICKS))
         with self._sessions() as session:
             row = session.get(tables.ObjectiveProfile, profile_id)
             if row is None:
@@ -491,6 +511,35 @@ class Library:
                                  "after": {"name": row.name, "description": row.description}})
         return self.get_profile(profile_id).current, dropped
 
+    def pinned_version(self, profile_id: str) -> str | None:
+        """The profile version an assessment that takes this profile pins: None for Full AI Act, the
+        current version of the project's own, and the stored version of the short built-in one,
+        written the first time it is taken. Raises LookupError for an unknown profile."""
+        if profile_id == FULL_AI_ACT:
+            return None
+        if profile_id != FAIRNESS_OVERSIGHT:
+            return self.get_profile(profile_id).current.id
+        for _ in range(2):
+            stored = self._stored_short_version()
+            if stored is not None:
+                return stored
+            try:
+                with self._sessions.begin() as session:
+                    session.add(tables.ObjectiveProfile(id=FAIRNESS_OVERSIGHT, name=FAIRNESS_OVERSIGHT_NAME,
+                                                        description=self._short_profile().description,
+                                                        created_by=BUILT_IN))
+                    session.flush()
+                    return self._add_version(session, FAIRNESS_OVERSIGHT, 1, list(FAIRNESS_OVERSIGHT_PICKS),
+                                             BUILT_IN)
+            except IntegrityError:
+                continue    # another request stored it first: take that one
+        raise RuntimeError("the short built-in profile could not be stored")
+
+    def _stored_short_version(self) -> str | None:
+        with self._sessions() as session:
+            versions = self._profile_versions(session, FAIRNESS_OVERSIGHT)
+            return versions[0].id if versions else None
+
     def catalogue_of(self, profile_version_id: str | None) -> ControlObjectiveCatalogue:
         """The objectives an assessment on this profile version works with; None is Full AI Act."""
         if profile_version_id is None:
@@ -522,6 +571,9 @@ class Library:
         with self._sessions() as session:
             version = session.get(tables.ObjectiveProfileVersion, profile_version_id)
             profile = session.get(tables.ObjectiveProfile, version.profile_id)
+            if profile.id == FAIRNESS_OVERSIGHT:
+                return {"id": FAIRNESS_OVERSIGHT, "version": None, "label": FAIRNESS_OVERSIGHT_NAME,
+                        "update": None}
             newest = self._profile_versions(session, profile.id)[0].number
             return {"id": profile.id, "version": version.number,
                     "label": f"{profile.name}, version {version.number}",
@@ -534,4 +586,6 @@ class Library:
         with self._sessions() as session:
             version = session.get(tables.ObjectiveProfileVersion, profile_version_id)
             profile = session.get(tables.ObjectiveProfile, version.profile_id)
+            if profile.id == FAIRNESS_OVERSIGHT:
+                return FAIRNESS_OVERSIGHT_NAME
             return f"{profile.name}, version {version.number}"
