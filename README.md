@@ -165,7 +165,7 @@ In the stack, compose sets these from `CONTROL_OBJECTIVES_DATABASE_URL`,
 
 The objectives ship as `src/aisc_control_objectives/data/ai_act_control_objectives.csv`, one row
 per objective, authored outside this repo. The columns are `ID` (`O1` ... `O50`),
-`Macro_Requirement` (`R1 Human Agency and Oversight` ... `R11`, the trustworthiness dimension),
+`Macro_Requirement` (`REQ1 Human Agency and Oversight` ... `REQ11`, the trustworthiness dimension),
 `Legal_Basis`, `Sub_Requirement_Label`, `Control_Objective`, `Assessment_Mode` (`Control`, `Test`
 or `Control + Test`), `Target`, `Standards_Grounding`, `Grounding_Tier_Flag` and `Notes` (tags
 `GAP:`, `CONDITIONAL:`, `VOLUNTARY:`, `Paired:`). A `Control + Test` objective needs both a
@@ -185,7 +185,7 @@ Interactive docs at `/docs`. The JSON API of a project is under `/p/{project}/ap
 | `GET /api/config` | The model the service is configured with. |
 | `GET /api/control-objectives[?mode=control\|test]` | The built-in objectives, in catalogue order. |
 | `GET /api/control-objectives/{id}` | One objective, 404 if unknown. |
-| `GET /api/macro-requirements` | R1 ... R11 with their objectives. |
+| `GET /api/macro-requirements` | REQ1 ... REQ11 with their objectives. |
 | `GET /p/{project}/api/projects`, `GET .../projects/{id}` | The project's assessments, or one. |
 | `POST .../projects/{id}/ratings` | `{"risk2": {"impact": 5, "likelihood": 4}}`; a part left out keeps its value. |
 | `POST .../projects/{id}/severity` | `{"risk2": 5}` sets the impact only. |

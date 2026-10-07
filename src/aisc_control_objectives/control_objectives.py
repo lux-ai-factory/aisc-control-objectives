@@ -62,7 +62,7 @@ class ControlObjectiveCatalogue:
         return self._by_id.get(objective_id)
 
     def macro_requirements(self) -> list[MacroRequirement]:
-        """The macro requirements (R1 ... R11) with their objectives, in order."""
+        """The macro requirements (REQ1 ... REQ11) with their objectives, in order."""
         return self._macros
 
     def _group_by_macro(self) -> list[MacroRequirement]:

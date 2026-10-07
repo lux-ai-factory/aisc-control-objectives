@@ -242,7 +242,7 @@ def test_library_actions_record_their_events(client, platform_project, repositor
     made = http.post(f"{base}/sets", json={"code": "LDG", "name": "Ledger set"}, headers=HEADERS)
     assert made.status_code == 201, made.text
     set_id = made.json()["id"]
-    values = {"dimension": "R2", "label": "Logging", "text": "Keep a log.", "assessment_mode": "Control"}
+    values = {"dimension": "REQ2", "label": "Logging", "text": "Keep a log.", "assessment_mode": "Control"}
     added = http.post(f"{base}/sets/{set_id}/objectives", json=values, headers=HEADERS)
     assert added.status_code == 201, added.text
     objective_id = added.json()["id"]
@@ -496,7 +496,7 @@ def test_m4_the_routes_store_the_authors_subject(repository, objectives, mapper,
     http = TestClient(app)
     base = f"/p/{platform_project}/api"
     set_id = http.post(f"{base}/sets", json={"code": "SUB", "name": "Subjects"}).json()["id"]
-    values = {"dimension": "R2", "label": "Logging", "text": "Keep a log.", "assessment_mode": "Control"}
+    values = {"dimension": "REQ2", "label": "Logging", "text": "Keep a log.", "assessment_mode": "Control"}
     assert http.post(f"{base}/sets/{set_id}/objectives", json=values).status_code == 201
     assert http.post(f"{base}/sets/{set_id}/publish").status_code == 200
     with repository.engine.begin() as connection:
@@ -511,7 +511,7 @@ def test_m9_an_objectives_item_is_its_set_and_its_id(client, platform_project, r
     the set, so the new objective's history doesn't continue the deleted one's."""
     http, _ = client
     base = f"/p/{platform_project}/api"
-    values = {"dimension": "R2", "label": "Logging", "text": "Keep a log.", "assessment_mode": "Control"}
+    values = {"dimension": "REQ2", "label": "Logging", "text": "Keep a log.", "assessment_mode": "Control"}
     items = []
     for _ in range(2):
         set_id = http.post(f"{base}/sets", json={"code": "AGN", "name": "Again"}).json()["id"]

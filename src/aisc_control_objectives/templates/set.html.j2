@@ -39,7 +39,7 @@
       <div class="co-obj-head">
         <span class="co-obj-id">{{ o.id }}</span>
         <h3>{{ o.sub_requirement_label }}</h3>
-        <span class="co-dim co-dim--r{{ o.macro_id[1:] }}">{{ o.macro_id }} · {{ o.macro_title }}</span>
+        <span class="co-dim co-dim--r{{ o.macro_id[3:] }}">{{ o.macro_id }} · {{ o.macro_title }}</span>
         <span class="qf-tag">{{ o.assessment_mode }}</span>
         {%- if retired %}<span class="qf-tag qf-tag--pending">Retired</span>{% endif %}
       </div>

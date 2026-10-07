@@ -269,7 +269,7 @@ class ObjectiveSelectionRow(Base):
 class _ObjectiveFields:
     """What an objective of a user's set says, as the built-in CSV's columns do."""
 
-    #: R1 ... R11, the trustworthiness dimension.
+    #: REQ1 ... REQ11, the trustworthiness dimension.
     dimension: Mapped[str] = mapped_column(Text, nullable=False)
     label: Mapped[str] = mapped_column(Text, nullable=False)
     text: Mapped[str] = mapped_column(Text, nullable=False)

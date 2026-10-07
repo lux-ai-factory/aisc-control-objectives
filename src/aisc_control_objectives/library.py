@@ -131,7 +131,7 @@ class Library:
 
     @property
     def dimensions(self) -> dict[str, str]:
-        """R1 ... R11 and their titles, in order."""
+        """REQ1 ... REQ11 and their titles, in order."""
         return dict(self._titles)
 
     def _objective(self, objective_id: str, row) -> ControlObjective:

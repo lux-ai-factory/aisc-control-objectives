@@ -165,7 +165,7 @@
           <button type="button" class="co-chip {{ 'co-chip--key' if chip.priority.key else 'co-chip--plain' }} co-chip--{{ chip.source }}" popovertarget="{{ pop }}" data-objective="{{ o.id }}">{{ o.id }}</button>
           <div id="{{ pop }}" class="co-chip-pop" popover>
             <p class="co-pop-head"><b>{{ o.id }}</b> {{ o.sub_requirement_label }}</p>
-            <p><span class="co-dim co-dim--r{{ o.macro_id[1:] }}">{{ o.macro_id }} · {{ o.macro_title }}</span></p>
+            <p><span class="co-dim co-dim--r{{ o.macro_id[3:] }}">{{ o.macro_id }} · {{ o.macro_title }}</span></p>
             <p class="co-pop-text">{{ o.text }}</p>
             <dl class="co-pop-dl">
               <dt>Score</dt><dd>{{ chip.priority.score | int }} (the sum of the ratings of its {{ chip.priority.risk_ids | length }} risk{{ 's' if chip.priority.risk_ids | length != 1 }})</dd>
@@ -190,7 +190,7 @@
               <p class="co-pop-head"><b>{{ risk.risk.text }}</b>: its control objectives</p>
               {%- for macro in macros %}
               <fieldset class="co-map-dim">
-                <legend><span class="co-dim co-dim--r{{ macro.id[1:] }}">{{ macro.id }} · {{ macro.title }}</span></legend>
+                <legend><span class="co-dim co-dim--r{{ macro.id[3:] }}">{{ macro.id }} · {{ macro.title }}</span></legend>
                 {%- for objective in macro.objectives %}
                 <label class="co-map-pick"><input type="checkbox" name="objective" value="{{ objective.id }}"{% if objective.id in chosen %} checked{% endif %}>
                   <b>{{ objective.id }}</b> {{ objective.sub_requirement_label }}</label>

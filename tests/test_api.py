@@ -43,7 +43,7 @@ class TestControlObjectives:
     def test_an_objective_carries_its_derived_routing_fields(self, client):
         payload = client.get("/api/control-objectives").json()
         paired = next(item for item in payload if item["id"] == "O5")
-        assert paired["macro_id"] == "R2"
+        assert paired["macro_id"] == "REQ2"
         assert paired["requires_control"] is True
         assert paired["requires_test"] is True
         assert "control_targets" not in paired
@@ -73,7 +73,7 @@ class TestControlObjectives:
 class TestMacroRequirements:
     def test_lists_the_eleven_macro_requirements_with_their_objectives(self, client):
         payload = client.get("/api/macro-requirements").json()
-        assert [macro["id"] for macro in payload] == [f"R{n}" for n in range(1, 12)]
+        assert [macro["id"] for macro in payload] == [f"REQ{n}" for n in range(1, 12)]
         assert payload[0]["title"] == "Human Agency and Oversight"
         assert sum(len(macro["objectives"]) for macro in payload) == 50
 
@@ -182,7 +182,7 @@ class TestObjectivesPage:
             [
                 ControlObjective(
                     id="O1",
-                    macro_requirement="R1 Human Agency and Oversight",
+                    macro_requirement="REQ1 Human Agency and Oversight",
                     legal_basis="AI Act Art. 14",
                     sub_requirement_label="Injected",
                     text="<script>alert(1)</script>",

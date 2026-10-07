@@ -44,7 +44,7 @@ def test_objectives_are_written_published_and_versioned(http, platform_project):
     base = api(platform_project, f"/sets/{s['id']}")
     r = http.post(base + "/objectives", json=fields())
     assert r.status_code == 201 and r.json()["id"] == "BNK1"
-    assert http.post(base + "/objectives", json=fields(dimension="R99")).status_code == 422
+    assert http.post(base + "/objectives", json=fields(dimension="REQ99")).status_code == 422
     assert http.put(base + "/objectives/BNK1", json=fields(label="Sign-off")).status_code == 200
     http.post(base + "/objectives", json=fields(label="Second"))
     assert http.post(base + "/objectives/BNK2/retire").status_code == 200

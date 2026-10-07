@@ -77,11 +77,11 @@ def test_each_objective_in_the_matrix_shows_its_dimension(client, start, platfor
     http.post(_api(platform_project, assessment, "/map"))
     page = http.get(f"/p/{platform_project}/projects/{assessment}").text
     # each chip's pop-up names the objective's dimension
-    cells = re.findall(r'<div id="pop-\w+-(\w+)" class="co-chip-pop" popover>.*?<span class="co-dim co-dim--r(\d+)">(R\d+) ·', page, re.S)
+    cells = re.findall(r'<div id="pop-\w+-(\w+)" class="co-chip-pop" popover>.*?<span class="co-dim co-dim--r(\d+)">(REQ\d+) ·', page, re.S)
     assert cells
     by_id = {o.id: o for o in objectives}
     for oid, n, macro in cells:
-        assert by_id[oid].macro_id == macro == f"R{n}", oid
+        assert by_id[oid].macro_id == macro == f"REQ{n}", oid
 
 
 def test_every_dimension_has_its_colour():

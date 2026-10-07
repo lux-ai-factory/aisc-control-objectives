@@ -8,7 +8,7 @@ from aisc_control_objectives.models.control_objective import ControlObjective
 
 
 def made(**over):
-    fields = {"id": "BNK3", "macro_requirement": "R2 Technical Robustness and Safety", "legal_basis": "Internal policy 7",
+    fields = {"id": "BNK3", "macro_requirement": "REQ2 Technical Robustness and Safety", "legal_basis": "Internal policy 7",
                   "sub_requirement_label": "Model change approval", "text": "Every model change is approved.",
                   "assessment_mode": "Control", "target": "G", "standards_grounding": "", "grounding_tier_flag": ""}
     fields.update(over)
@@ -18,7 +18,7 @@ def made(**over):
 def test_a_set_objective_has_its_code_and_number():
     o = made()
     assert (o.set_code, o.number) == ("BNK", 3)
-    assert o.macro_id == "R2"
+    assert o.macro_id == "REQ2"
 
 
 def test_a_basis_outside_the_ai_act_and_gdpr_is_other_in_a_users_set():

@@ -45,7 +45,7 @@ class ControlObjective(BaseModel):
     #: The set's code and the objective's number in it: "O1" ... "O50" in the built-in set, "BNK3" in
     #: a set a user made. The earlier ids (R1.1 ...) map to these in data/objective_id_renames.csv.
     id: str = Field(pattern=r"^(O|[A-Z]{2,6})[1-9]\d*$")
-    macro_requirement: str = Field(pattern=r"^R\d+\s+\S")
+    macro_requirement: str = Field(pattern=r"^REQ\d+\s+\S")
     legal_basis: str = Field(min_length=1)
     sub_requirement_label: str
     #: The objective itself (CSV column `Control_Objective`).
@@ -65,13 +65,13 @@ class ControlObjective(BaseModel):
     @computed_field
     @property
     def macro_id(self) -> str:
-        """"R1" from "R1 Human Agency and Oversight"."""
+        """"REQ1" from "REQ1 Human Agency and Oversight"."""
         return self.macro_requirement.split(None, 1)[0]
 
     @computed_field
     @property
     def macro_title(self) -> str:
-        """"Human Agency and Oversight" from "R1 Human Agency and Oversight"."""
+        """"Human Agency and Oversight" from "REQ1 Human Agency and Oversight"."""
         return self.macro_requirement.split(None, 1)[1]
 
     @computed_field
@@ -154,7 +154,7 @@ class ControlObjective(BaseModel):
 
 
 class MacroRequirement(BaseModel):
-    """A macro requirement (R1 ... R11) with the objectives under it."""
+    """A macro requirement (REQ1 ... REQ11) with the objectives under it."""
 
     id: str
     title: str

@@ -34,7 +34,7 @@ def test_objectives_are_in_requirement_order_not_string_order(catalogue):
 
 def test_first_objective_carries_every_column_verbatim(catalogue):
     objective = catalogue.by_id("O1")
-    assert objective.macro_requirement == "R1 Human Agency and Oversight"
+    assert objective.macro_requirement == "REQ1 Human Agency and Oversight"
     assert objective.legal_basis == "AI Act Art. 14"
     assert objective.sub_requirement_label == "Operator oversight capability"
     assert objective.text.startswith("A qualified operator can monitor")
@@ -59,22 +59,22 @@ def test_by_id_is_exact_and_unknown_ids_return_none(catalogue):
 class TestMacroRequirements:
     def test_eleven_macro_requirements_in_numeric_order(self, catalogue):
         macros = catalogue.macro_requirements()
-        assert [macro.id for macro in macros] == [f"R{n}" for n in range(1, 12)]
+        assert [macro.id for macro in macros] == [f"REQ{n}" for n in range(1, 12)]
 
     def test_macro_splits_id_from_title(self, catalogue):
         macro = catalogue.macro_requirements()[0]
-        assert macro.id == "R1"
+        assert macro.id == "REQ1"
         assert macro.title == "Human Agency and Oversight"
 
     def test_objectives_are_grouped_under_their_macro(self, catalogue):
         counts = {macro.id: len(macro.objectives) for macro in catalogue.macro_requirements()}
-        assert counts["R9"] == 9
-        assert counts["R6"] == 2
+        assert counts["REQ9"] == 9
+        assert counts["REQ6"] == 2
         assert sum(counts.values()) == 50
 
     def test_every_objective_knows_its_macro(self, catalogue):
         objective = catalogue.by_id("O33")
-        assert objective.macro_id == "R9"
+        assert objective.macro_id == "REQ9"
         assert objective.macro_title == "Risk Management"
 
 
@@ -136,7 +136,7 @@ def test_loading_an_explicit_path_works(tmp_path):
 
 def test_a_csv_missing_a_required_column_fails_loudly(tmp_path):
     bad = tmp_path / "bad.csv"
-    bad.write_text('"ID","Macro_Requirement"\n"O1","R1 Human Agency"\n', encoding="utf-8")
+    bad.write_text('"ID","Macro_Requirement"\n"O1","REQ1 Human Agency"\n', encoding="utf-8")
     with pytest.raises(ValueError, match="column"):
         load_control_objectives(bad)
 

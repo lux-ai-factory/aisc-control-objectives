@@ -16,7 +16,7 @@ ALICE = "alice"
 
 
 def fields(**over):
-    base = {"dimension": "R2", "label": "Model change approval", "text": "Every model change is approved before use.",
+    base = {"dimension": "REQ2", "label": "Model change approval", "text": "Every model change is approved before use.",
                 "legal_basis": "Internal policy 7", "assessment_mode": "Control", "target": "G",
                 "standards_grounding": "", "grounding_tier_flag": "", "notes": ""}
     base.update(over)
@@ -32,7 +32,7 @@ def library(repository, objectives):
 def bnk(library):
     made = library.create_set("BNK", "Bank policies", "Our own controls", who=ALICE)
     library.add_objective(made.id, fields())
-    library.add_objective(made.id, fields(dimension="R5", label="Fair pricing", text="Prices are reviewed for bias."))
+    library.add_objective(made.id, fields(dimension="REQ5", label="Fair pricing", text="Prices are reviewed for bias."))
     return made
 
 
@@ -58,11 +58,11 @@ def test_a_code_is_unique(library, bnk):
 def test_objectives_are_numbered_in_their_set(library, bnk):
     draft = library.get_set(bnk.id).draft
     assert [(o.id, o.macro_id, o.sub_requirement_label) for o in draft] == [
-        ("BNK1", "R2", "Model change approval"), ("BNK2", "R5", "Fair pricing")]
+        ("BNK1", "REQ2", "Model change approval"), ("BNK2", "REQ5", "Fair pricing")]
 
 
 @pytest.mark.parametrize("bad, why", [
-    ({"dimension": "R12"}, "dimension"), ({"dimension": ""}, "dimension"),
+    ({"dimension": "REQ12"}, "dimension"), ({"dimension": ""}, "dimension"),
     ({"label": " "}, "label"), ({"text": ""}, "text"), ({"assessment_mode": "Maybe"}, "mode"),
 ])
 def test_an_objective_needs_a_dimension_a_label_a_text_and_a_mode(library, bnk, bad, why):
@@ -158,7 +158,7 @@ def test_a_profile_picks_from_the_built_in_set_and_published_sets(library, bnk):
     assert view.current.number == 1
     catalogue = library.catalogue_of(view.current.id)
     assert [o.id for o in catalogue] == ["O1", "O7", "BNK1"]
-    assert catalogue.by_id("BNK1").macro_id == "R2" and catalogue.by_id("BNK1").regimes == ["other"]
+    assert catalogue.by_id("BNK1").macro_id == "REQ2" and catalogue.by_id("BNK1").regimes == ["other"]
     assert view.pins == {"BNK": 1}
 
 
