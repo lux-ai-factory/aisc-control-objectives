@@ -16,7 +16,7 @@ You do not need to sign the CLA separately — by submitting a pull request, iss
 
 ## How to Contribute
 
-1. Fork the repository and create your branch from `main`.
+1. Fork the repository and create your branch from `feat/unified-modules`.
 2. Follow our coding guidelines and documentation standards.
 3. Include appropriate tests and documentation with your pull request.
 4. Submit a pull request with a clear description of your changes.
@@ -31,16 +31,18 @@ The AISC project is co-developed and co-maintained by the **Université du Luxem
 ## Repository-specific notes
 
 - **Test-first.** Every change to the domain (the catalogue, the mapping, the
-  tiering, the repository) starts with a failing test. Run the suite before any
-  PR: `uv pip install -e '.[dev]' && pytest`. It needs a real PostgreSQL, not
-  SQLite (see README, Testing).
+  scores, the repository) starts with a failing test. Run the suite before any
+  PR: `uv run --extra dev pytest -q -p no:cacheprovider tests`. It needs a
+  throwaway PostgreSQL, not SQLite and never the live stack's (see README, Tests).
 - **The model's instructions are markdown**, in `src/aisc_control_objectives/skills/`. Change how
   the mapping reasons there rather than in Python, and pin the new behaviour with
   a test that uses a fake completer.
 - **Schema changes need a migration.** Edit `src/aisc_control_objectives/db/tables.py`, then
-  `alembic revision --autogenerate`, and check the generated file before
-  committing it.
-- **Nothing derived gets stored.** Tiers, scores and counts are recomputed on
-  every read; a PR that writes them into a table will be asked to explain why.
+  add a revision under `alembic/versions/` (for example
+  `uv run alembic -x url=<a scratch project database> revision --autogenerate -m "..."`),
+  and check the generated file before committing it.
+- **Nothing derived gets stored.** Scores, default key objectives and counts are
+  recomputed on every read; a PR that writes them into a table will be asked to
+  explain why.
 
 Thank you for contributing to the AISC project!
