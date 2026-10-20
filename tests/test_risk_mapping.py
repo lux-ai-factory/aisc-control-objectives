@@ -37,7 +37,7 @@ def _mapping(*items) -> Mapping:
     return Mapping(risk_id="risk2", objectives=list(items))
 
 
-def _good(objective_id="R1.1", quote="The mandatory human review becomes a formality"):
+def _good(objective_id="O1", quote="The mandatory human review becomes a formality"):
     return MappedObjective(
         objective_id=objective_id, quote=quote, rationale="the oversight duty this risk defeats"
     )
@@ -109,7 +109,7 @@ class TestTheLoop:
         run = map_risks([RUBBER_STAMP], FakeMapper(_mapping(_good())), objectives)
         assert run.stop == "clean"
         assert run.attempts == 1
-        assert run.mappings["risk2"].objectives[0].objective_id == "R1.1"
+        assert run.mappings["risk2"].objectives[0].objective_id == "O1"
 
     def test_findings_go_back_and_a_fixed_attempt_is_clean(self, objectives):
         mapper = FakeMapper(_mapping(_good("R42.9")), _mapping(_good()))
@@ -130,19 +130,19 @@ class TestTheLoop:
 
     def test_what_publishes_after_a_fixpoint_holds_no_rejected_objective(self, objectives):
         """Every exit publishes, but an invented objective id must not survive
-        into the tiers: publishing it would schedule work on a duty that does
+        into the matrix: publishing it would schedule work on a duty that does
         not exist."""
-        stubborn = _mapping(_good("R42.9"), _good("R1.1"))
+        stubborn = _mapping(_good("R42.9"), _good("O1"))
         run = map_risks([RUBBER_STAMP], FakeMapper(stubborn), objectives)
         assert run.stop == "fixpoint"
         published = {o.objective_id for o in run.mappings["risk2"].objectives}
-        assert published == {"R1.1"}
+        assert published == {"O1"}
         assert any(f.flag == "unknown-objective" for f in run.findings)
 
     def test_an_unquoted_objective_is_dropped_too(self, objectives):
-        run = map_risks([RUBBER_STAMP], FakeMapper(_mapping(_good(quote=""), _good("R1.3"))), objectives)
+        run = map_risks([RUBBER_STAMP], FakeMapper(_mapping(_good(quote=""), _good("O3"))), objectives)
         published = {o.objective_id for o in run.mappings["risk2"].objectives}
-        assert published == {"R1.3"}
+        assert published == {"O3"}
 
     def test_a_dead_model_publishes_an_empty_mapping_not_a_crash(self, objectives):
         run = map_risks([RUBBER_STAMP], FakeMapper(error=RuntimeError("no key")), objectives)
@@ -221,15 +221,15 @@ class FakeCompleter:
 class TestTheMapper:
     def test_it_shows_the_model_the_risk_and_the_objectives(self, objectives):
         answer = json.dumps({"risk_id": "risk2", "objectives": [
-            {"objective_id": "R1.1", "quote": "Automation bias", "rationale": "why"}]})
+            {"objective_id": "O1", "quote": "Automation bias", "rationale": "why"}]})
         complete = FakeCompleter(answer)
         mapping = RiskMapper(complete=complete, catalogue=objectives).propose(RUBBER_STAMP)
-        assert mapping.objectives[0].objective_id == "R1.1"
+        assert mapping.objectives[0].objective_id == "O1"
         system, user = complete.calls[0]
         assert "mitigate" in system.lower()
         assert "rubber-stamp" in user
-        assert "R1.1" in user and "Operator oversight capability" in user
-        assert "R11.4" in user                      # the whole catalogue is offered
+        assert "O1" in user and "Operator oversight capability" in user
+        assert "O50" in user                      # the whole catalogue is offered
 
     def test_the_skill_carries_a_literal_answer_schema(self):
         from aisc_control_objectives.skills import load_skill
@@ -240,3 +240,52 @@ class TestTheMapper:
         example = json.loads(blocks[-1].removeprefix("json").strip())
         assert set(example) == {"risk_id", "objectives"}
         assert {"objective_id", "quote", "rationale"} <= set(example["objectives"][0])
+
+
+class StubbornMapper:
+    """Always proposes the same mapping, whatever the findings say."""
+
+    def __init__(self, mapping):
+        self.mapping = mapping
+
+    def propose(self, risk, findings=()):
+        return self.mapping.model_copy(deep=True)
+
+
+def test_a_duplicated_objective_keeps_its_supported_first_copy(objectives):
+    """A duplicate is the repeat, not the objective: every id a finding named was dropped,
+    so an objective proposed twice with a good quote lost both copies."""
+    run = map_risks([RUBBER_STAMP], StubbornMapper(_mapping(_good("O1"), _good("O1"))), objectives)
+    kept = [o.objective_id for o in run.mappings["risk2"].objectives]
+    assert kept == ["O1"]
+    assert [f.flag for f in run.findings] == ["duplicate-objective"]
+
+
+def test_an_objective_with_a_finding_of_its_own_is_still_dropped(objectives):
+    bad = _good("O1", quote="the model was trained on Martian data")
+    run = map_risks([RUBBER_STAMP], StubbornMapper(_mapping(bad, _good("O2"))), objectives)
+    assert [o.objective_id for o in run.mappings["risk2"].objectives] == ["O2"]
+
+
+# A provider's error is cut before it is scrubbed: the key-like patterns are
+# super-quadratic on long input ('a-' * 4000 took 1.9 s, 8000 took 8.6 s), and run.error is the
+# provider's or the SDK's text, of any length, scrubbed inside the mapping run's save.
+
+def test_a_long_provider_error_is_scrubbed_in_bounded_time():
+    import time
+
+    from aisc_control_objectives.risk_mapping import ERROR_CHARS, safe_error
+
+    started = time.monotonic()
+    out = safe_error("a-" * 50_000)
+    assert time.monotonic() - started < 1
+    assert len(out) <= ERROR_CHARS
+
+
+def test_a_long_provider_error_still_loses_its_key_and_is_cut_short():
+    from aisc_control_objectives.risk_mapping import ERROR_CHARS, safe_error
+
+    out = safe_error("POST https://x/v1?key=AIzaSyA-not-real-0123456789 failed: " + "word " * 20_000)
+    assert "AIza" not in out and "[redacted]" in out
+    assert len(out) <= ERROR_CHARS and out.endswith("...")
+    assert safe_error("short Bearer abc.def") == "short Bearer [redacted]"

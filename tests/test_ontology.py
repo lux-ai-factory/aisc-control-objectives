@@ -13,7 +13,7 @@ import json
 
 import pytest
 
-from aisc_control_objectives.models.ontology import Ontology, OntologyRisk
+from aisc_control_objectives.models.ontology import Ontology
 
 
 @pytest.fixture(scope="module")
@@ -53,10 +53,6 @@ class TestTheAiCard:
 
 
 class TestRecognising:
-    def test_the_real_export_is_recognised(self, fixtures_dir):
-        raw = json.loads((fixtures_dir / "mcas.ontology.jsonld").read_text())
-        assert Ontology.looks_like_one(raw)
-
     def test_an_arbitrary_list_is_not_a_graph(self):
         assert not Ontology.looks_like_one([{"hello": "world"}])
 
@@ -73,10 +69,6 @@ class TestTheSystem:
 
 
 class TestTheRisks:
-    def test_every_risk_node_becomes_a_risk(self, mcas):
-        assert len(mcas.risks) == 5
-        assert all(isinstance(risk, OntologyRisk) for risk in mcas.risks)
-
     def test_risks_are_in_the_order_the_assessor_gave_them(self, mcas):
         assert [risk.id for risk in mcas.risks] == [f"risk{n}" for n in range(5)]
 

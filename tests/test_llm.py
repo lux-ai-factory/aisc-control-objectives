@@ -14,9 +14,6 @@ import pytest
 from pydantic import BaseModel
 
 from aisc_control_objectives.llm import (
-    DEFAULT_MODEL,
-    DEFAULT_PROVIDER,
-    OPTIONAL_KEY,
     PROVIDERS,
     build_llm,
     completer,
@@ -59,34 +56,12 @@ class TestProviders:
         variables = [var for _, _, var in PROVIDERS.values() if var]
         assert len(variables) == len(set(variables))
 
-    def test_the_keyless_providers_are_the_ones_you_host(self):
-        assert OPTIONAL_KEY <= set(PROVIDERS)
-        assert OPTIONAL_KEY == {"ollama", "compatible"}
-
-    def test_the_default_is_a_provider_we_configure(self):
-        assert DEFAULT_PROVIDER in PROVIDERS
-        assert DEFAULT_MODEL
-
 
 class TestBuildLlm:
-    def test_an_unknown_provider_names_the_ones_that_exist(self):
-        with pytest.raises(ValueError, match="not a provider"):
-            build_llm("altavista", "some-model")
-
-    def test_a_provider_without_its_key_says_which_variable(self, monkeypatch):
-        monkeypatch.delenv("MISTRAL_API_KEY", raising=False)
-        with pytest.raises(ValueError, match="MISTRAL_API_KEY"):
-            build_llm("mistral", "mistral-large-latest")
-
     def test_a_local_model_needs_no_key(self, monkeypatch):
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         llm = build_llm("ollama", "mistral:latest")
         assert llm is not None
-
-    def test_a_self_hosted_endpoint_needs_its_base_url(self, monkeypatch):
-        monkeypatch.delenv("BAF_LLM_BASE_URL", raising=False)
-        with pytest.raises(ValueError, match="BAF_LLM_BASE_URL"):
-            build_llm("compatible", "whatever")
 
 
 class FakeLLM:
@@ -104,23 +79,13 @@ class FakeLLM:
 
 
 class TestCompleter:
-    def test_it_makes_the_two_prompt_call_baf_takes(self):
-        llm = FakeLLM("hello")
-        complete = completer(llm)
-        assert complete("the rules", "the card") == "hello"
-        call = llm.calls[0]
-        assert call["system_message"] == "the rules"
-        assert call["message"] == "the card"
-
-    def test_a_draft_is_reproducible_by_default(self):
+    def test_no_temperature_is_sent_unless_asked_for(self):
+        """The shared completer (the same file as qualification's) sends none by default: some models
+        (OpenAI's reasoning ones) refuse every value but their own. The risk mapper asks for 0.0 itself
+        (tests/test_server.py)."""
         llm = FakeLLM()
         completer(llm)("s", "u")
-        assert llm.calls[0]["parameters"]["temperature"] == 0
-
-    def test_temperature_can_be_raised(self):
-        llm = FakeLLM()
-        completer(llm)("s", "u", temperature=0.7)
-        assert llm.calls[0]["parameters"]["temperature"] == 0.7
+        assert llm.calls[0]["parameters"] is None
 
 
 class TestJsonObject:

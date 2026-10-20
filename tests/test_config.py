@@ -1,7 +1,7 @@
 """RunConfig: defaults < TOML file < environment.
 
-The pipeline it once configured is gone; what remains is the model the service
-talks to, and the one loading path `server.build_app` uses.
+What it configures is the model the service talks to, through the one loading
+path `server.build_app` uses.
 """
 
 import pytest
@@ -52,8 +52,3 @@ def test_unrelated_vars_are_ignored():
 def test_a_non_string_model_is_rejected():
     with pytest.raises(ValidationError):
         RunConfig.model_validate({"model": 3})
-
-
-def test_the_retired_override_surface_is_gone():
-    for name in ("from_file", "from_env", "with_overrides"):
-        assert not hasattr(RunConfig, name), name

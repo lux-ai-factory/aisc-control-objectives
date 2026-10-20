@@ -11,12 +11,6 @@ from aisc_control_objectives import server
 from aisc_control_objectives.config import RunConfig
 
 
-def test_the_completer_is_built_from_the_configured_provider(monkeypatch):
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    complete = server._build_completer(RunConfig(provider="ollama", model="mistral:latest"))
-    assert callable(complete)
-
-
 def test_a_provider_missing_its_key_fails_at_startup_naming_the_variable(monkeypatch):
     """Better here, where the message is readable, than as a provider error on
     every card page."""
@@ -78,3 +72,33 @@ class TestDotenv:
         (tmp_path / ".env").write_text("A_KEY=from the file\n")
         server._load_dotenv()
         assert os.environ["A_KEY"] == "from the shell"
+
+
+class _RecordingLLM:
+    def __init__(self):
+        self.calls = []
+
+    def predict(self, message, parameters=None, session=None, system_message=None):
+        self.calls.append(parameters)
+        return "{}"
+
+
+def test_the_startup_mapper_asks_for_a_reproducible_mapping(monkeypatch):
+    """A mapping is repeatable: the risk mapper's completer asks for temperature 0.0."""
+    from aisc_control_objectives import llm as llm_module
+
+    fake = _RecordingLLM()
+    monkeypatch.setattr(llm_module, "build_llm", lambda provider, model: fake)
+    server._build_completer(RunConfig(provider="ollama", model="mistral:latest"))("s", "u")
+    assert fake.calls == [{"temperature": 0.0}]
+
+
+def test_the_shared_llm_file_is_qualifications():
+    """baf_llm.py is one file in two services: byte-identical to qualification's copy."""
+    from pathlib import Path
+
+    here = Path(__file__).resolve().parents[1] / "src/aisc_control_objectives/baf_llm.py"
+    there = Path(__file__).resolve().parents[2] / "qualification/services/agents/fill/baf_llm.py"
+    if not there.exists():
+        pytest.skip("not in the aisc checkout")
+    assert here.read_bytes() == there.read_bytes()

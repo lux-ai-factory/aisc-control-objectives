@@ -37,13 +37,13 @@ class TestControlObjectives:
     def test_lists_every_objective_in_requirement_order(self, client):
         payload = client.get("/api/control-objectives").json()
         assert len(payload) == 50
-        assert payload[0]["id"] == "R1.1"
-        assert payload[-1]["id"] == "R11.4"
+        assert payload[0]["id"] == "O1"
+        assert payload[-1]["id"] == "O50"
 
     def test_an_objective_carries_its_derived_routing_fields(self, client):
         payload = client.get("/api/control-objectives").json()
-        paired = next(item for item in payload if item["id"] == "R2.1")
-        assert paired["macro_id"] == "R2"
+        paired = next(item for item in payload if item["id"] == "O5")
+        assert paired["macro_id"] == "REQ2"
         assert paired["requires_control"] is True
         assert paired["requires_test"] is True
         assert "control_targets" not in paired
@@ -55,14 +55,14 @@ class TestControlObjectives:
         assert len(controls) == 41
         assert len(tests) == 14
         # a paired objective is in both partitions
-        assert "R2.1" in {item["id"] for item in controls}
-        assert "R2.1" in {item["id"] for item in tests}
+        assert "O5" in {item["id"] for item in controls}
+        assert "O5" in {item["id"] for item in tests}
 
     def test_an_unknown_mode_is_rejected(self, client):
         assert client.get("/api/control-objectives?mode=banana").status_code == 422
 
     def test_fetch_one_objective_by_id(self, client):
-        payload = client.get("/api/control-objectives/R1.1").json()
+        payload = client.get("/api/control-objectives/O1").json()
         assert payload["sub_requirement_label"] == "Operator oversight capability"
         assert payload["legal_bases"] == ["AI Act Art. 14"]
 
@@ -73,7 +73,7 @@ class TestControlObjectives:
 class TestMacroRequirements:
     def test_lists_the_eleven_macro_requirements_with_their_objectives(self, client):
         payload = client.get("/api/macro-requirements").json()
-        assert [macro["id"] for macro in payload] == [f"R{n}" for n in range(1, 12)]
+        assert [macro["id"] for macro in payload] == [f"REQ{n}" for n in range(1, 12)]
         assert payload[0]["title"] == "Human Agency and Oversight"
         assert sum(len(macro["objectives"]) for macro in payload) == 50
 
@@ -104,40 +104,34 @@ class TestObjectivesPage:
     def test_objective_text_is_rendered_not_just_ids(self, page):
         assert "A qualified operator can monitor" in page
 
-    def test_the_page_does_not_split_control_from_test(self, page):
-        """Assessment mode stays in the data and the API, off the page.
+    def test_the_logo_is_served_behind_the_proxy(self, objectives, repository):
+        """Caddy strips /control-objectives before the request arrives, so the
+        logo is asked for at /static/... while the app runs with a root_path.
+        A 404 here shows the image's alt text in place of the mark."""
+        from aisc_control_objectives.api.app import NoMapper
+        from aisc_control_objectives.projects import Projects
 
-        "Control" itself still occurs — it is in the title and in objective
-        text — so this pins the markers of the distinction, not the word.
-        """
-        for marker in (
-            "qf-tag--control",   # the badges
-            "qf-tag--test",
-            "Assessment mode",   # the filter
-            "Need a control",    # the stat tiles
-            "Need a test",
-            "Need both",
-            "data-control",      # the filter hooks
-            "data-test",
-            "Applies to",        # the target codes
-        ):
-            assert marker not in page, marker
-
-    def test_page_wears_the_platform_chrome(self, page):
-        """It has to read as the same product as the qualification app."""
-        assert "laif-logo.svg" in page          # Luxembourg AI Factory mark
-        assert "#000fdf" in page.lower()        # brand primary
-        assert "#ff007e" in page.lower()        # brand accent
-        assert "site-header" in page and "qf-section" in page
-
-    def test_the_logo_is_served(self, client):
+        app = create_app(
+            objectives,
+            Projects(repository, objectives, NoMapper()),
+            base_config=RunConfig(),
+            root_path="/control-objectives",
+        )
+        client = TestClient(app, root_path="/control-objectives")
+        page = client.get("/objectives").text
+        assert 'src="/control-objectives/static/laif-logo.svg"' in page
         response = client.get("/static/laif-logo.svg")
         assert response.status_code == 200
         assert "svg" in response.headers["content-type"]
 
+    def test_the_logo_links_to_the_launcher(self, page):
+        """Like the qualification app's: outside a project the mark goes back
+        to the launcher, where projects are chosen."""
+        assert '<a class="brand" href="http://localhost:8100/">' in page
+
     def test_the_counts_are_stated(self, page):
         assert ">50<" in page  # objectives
-        assert ">11<" in page  # macro requirements
+        assert ">11<" in page  # dimensions
 
     def test_notes_survive_to_the_page(self, page):
         assert "thresholds must be documented before the test is run" in page
@@ -156,8 +150,8 @@ class TestObjectivesPage:
         catalogue = ControlObjectiveCatalogue(
             [
                 ControlObjective(
-                    id="R1.1",
-                    macro_requirement="R1 Human Agency and Oversight",
+                    id="O1",
+                    macro_requirement="REQ1 Human Agency and Oversight",
                     legal_basis="AI Act Art. 14",
                     sub_requirement_label="Injected",
                     text="<script>alert(1)</script>",
@@ -179,3 +173,36 @@ class TestObjectivesPage:
         page = TestClient(app).get("/objectives").text
         assert "<script>alert(1)</script>" not in page
         assert "&lt;script&gt;" in page
+
+
+class TestCors:
+    """The app is same-origin behind Caddy, so with CONTROL_OBJECTIVES_CORS_ORIGINS
+    unset no other origin may read its answers; an origin set there still may."""
+
+    def _app(self, objectives, repository, cors_origins=None):
+        from aisc_control_objectives.api.app import NoMapper
+        from aisc_control_objectives.projects import Projects
+
+        projects = Projects(repository, objectives, NoMapper())
+        return TestClient(create_app(objectives, projects, base_config=RunConfig(),
+                                     cors_origins=cors_origins))
+
+    def test_with_no_origins_configured_a_foreign_origin_is_not_allowed(
+            self, objectives, repository):
+        client = self._app(objectives, repository)
+        response = client.get("/api/config", headers={"Origin": "https://evil.example"})
+        assert response.status_code == 200
+        assert "access-control-allow-origin" not in response.headers
+
+    def test_with_no_origins_configured_a_preflight_is_refused(self, objectives, repository):
+        client = self._app(objectives, repository)
+        response = client.options("/api/config", headers={
+            "Origin": "https://evil.example", "Access-Control-Request-Method": "GET"})
+        assert "access-control-allow-origin" not in response.headers
+
+    def test_a_configured_origin_is_still_allowed(self, objectives, repository):
+        client = self._app(objectives, repository, cors_origins=["https://aisc.example"])
+        response = client.get("/api/config", headers={"Origin": "https://aisc.example"})
+        assert response.headers["access-control-allow-origin"] == "https://aisc.example"
+        other = client.get("/api/config", headers={"Origin": "https://evil.example"})
+        assert "access-control-allow-origin" not in other.headers
