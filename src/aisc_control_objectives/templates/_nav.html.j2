@@ -1,0 +1,8 @@
+{#- The site's links, in the header on most pages and at the bottom of the assessment page's left
+    menu. "← Back to the project" is not one of them: it is the header's own button, on every page. -#}
+{% macro site_links(project_base, root_path, here) -%}
+      {% if project_base %}<a href="{{ project_base }}/projects" {% if here == "projects" %}class="nav-here"{% endif %}>Assessments</a>{% endif %}
+      <a href="{{ project_base or root_path }}/objectives" {% if here == "objectives" %}class="nav-here"{% endif %}>Objective catalogue</a>
+      {% if project_base %}<a href="{{ project_base }}/sets" {% if here == "sets" %}class="nav-here"{% endif %}>Custom objective sets</a>{% endif %}
+      {% if project_base %}<a href="{{ project_base }}/profiles" {% if here == "profiles" %}class="nav-here"{% endif %}>Objective profiles</a>{% endif %}
+{%- endmacro %}

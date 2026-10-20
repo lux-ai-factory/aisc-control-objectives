@@ -2,7 +2,7 @@
 
 Server-rendered on purpose: each page ships with everything already in it, so
 the browser needs no API round-trip and the service stays the single source of
-truth. Autoescaping is on — objective text and card text are data, never markup.
+truth. Autoescaping is on: objective text and card text are data, never markup.
 
 The pages carry the qualification app's design tokens verbatim (the Luxembourg
 AI Factory palette in apps/qualification/src/app/globals.css) so the modules
@@ -11,6 +11,7 @@ read as one platform.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
@@ -18,6 +19,7 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from aisc_control_objectives.control_objectives import ControlObjectiveCatalogue
+from aisc_control_objectives.prioritising import band
 
 TEMPLATES = Path(__file__).resolve().parent / "templates"
 STATIC = Path(__file__).resolve().parent / "static"
@@ -26,32 +28,54 @@ STATIC = Path(__file__).resolve().parent / "static"
 #: "Paired" only explains a Control + Test row and stays neutral.
 FLAG_TAGS = ("GAP", "CONDITIONAL", "VOLUNTARY")
 
+#: The launcher on a developer's machine, when LAUNCHER_URL is not set.
+DEFAULT_LAUNCHER_URL = "http://localhost:8100/"
+
 
 @lru_cache(maxsize=1)
 def _environment() -> Environment:
-    return Environment(
+    environment = Environment(
         loader=FileSystemLoader(TEMPLATES),
         autoescape=select_autoescape(["html", "html.j2"]),
         trim_blocks=True,
         lstrip_blocks=True,
     )
+    environment.globals["launcher_url"] = launcher_url
+    return environment
 
 
-def render_home_page(
-    catalogue: ControlObjectiveCatalogue, projects_count: int, root_path: str = ""
-) -> str:
-    """The way in: what the two halves are, and how an assessment runs."""
-    return _environment().get_template("home.html.j2").render(
-        objectives_count=len(catalogue),
-        macros_count=len(catalogue.macro_requirements()),
-        projects_count=projects_count,
-        here="home",
-        root_path=root_path,
-    )
+def launcher_url() -> str:
+    """Where projects are chosen. Read from the environment, because it is
+    outside this service."""
+    return os.environ.get("LAUNCHER_URL", DEFAULT_LAUNCHER_URL).rstrip("/") + "/"
+
+
+def project_base(root_path: str, project: str) -> str:
+    """Everything about one project hangs off this prefix. Pages build their
+    links from it, so navigating never drops the project the way a query
+    string can."""
+    return f"{root_path}/p/{project}" if project else ""
+
+
+def project_page(project: str) -> str:
+    """Where the launcher shows this project and the other five steps."""
+    return f"{launcher_url()}p/{project}" if project else ""
+
+
+def _navigation(root_path: str, project: str) -> dict[str, str]:
+    """What every page's header and links are built from."""
+    return {
+        "root_path": root_path,
+        "project_base": project_base(root_path, project),
+        "project_page": project_page(project),
+    }
 
 
 def render_objectives_page(
-    catalogue: ControlObjectiveCatalogue, source_name: str = "", root_path: str = ""
+    catalogue: ControlObjectiveCatalogue,
+    source_name: str = "",
+    root_path: str = "",
+    project: str = "",
 ) -> str:
     """The full objectives page as HTML."""
     template = _environment().get_template("objectives.html.j2")
@@ -61,98 +85,181 @@ def render_objectives_page(
         source_name=source_name,
         flag_tags=FLAG_TAGS,
         here="objectives",
-        root_path=root_path,
+        **_navigation(root_path, project),
     )
-
-
-#: A project's objective sections, in the order an assessor works through them.
-TIER_SECTIONS = (
-    (1, "Tier 1", "Start here"),
-    (2, "Tier 2", "Next"),
-    (3, "Tier 3", "Later"),
-)
-
-
-@dataclass
-class _TierView:
-    key: object
-    title: str
-    subtitle: str
-    objectives: list[tuple] = field(default_factory=list)  # (objective, priority)
 
 
 @dataclass
 class _RiskView:
-    """One risk, its rating, and the objectives it drives."""
+    """One row of the risk register: a risk, its rating, and the objectives it drives."""
 
     risk: object
     rating: int
-    mapped: list = field(default_factory=list)   # (objective_id, rationale)
+    impact: int | None = None
+    likelihood: int | None = None
+    mapped: list = field(default_factory=list)   # (objective_id, rationale, source)
     findings: list = field(default_factory=list)
+    #: Why the assessor rated it so; "" when they said nothing.
+    comment: str = ""
+
+    @property
+    def band(self) -> str:
+        """Low ... Critical; "Not rated" until both parts are."""
+        return band(self.rating) if self.rating else "Not rated"
 
 
 def _risk_views(record) -> list:
-    """The risks worst-first, so the page reads as the assessor's ranking."""
+    """The risks by rating, highest first: the register reads as the assessor's ranking."""
     if not record.ontology.risks:
         return []
     run = record.mapping_run
+    severity = record.severity
     views = []
     for risk in record.ontology.risks:
         mapping = run.mappings.get(risk.id) if run else None
         views.append(
             _RiskView(
                 risk=risk,
-                rating=record.severity.of(risk.id),
-                mapped=[(item.objective_id, item.rationale) for item in (mapping.objectives if mapping else [])],
+                rating=severity.of(risk.id),
+                impact=severity.impact.get(risk.id),
+                likelihood=severity.likelihood.get(risk.id),
+                mapped=[(item.objective_id, item.rationale, item.source)
+                        for item in (mapping.objectives if mapping else [])],
                 findings=[f for f in (run.findings if run else []) if f.risk_id == risk.id],
+                comment=severity.comments.get(risk.id, ""),
             )
         )
     return sorted(views, key=lambda view: (-view.rating, view.risk.position))
 
 
 @dataclass
-class _Counts:
-    tier1: int = 0
-    tier2: int = 0
-    tier3: int = 0
+class _Chip:
+    """One objective in a risk's row of the matrix."""
+
+    objective: object
+    priority: object
+    #: "ai" or "person"
+    source: str
+    rationale: str
+    quote: str
 
 
-def render_projects_page(views: list, root_path: str = "") -> str:
-    """The systems under assessment."""
+def _chips(record, risks: list, catalogue: ControlObjectiveCatalogue, priorities: dict) -> dict:
+    """risk id -> its objectives as chips, by rank; one outside the profile (left from an older
+    mapping) is not shown."""
+    run = record.mapping_run
+    out = {}
+    for view in risks:
+        mapping = run.mappings.get(view.risk.id) if run else None
+        chips = []
+        for item in (mapping.objectives if mapping else []):
+            objective = catalogue.by_id(item.objective_id)
+            if objective is not None:
+                chips.append(_Chip(objective=objective, priority=priorities[objective.id], source=item.source,
+                                   rationale=item.rationale, quote=item.quote))
+        chips.sort(key=lambda chip: chip.priority.rank)
+        out[view.risk.id] = chips
+    return out
+
+
+def render_projects_page(views: list, latest=None, root_path: str = "", project: str = "") -> str:
+    """The systems under assessment, in one project. `latest` is the assessment of the latest card
+    version, None while that version has none."""
     return _environment().get_template("projects.html.j2").render(
-        projects=views, here="projects", root_path=root_path
+        projects=views, latest=latest, here="projects", **_navigation(root_path, project)
     )
 
 
-def render_project_page(view, catalogue: ControlObjectiveCatalogue, root_path: str = "") -> str:
-    """One project: its risks, and the tiers they produce."""
+def render_project_page(
+    view, catalogue: ControlObjectiveCatalogue, root_path: str = "", project: str = "",
+    read_only: str | None = None, profiles: list | None = None, show_error: bool = True,
+    dropped: list | None = None, confirm_replace: bool = False, card_changed: bool = False,
+    confirm_reset: bool = False,
+) -> str:
+    """One assessment as a risk and control matrix: the profile line, the risk register and the
+    matrix. `read_only` says why an older version's assessment can no longer be changed. The
+    objectives are the assessment's profile's (`view.catalogue`); `profiles` are the ones it may
+    switch to. `show_error` is whether this reader sees a model run's error text (editors and
+    owners only). `dropped` are the objectives the last profile switch dropped, to say so.
+    `confirm_replace` asks before an AI run replaces what a person mapped, saying how much.
+    `confirm_reset` asks before the key choices are removed, saying how many.
+    `card_changed`: qualification now serves another card for this version than the one it started from."""
+    catalogue = view.catalogue or catalogue
     record = view.record
     priorities = {p.objective_id: p for p in view.priorities}
-    counts = _Counts()
-    sections = {key: _TierView(key, title, subtitle) for key, title, subtitle in TIER_SECTIONS}
-
-    # Ordered by tier, then by score within a tier, then by requirement order:
-    # the page is a work list, and a work list reads top to bottom.
-    rows = []
-    for objective in catalogue:
-        priority = priorities[objective.id]
-        rows.append((objective, priority))
-        setattr(counts, f"tier{priority.tier}", getattr(counts, f"tier{priority.tier}") + 1)
-
-    rows.sort(key=lambda row: (-row[1].score, row[0].sort_key))
-    for objective, priority in rows:
-        sections[priority.tier].objectives.append((objective, priority))
-    ordered = [section for section in sections.values() if section.objectives]
-
+    risks = _risk_views(record)
+    replacing = None
+    if confirm_replace:
+        run = record.mapping_run
+        replacing = {"risks": len(record.by_hand), "objectives": sum(
+            len(run.mappings[rid].objectives) for rid in record.by_hand if run and rid in run.mappings)}
+    chips = _chips(record, risks, catalogue, priorities)
+    # what the key ticks show, once per objective: a save compares the ticks with it
+    shown = {chip.objective.id: chip.priority.key for row in chips.values() for chip in row}
     template = _environment().get_template("project.html.j2")
     return template.render(
         view=view,
         record=record,
-        sections=ordered,
-        counts=counts,
-        flag_tags=FLAG_TAGS,
-        here="projects",
-        risks=_risk_views(record),
-        objective_labels={o.id: o.sub_requirement_label for o in catalogue},
-        root_path=root_path,
+        # an assessment is not the Assessments page, so no link in the menu is marked as the one open
+        here="assessment",
+        risks=risks,
+        chips=chips,
+        shown=shown,
+        keys=[p for p in sorted(view.priorities, key=lambda p: p.rank) if p.key],
+        macros=catalogue.macro_requirements(),
+        read_only=read_only,
+        show_error=show_error,
+        profile=view.profile or {},
+        profiles=profiles or [],
+        dropped=dropped or [],
+        replacing=replacing,
+        resetting=len(record.keys) if confirm_reset else None,
+        card_changed=card_changed,
+        **_navigation(root_path, project),
     )
+
+
+# Objective sets and profiles
+
+
+def _library_context(library) -> dict:
+    from aisc_control_objectives.library import MODES, NO_BASIS
+    return {"dimensions": library.dimensions, "modes": MODES, "no_basis": NO_BASIS}
+
+
+def render_sets_page(library, root_path: str = "", project: str = "") -> str:
+    return _environment().get_template("sets.html.j2").render(
+        sets=library.sets(), here="sets", **_navigation(root_path, project))
+
+
+def render_set_page(library, set_id: str, root_path: str = "", project: str = "") -> str:
+    view = library.get_set(set_id)
+    numbers = [o.number for o, _ in view.draft_rows]
+    return _environment().get_template("set.html.j2").render(
+        view=view, next_number=(max(numbers) + 1) if numbers else 1, here="sets",
+        **_library_context(library), **_navigation(root_path, project))
+
+
+def render_profiles_page(library, root_path: str = "", project: str = "") -> str:
+    return _environment().get_template("profiles.html.j2").render(
+        profiles=library.profiles(), here="profiles", **_navigation(root_path, project))
+
+
+def render_profile_page(library, profile_id: str | None, root_path: str = "", project: str = "") -> str:
+    """One profile (None: a new one). The picker groups what can be picked by set, then dimension, each
+    set worded as the version the profile pins (a set it does not take from: its latest)."""
+    view = library.get_profile(profile_id) if profile_id else None
+    editable = view is not None and not view.profile.read_only
+    available = library.available_for(profile_id) if editable else library.available()
+    groups = []
+    for summary in library.sets():
+        if summary.latest is None:
+            continue
+        mine = ControlObjectiveCatalogue([o for o in available if o.set_code == summary.code])
+        if len(mine):
+            number = view.pins.get(summary.code, summary.latest) if view else summary.latest
+            groups.append((summary, number, [(m, m.objectives) for m in mine.macro_requirements()]))
+    return _environment().get_template("profile.html.j2").render(
+        view=view, groups=groups, builtin=[o for o in available if o.set_code == "O"],
+        newer_drops=library.newer_drops(profile_id) if editable and view.updates else [],
+        here="profiles", **_navigation(root_path, project))

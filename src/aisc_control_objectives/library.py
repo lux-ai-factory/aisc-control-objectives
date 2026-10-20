@@ -1,0 +1,659 @@
+"""Objective sets and objective profiles, in one project's database.
+
+Two levels, like the qualification app's question sets and questionnaires:
+
+- An **objective set** is where objectives are written. Its code is chosen when it is made and
+  starts every id in it: BNK1, BNK2, ... A number is never given twice; a retired objective keeps
+  its. The set is edited as a draft and published as numbered versions that never change.
+- An **objective profile** is a choice of objectives from the built-in set and from sets' published
+  versions. A change of the choice is a new version, pinned to the set versions it took; renaming it is
+  not. A newer set version is offered, and taken only by its own action, which says first what it
+  would drop. An assessment pins one profile version.
+
+The built-in set (O1 ... O50) and the Full AI Act profile are the packaged CSV: the same for every
+project, read-only, and not stored. A second built-in profile, Fairness and oversight, is a short list of
+ten and the one a first assessment starts on; it is read-only too, and
+stored in the project's database the first time an assessment takes it, because an assessment pins a
+stored profile version.
+"""
+
+from __future__ import annotations
+
+import re
+import uuid
+from dataclasses import dataclass, field
+from datetime import datetime
+
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session, sessionmaker
+
+from aisc_control_objectives.control_objectives import ControlObjectiveCatalogue
+from aisc_control_objectives.db import tables
+from aisc_control_objectives.models.control_objective import BUILTIN_CODE, ControlObjective
+
+#: The built-in profile: every objective of the built-in set.
+FULL_AI_ACT = "full-ai-act"
+FULL_AI_ACT_NAME = "Full AI Act"
+#: The built-in short profile: the human oversight (Art. 14) and fairness objectives, and the three
+#: they lean on: dataset quality (O11), instructions for use (O17), explainability (O19).
+FAIRNESS_OVERSIGHT = "fairness-oversight"
+FAIRNESS_OVERSIGHT_NAME = "Fairness and oversight"
+FAIRNESS_OVERSIGHT_PICKS = ("O1", "O2", "O3", "O4", "O11", "O17", "O19", "O21", "O22", "O23")
+#: Who a stored built-in profile reads as made by.
+BUILT_IN = "built-in"
+#: The profile a project's first assessment starts on; a later card version's keeps its previous one's.
+DEFAULT_PROFILE = FAIRNESS_OVERSIGHT
+
+CODE = re.compile(r"^[A-Z]{2,6}$")
+MODES = ("Control", "Test", "Control + Test")
+#: The fields of an objective a user writes, as the form and the API name them.
+FIELDS = ("dimension", "label", "text", "legal_basis", "assessment_mode", "target",
+          "standards_grounding", "grounding_tier_flag", "notes")
+#: What a legal basis left empty reads as.
+NO_BASIS = "None stated"
+
+
+@dataclass
+class SetSummary:
+    id: str
+    code: str
+    name: str
+    description: str
+    read_only: bool
+    #: Objectives in the latest version (the built-in set: all of them).
+    objectives: int
+    #: The latest published version; None before the first.
+    latest: int | None
+    #: The draft differs from the latest version.
+    unpublished: bool = False
+
+
+@dataclass
+class SetView:
+    set: SetSummary
+    #: Every objective of the draft, in number order, and whether it is retired.
+    draft_rows: list[tuple[ControlObjective, bool]]
+    #: (number, published_at, published_by), newest first.
+    versions: list[tuple[int, datetime, str]]
+
+    @property
+    def draft(self) -> list[ControlObjective]:
+        return [objective for objective, retired in self.draft_rows if not retired]
+
+
+@dataclass
+class ProfileSummary:
+    id: str
+    name: str
+    description: str
+    read_only: bool
+    objectives: int
+    #: The current version's number; None for the built-in profile.
+    number: int | None
+    #: A set it takes from has published a newer version.
+    update_available: bool = False
+
+
+@dataclass
+class ProfileVersion:
+    id: str | None
+    number: int | None
+    created_at: datetime | None = None
+    created_by: str = ""
+
+
+@dataclass
+class ProfileView:
+    profile: ProfileSummary
+    current: ProfileVersion
+    versions: list[ProfileVersion]
+    #: The objective ids the current version takes, in order.
+    picks: list[str]
+    #: set code -> the set version the current version took.
+    pins: dict[str, int] = field(default_factory=dict)
+    #: set code -> (pinned, latest) where a newer version is out.
+    updates: dict[str, tuple[int, int]] = field(default_factory=dict)
+
+
+def _new_id() -> str:
+    return uuid.uuid4().hex
+
+
+class Library:
+    """Sets and profiles of the project whose database `engine` is."""
+
+    def __init__(self, engine, builtin: ControlObjectiveCatalogue):
+        self._sessions = sessionmaker(engine, expire_on_commit=False)
+        self._builtin = builtin
+        self._titles = {macro.id: macro.title for macro in builtin.macro_requirements()}
+
+    # Objectives
+
+    @property
+    def dimensions(self) -> dict[str, str]:
+        """REQ1 ... REQ11 and their titles, in order."""
+        return dict(self._titles)
+
+    def _objective(self, objective_id: str, row) -> ControlObjective:
+        return ControlObjective(
+            id=objective_id,
+            macro_requirement=f"{row.dimension} {self._titles.get(row.dimension, row.dimension)}",
+            legal_basis=row.legal_basis or NO_BASIS,
+            sub_requirement_label=row.label,
+            text=row.text,
+            assessment_mode=row.assessment_mode,
+            target=row.target,
+            standards_grounding=row.standards_grounding,
+            grounding_tier_flag=row.grounding_tier_flag,
+            notes=row.notes,
+        )
+
+    def _checked(self, objective_id: str, values: dict) -> dict:
+        """The fields, cleaned and checked; ValueError naming the first that is wrong."""
+        unknown = sorted(set(values) - set(FIELDS))
+        if unknown:
+            raise ValueError(f"unknown field(s): {', '.join(unknown)}")
+        clean = {name: str(values.get(name) or "").strip() for name in FIELDS}
+        if clean["dimension"] not in self._titles:
+            raise ValueError(f"the dimension must be one of {', '.join(self._titles)}")
+        if not clean["label"]:
+            raise ValueError("a short label is required")
+        if not clean["text"]:
+            raise ValueError("the objective's text is required")
+        if clean["assessment_mode"] not in MODES:
+            raise ValueError(f"the assessment mode must be one of {', '.join(MODES)}")
+
+        class _Row:
+            pass
+
+        row = _Row()
+        row.__dict__.update(clean)
+        try:
+            self._objective(objective_id, row)
+        except ValueError as exc:
+            raise ValueError(f"{objective_id}: {exc}") from exc
+        return clean
+
+    # Sets
+
+    def _latest_version(self, session: Session, set_id: str):
+        return session.scalars(
+            select(tables.ObjectiveSetVersion).where(tables.ObjectiveSetVersion.set_id == set_id)
+            .order_by(tables.ObjectiveSetVersion.number.desc()).limit(1)).first()
+
+    def _items(self, session: Session, set_version_id: str) -> list:
+        return session.scalars(
+            select(tables.ObjectiveSetVersionItem)
+            .where(tables.ObjectiveSetVersionItem.set_version_id == set_version_id)
+            .order_by(tables.ObjectiveSetVersionItem.position)).all()
+
+    def _drafts(self, session: Session, set_id: str) -> list:
+        return session.scalars(
+            select(tables.ObjectiveDraft).where(tables.ObjectiveDraft.set_id == set_id)
+            .order_by(tables.ObjectiveDraft.number)).all()
+
+    @staticmethod
+    def _content(rows) -> list[tuple]:
+        return [(row.objective_id, *(getattr(row, name) for name in FIELDS)) for row in rows]
+
+    def _summary(self, session: Session, row) -> SetSummary:
+        latest = self._latest_version(session, row.id)
+        items = self._items(session, latest.id) if latest else []
+        active = [d for d in self._drafts(session, row.id) if not d.retired]
+        return SetSummary(
+            id=row.id, code=row.code, name=row.name, description=row.description, read_only=False,
+            objectives=len(items), latest=latest.number if latest else None,
+            unpublished=self._content(active) != self._content(items))
+
+    def _builtin_summary(self) -> SetSummary:
+        return SetSummary(id=BUILTIN_CODE, code=BUILTIN_CODE, name="AI Act control objectives",
+                          description="The built-in set, from the AI Act's essential requirements.",
+                          read_only=True, objectives=len(self._builtin), latest=1)
+
+    def sets(self) -> list[SetSummary]:
+        """The built-in set, then the project's sets by code."""
+        with self._sessions() as session:
+            rows = session.scalars(select(tables.ObjectiveSet).order_by(tables.ObjectiveSet.code)).all()
+            return [self._builtin_summary()] + [self._summary(session, row) for row in rows]
+
+    def _set_row(self, session: Session, set_id: str, *, lock: bool = False):
+        """The set's row; `lock` holds it to the end of the transaction, so writes that number
+        something in the set (an objective, a version) take turns rather than both taking one number."""
+        row = session.get(tables.ObjectiveSet, set_id, with_for_update=lock)
+        if row is None:
+            raise LookupError(f"no set {set_id}")
+        return row
+
+    # Each write takes `who_sub`, the author's Keycloak subject, kept beside the name shown, and
+    # `record`, the caller's ledger events, run inside the write's own transaction with what changed.
+
+    def create_set(self, code: str, name: str, description: str, *, who: str, who_sub: str = "",
+                   record=None) -> SetSummary:
+        code = (code or "").strip()
+        if not CODE.match(code):
+            raise ValueError("the code is 2 to 6 capital letters (A to Z), e.g. BNK")
+        if not (name or "").strip():
+            raise ValueError("a set needs a name")
+        taken = ValueError(f"the code {code} is already a set's in this project")
+        try:
+            with self._sessions.begin() as session:
+                if session.scalar(select(func.count()).select_from(tables.ObjectiveSet)
+                                  .where(tables.ObjectiveSet.code == code)):
+                    raise taken
+                row = tables.ObjectiveSet(id=_new_id(), code=code, name=name.strip(),
+                                          description=(description or "").strip(), created_by=who,
+                                          created_by_sub=who_sub)
+                session.add(row)
+                session.flush()
+                if record is not None:
+                    record(session, {"id": row.id, "code": code, "name": row.name, "description": row.description})
+                return self._summary(session, row)
+        except IntegrityError as exc:
+            # another set took the code between the check and the insert: the same answer as the check's
+            if getattr(getattr(exc.orig, "diag", None), "constraint_name", None) == "uq_objective_set_code":
+                raise taken from exc
+            raise
+
+    def get_set(self, set_id: str) -> SetView:
+        with self._sessions() as session:
+            row = self._set_row(session, set_id)
+            drafts = self._drafts(session, set_id)
+            versions = session.scalars(
+                select(tables.ObjectiveSetVersion).where(tables.ObjectiveSetVersion.set_id == set_id)
+                .order_by(tables.ObjectiveSetVersion.number.desc())).all()
+            return SetView(
+                set=self._summary(session, row),
+                draft_rows=[(self._objective(d.objective_id, d), d.retired) for d in drafts],
+                versions=[(v.number, v.published_at, v.published_by) for v in versions])
+
+    def add_objective(self, set_id: str, values: dict, record=None) -> str:
+        """A new objective in the draft; returns its id."""
+        with self._sessions.begin() as session:
+            row = self._set_row(session, set_id, lock=True)
+            objective_id = f"{row.code}{row.next_number}"
+            clean = self._checked(objective_id, values)
+            session.add(tables.ObjectiveDraft(set_id=set_id, number=row.next_number,
+                                              objective_id=objective_id, **clean))
+            row.next_number += 1
+            if record is not None:
+                record(session, {"id": objective_id, "after": clean})
+            return objective_id
+
+    def _draft_row(self, session: Session, set_id: str, objective_id: str):
+        found = session.scalars(select(tables.ObjectiveDraft).where(
+            tables.ObjectiveDraft.set_id == set_id,
+            tables.ObjectiveDraft.objective_id == objective_id)).first()
+        if found is None:
+            raise LookupError(f"no objective {objective_id} in this set")
+        return found
+
+    def edit_objective(self, set_id: str, objective_id: str, values: dict, record=None) -> None:
+        """The draft's wording; `record` gets it before and after (the draft keeps no versions)."""
+        with self._sessions.begin() as session:
+            draft = self._draft_row(session, set_id, objective_id)
+            before = {name: getattr(draft, name) for name in FIELDS}
+            for name, value in self._checked(objective_id, values).items():
+                setattr(draft, name, value)
+            after = {name: getattr(draft, name) for name in FIELDS}
+            if record is not None and before != after:
+                record(session, {"before": before, "after": after})
+
+    def retire(self, set_id: str, objective_id: str, record=None) -> None:
+        with self._sessions.begin() as session:
+            draft = self._draft_row(session, set_id, objective_id)
+            was, draft.retired = draft.retired, True
+            if record is not None and not was:
+                record(session, {})
+
+    def restore(self, set_id: str, objective_id: str, record=None) -> None:
+        with self._sessions.begin() as session:
+            draft = self._draft_row(session, set_id, objective_id)
+            was, draft.retired = draft.retired, False
+            if record is not None and was:
+                record(session, {})
+
+    def publish(self, set_id: str, *, who: str, who_sub: str = "", record=None) -> int:
+        """The draft becomes the next version; returns its number."""
+        with self._sessions.begin() as session:
+            self._set_row(session, set_id, lock=True)
+            active = [d for d in self._drafts(session, set_id) if not d.retired]
+            if not active:
+                raise ValueError("there is no objective to publish: add one, or restore a retired one")
+            latest = self._latest_version(session, set_id)
+            if latest is not None and self._content(active) == self._content(self._items(session, latest.id)):
+                raise ValueError(f"nothing changed since version {latest.number}")
+            version = tables.ObjectiveSetVersion(id=_new_id(), set_id=set_id,
+                                                 number=(latest.number if latest else 0) + 1, published_by=who,
+                                                 published_by_sub=who_sub)
+            session.add(version)
+            session.flush()
+            for position, draft in enumerate(active, 1):
+                session.add(tables.ObjectiveSetVersionItem(
+                    set_version_id=version.id, objective_id=draft.objective_id, position=position,
+                    **{name: getattr(draft, name) for name in FIELDS}))
+            if record is not None:
+                record(session, {"number": version.number, "items": [
+                    {"id": d.objective_id, **{name: getattr(d, name) for name in FIELDS}} for d in active]})
+            return version.number
+
+    def set_version(self, set_id: str, number: int) -> list[ControlObjective]:
+        with self._sessions() as session:
+            version = session.scalars(select(tables.ObjectiveSetVersion).where(
+                tables.ObjectiveSetVersion.set_id == set_id,
+                tables.ObjectiveSetVersion.number == number)).first()
+            if version is None:
+                raise LookupError(f"no version {number} of this set")
+            return [self._objective(item.objective_id, item) for item in self._items(session, version.id)]
+
+    def delete_set(self, set_id: str, record=None) -> None:
+        """An unpublished set and its drafts; `record` gets what they were (only the ledger keeps them)."""
+        with self._sessions.begin() as session:
+            row = self._set_row(session, set_id)
+            if self._latest_version(session, set_id) is not None:
+                raise ValueError("a published set cannot be deleted: profiles and assessments may rest on it")
+            held = {"code": row.code, "name": row.name, "description": row.description, "drafts": [
+                {"id": d.objective_id, "retired": d.retired, **{n: getattr(d, n) for n in FIELDS}}
+                for d in self._drafts(session, set_id)]}
+            session.delete(row)
+            if record is not None:
+                record(session, held)
+
+    def available(self, session: Session | None = None) -> ControlObjectiveCatalogue:
+        """What a profile can pick: the built-in set and every set's latest published version. Read in
+        `session` when the caller has one open: a second connection inside its transaction could wait
+        for the pool (two connections a project) behind another save doing the same."""
+        if session is None:
+            with self._sessions() as own:
+                return self.available(own)
+        picked = list(self._builtin)
+        for row in session.scalars(select(tables.ObjectiveSet)).all():
+            latest = self._latest_version(session, row.id)
+            if latest is not None:
+                picked += [self._objective(i.objective_id, i) for i in self._items(session, latest.id)]
+        return ControlObjectiveCatalogue(picked)
+
+    def available_for(self, profile_id: str, session: Session | None = None) -> ControlObjectiveCatalogue:
+        """What a profile can pick: the built-in set, the set versions it pins, worded as they are, and
+        the latest version of every set it does not take from yet."""
+        if session is None:
+            with self._sessions() as own:
+                return self.available_for(profile_id, own)
+        versions = self._profile_versions(session, profile_id)
+        pins = self._pins(self._profile_items(session, versions[0].id)) if versions else {}
+        return self._worded(session, pins)
+
+    def _worded(self, session: Session, pins: dict[str, int]) -> ControlObjectiveCatalogue:
+        """The built-in set and each set at the version `pins` names for it, else its latest."""
+        picked = list(self._builtin)
+        for row in session.scalars(select(tables.ObjectiveSet)).all():
+            version = self._set_version(session, row.id, pins[row.code]) if row.code in pins \
+                else self._latest_version(session, row.id)
+            if version is not None:
+                picked += [self._objective(i.objective_id, i) for i in self._items(session, version.id)]
+        return ControlObjectiveCatalogue(picked)
+
+    def _set_version(self, session: Session, set_id: str, number: int):
+        return session.scalars(select(tables.ObjectiveSetVersion).where(
+            tables.ObjectiveSetVersion.set_id == set_id, tables.ObjectiveSetVersion.number == number)).first()
+
+    @staticmethod
+    def _pins(items) -> dict[str, int]:
+        return {i.set_code: i.set_version_number for i in items if i.set_code != BUILTIN_CODE}
+
+    def known_ids(self) -> set[str]:
+        """Every objective id an assessment can have held: the built-in set's and those of every
+        published version of a set, a retired one included."""
+        with self._sessions() as session:
+            published = session.scalars(select(tables.ObjectiveSetVersionItem.objective_id).distinct()).all()
+        return {o.id for o in self._builtin} | set(published)
+
+    def _latest_by_code(self, session: Session) -> dict[str, int]:
+        out = {}
+        for row in session.scalars(select(tables.ObjectiveSet)).all():
+            latest = self._latest_version(session, row.id)
+            if latest is not None:
+                out[row.code] = latest.number
+        return out
+
+    # Profiles
+
+    def _profile_versions(self, session: Session, profile_id: str) -> list:
+        return session.scalars(
+            select(tables.ObjectiveProfileVersion).where(tables.ObjectiveProfileVersion.profile_id == profile_id)
+            .order_by(tables.ObjectiveProfileVersion.number.desc())).all()
+
+    def _profile_items(self, session: Session, version_id: str) -> list:
+        return session.scalars(
+            select(tables.ObjectiveProfileVersionItem)
+            .where(tables.ObjectiveProfileVersionItem.profile_version_id == version_id)
+            .order_by(tables.ObjectiveProfileVersionItem.position)).all()
+
+    def _builtin_profile(self) -> ProfileSummary:
+        return ProfileSummary(id=FULL_AI_ACT, name=FULL_AI_ACT_NAME,
+                              description="Every objective of the built-in AI Act set.",
+                              read_only=True, objectives=len(self._builtin), number=None)
+
+    def _short_profile(self) -> ProfileSummary:
+        return ProfileSummary(id=FAIRNESS_OVERSIGHT, name=FAIRNESS_OVERSIGHT_NAME,
+                              description="Ten objectives for a short assessment: human oversight, fairness, and the data quality, instructions and explanations they rely on.",
+                              read_only=True, objectives=len(FAIRNESS_OVERSIGHT_PICKS), number=None)
+
+    def _updates(self, items, latest: dict[str, int]) -> dict[str, tuple[int, int]]:
+        pins = {i.set_code: i.set_version_number for i in items if i.set_code != BUILTIN_CODE}
+        return {code: (pinned, latest[code]) for code, pinned in pins.items()
+                if code in latest and latest[code] > pinned}
+
+    def profiles(self) -> list[ProfileSummary]:
+        """The built-in profiles, Full AI Act first, then the project's by name."""
+        with self._sessions() as session:
+            latest = self._latest_by_code(session)
+            out = [self._builtin_profile(), self._short_profile()]
+            for row in session.scalars(select(tables.ObjectiveProfile)
+                                       .where(tables.ObjectiveProfile.id != FAIRNESS_OVERSIGHT)
+                                       .order_by(tables.ObjectiveProfile.name)).all():
+                current = self._profile_versions(session, row.id)[0]
+                items = self._profile_items(session, current.id)
+                out.append(ProfileSummary(id=row.id, name=row.name, description=row.description, read_only=False,
+                                          objectives=len(items), number=current.number,
+                                          update_available=bool(self._updates(items, latest))))
+            return out
+
+    def get_profile(self, profile_id: str) -> ProfileView:
+        if profile_id == FULL_AI_ACT:
+            return ProfileView(profile=self._builtin_profile(), current=ProfileVersion(None, None), versions=[],
+                               picks=[o.id for o in self._builtin])
+        if profile_id == FAIRNESS_OVERSIGHT:
+            return ProfileView(profile=self._short_profile(), current=ProfileVersion(None, None), versions=[],
+                               picks=list(FAIRNESS_OVERSIGHT_PICKS))
+        with self._sessions() as session:
+            row = session.get(tables.ObjectiveProfile, profile_id)
+            if row is None:
+                raise LookupError(f"no profile {profile_id}")
+            versions = self._profile_versions(session, profile_id)
+            items = self._profile_items(session, versions[0].id)
+            latest = self._latest_by_code(session)
+            updates = self._updates(items, latest)
+            as_version = [ProfileVersion(v.id, v.number, v.created_at, v.created_by) for v in versions]
+            return ProfileView(
+                profile=ProfileSummary(id=row.id, name=row.name, description=row.description, read_only=False,
+                                       objectives=len(items), number=versions[0].number,
+                                       update_available=bool(updates)),
+                current=as_version[0], versions=as_version, picks=[i.objective_id for i in items],
+                pins={i.set_code: i.set_version_number for i in items if i.set_code != BUILTIN_CODE},
+                updates=updates)
+
+    def _add_version(self, session: Session, profile_id: str, number: int, picks: list[str], who: str,
+                     who_sub: str = "", pins: dict[str, int] | None = None) -> str:
+        """A new version taking `picks`, each set at the version `pins` names for it, else its latest."""
+        pins = pins or {}
+        available = self._worded(session, pins)
+        latest = self._latest_by_code(session)
+        version = tables.ObjectiveProfileVersion(id=_new_id(), profile_id=profile_id, number=number, created_by=who,
+                                                 created_by_sub=who_sub)
+        session.add(version)
+        session.flush()
+        chosen = sorted((available.by_id(oid) for oid in dict.fromkeys(picks)), key=lambda o: o.sort_key)
+        for position, objective in enumerate(chosen, 1):
+            code = objective.set_code
+            session.add(tables.ObjectiveProfileVersionItem(
+                profile_version_id=version.id, objective_id=objective.id, position=position, set_code=code,
+                set_version_number=None if code == BUILTIN_CODE else pins.get(code, latest[code])))
+        return version.id
+
+    def _check_picks(self, picks: list[str], available: ControlObjectiveCatalogue | None = None) -> None:
+        if not picks:
+            raise ValueError("a profile takes at least one objective")
+        available = available if available is not None else self.available()
+        missing = [oid for oid in picks if available.by_id(oid) is None]
+        if missing:
+            raise ValueError(f"cannot be picked (not in the built-in set or a published set): {', '.join(missing)}")
+
+    def create_profile(self, name: str, description: str, picks: list[str], *, who: str, who_sub: str = "",
+                       record=None) -> ProfileSummary:
+        if not (name or "").strip():
+            raise ValueError("a profile needs a name")
+        picks = list(dict.fromkeys(picks))
+        self._check_picks(picks)
+        with self._sessions.begin() as session:
+            row = tables.ObjectiveProfile(id=_new_id(), name=name.strip(),
+                                          description=(description or "").strip(), created_by=who,
+                                          created_by_sub=who_sub)
+            session.add(row)
+            session.flush()
+            version_id = self._add_version(session, row.id, 1, picks, who, who_sub)
+            if record is not None:
+                record(session, {"id": row.id, "version_id": version_id, "name": row.name,
+                                 "description": row.description, "picks": picks})
+        return self.get_profile(row.id).profile
+
+    def save_profile(self, profile_id: str, picks: list[str], *, who: str, name: str | None = None,
+                     description: str | None = None, who_sub: str = "",
+                     record=None) -> tuple[ProfileVersion, list[str]]:
+        """The name, the description and the picks. Only a change of the picks is a new version, and it
+        keeps the set versions the profile pins (a set it starts taking from: its latest). `record` gets
+        the name and description before and after, and the new version's number, None when there is
+        none. The list returned is what was dropped, which a save never does any more: the newer
+        wording, which can drop, is `take_newer`."""
+        current = self.get_profile(profile_id)
+        if current.profile.read_only:
+            raise ValueError("the built-in profile cannot be changed: make a profile of your own")
+        picks = list(dict.fromkeys(picks))
+        self._check_picks(picks, self.available_for(profile_id))
+        with self._sessions.begin() as session:
+            # locked, and its last number read under the lock: two saves at once take turns, each its own
+            # number
+            row = session.get(tables.ObjectiveProfile, profile_id, with_for_update=True)
+            last = self._profile_versions(session, profile_id)[0]
+            named_before = {"name": row.name, "description": row.description}
+            if name is not None:
+                if not name.strip():
+                    raise ValueError("a profile needs a name")
+                row.name = name.strip()
+            if description is not None:
+                row.description = description.strip()
+            named_after = {"name": row.name, "description": row.description}
+            number = None
+            if set(picks) != {i.objective_id for i in self._profile_items(session, last.id)}:
+                number = last.number + 1
+                self._add_version(session, profile_id, number, picks, who, who_sub,
+                                  pins=self._pins(self._profile_items(session, last.id)))
+            if record is not None and (number is not None or named_after != named_before):
+                record(session, {"number": number, "picks": picks, "dropped": [], "before": named_before,
+                                 "after": named_after})
+        return self.get_profile(profile_id).current, []
+
+    def newer_drops(self, profile_id: str) -> list[str]:
+        """What taking the newer set wording would drop: objectives the newer versions retired."""
+        view = self.get_profile(profile_id)
+        latest = self.available()
+        return [oid for oid in view.picks
+                if oid.rstrip("0123456789") in view.updates and latest.by_id(oid) is None]
+
+    def take_newer(self, profile_id: str, *, who: str, who_sub: str = "",
+                   record=None) -> tuple[ProfileVersion, list[str]]:
+        """A new version on the sets' latest versions, with the same picks less what they retired;
+        returns it and what was dropped. `record` gets what save_profile's gets."""
+        view = self.get_profile(profile_id)
+        if view.profile.read_only or not view.updates:
+            raise ValueError("there is no newer set version to take")
+        dropped = self.newer_drops(profile_id)
+        picks = [oid for oid in view.picks if oid not in dropped]
+        self._check_picks(picks)
+        with self._sessions.begin() as session:
+            row = session.get(tables.ObjectiveProfile, profile_id, with_for_update=True)
+            number = self._profile_versions(session, profile_id)[0].number + 1
+            self._add_version(session, profile_id, number, picks, who, who_sub)
+            named = {"name": row.name, "description": row.description}
+            if record is not None:
+                record(session, {"number": number, "picks": picks, "dropped": dropped, "before": named,
+                                 "after": named})
+        return self.get_profile(profile_id).current, dropped
+
+    def pinned_version(self, profile_id: str) -> str | None:
+        """The profile version an assessment that takes this profile pins: None for Full AI Act, the
+        current version of the project's own, and the stored version of the short built-in one,
+        written the first time it is taken. Raises LookupError for an unknown profile."""
+        if profile_id == FULL_AI_ACT:
+            return None
+        if profile_id != FAIRNESS_OVERSIGHT:
+            return self.get_profile(profile_id).current.id
+        for _ in range(2):
+            stored = self._stored_short_version()
+            if stored is not None:
+                return stored
+            try:
+                with self._sessions.begin() as session:
+                    session.add(tables.ObjectiveProfile(id=FAIRNESS_OVERSIGHT, name=FAIRNESS_OVERSIGHT_NAME,
+                                                        description=self._short_profile().description,
+                                                        created_by=BUILT_IN))
+                    session.flush()
+                    return self._add_version(session, FAIRNESS_OVERSIGHT, 1, list(FAIRNESS_OVERSIGHT_PICKS),
+                                             BUILT_IN)
+            except IntegrityError:
+                continue    # another request stored it first: take that one
+        raise RuntimeError("the short built-in profile could not be stored")
+
+    def _stored_short_version(self) -> str | None:
+        with self._sessions() as session:
+            versions = self._profile_versions(session, FAIRNESS_OVERSIGHT)
+            return versions[0].id if versions else None
+
+    def catalogue_of(self, profile_version_id: str | None) -> ControlObjectiveCatalogue:
+        """The objectives an assessment on this profile version works with; None is Full AI Act."""
+        if profile_version_id is None:
+            return self._builtin
+        with self._sessions() as session:
+            version = session.get(tables.ObjectiveProfileVersion, profile_version_id)
+            if version is None:
+                raise LookupError(f"no profile version {profile_version_id}")
+            sets = {row.code: row.id for row in session.scalars(select(tables.ObjectiveSet)).all()}
+            out: list[ControlObjective] = []
+            for item in self._profile_items(session, profile_version_id):
+                if item.set_code == BUILTIN_CODE:
+                    found = self._builtin.by_id(item.objective_id)
+                    if found is not None:
+                        out.append(found)
+                    continue
+                set_version = session.scalars(select(tables.ObjectiveSetVersion).where(
+                    tables.ObjectiveSetVersion.set_id == sets.get(item.set_code),
+                    tables.ObjectiveSetVersion.number == item.set_version_number)).first()
+                worded = session.get(tables.ObjectiveSetVersionItem, (set_version.id, item.objective_id))
+                out.append(self._objective(item.objective_id, worded))
+            return ControlObjectiveCatalogue(out, digest=f"profile:{profile_version_id}")
+
+    def version_info(self, profile_version_id: str | None) -> dict:
+        """{"id", "version", "label", "update"} of the profile version an assessment pins; "update" is
+        {"from", "to"} when the profile has a newer version."""
+        if profile_version_id is None:
+            return {"id": FULL_AI_ACT, "version": None, "label": FULL_AI_ACT_NAME, "update": None}
+        with self._sessions() as session:
+            version = session.get(tables.ObjectiveProfileVersion, profile_version_id)
+            profile = session.get(tables.ObjectiveProfile, version.profile_id)
+            if profile.id == FAIRNESS_OVERSIGHT:
+                return {"id": FAIRNESS_OVERSIGHT, "version": None, "label": FAIRNESS_OVERSIGHT_NAME,
+                        "update": None}
+            newest = self._profile_versions(session, profile.id)[0].number
+            return {"id": profile.id, "version": version.number,
+                    "label": f"{profile.name}, version {version.number}",
+                    "update": {"from": version.number, "to": newest} if newest > version.number else None}

@@ -24,7 +24,11 @@ AssessmentMode = Literal["Control", "Test", "Control + Test"]
 #: What governs a legal basis. `ai_act` and `gdpr` are read off the basis
 #: text; `conditional` and `voluntary` are the author's note tags and cover
 #: the whole row.
-Regime = Literal["ai_act", "gdpr", "conditional", "voluntary"]
+Regime = Literal["ai_act", "gdpr", "conditional", "voluntary", "other"]
+
+#: The built-in AI Act set's code: its objectives are O1 ... O50. A set a user makes has a code of
+#: 2 to 6 capital letters, so no id of theirs can be read as a built-in one.
+BUILTIN_CODE = "O"
 
 #: A CONDITIONAL note must name its condition in words this list knows. A note
 #: naming none of them fails at load rather than passing as unconditional.
@@ -38,8 +42,10 @@ class ControlObjective(BaseModel):
     #: are called out on the pages; "Paired" only explains a Control + Test row.
     NOTE_TAGS: ClassVar[tuple[str, ...]] = ("GAP", "CONDITIONAL", "VOLUNTARY", "Paired")
 
-    id: str = Field(pattern=r"^R\d+\.\d+$")
-    macro_requirement: str = Field(pattern=r"^R\d+\s+\S")
+    #: The set's code and the objective's number in it: "O1" ... "O50" in the built-in set, "BNK3" in
+    #: a set a user made. The earlier ids (R1.1 ...) map to these in data/objective_id_renames.csv.
+    id: str = Field(pattern=r"^(O|[A-Z]{2,6})[1-9]\d*$")
+    macro_requirement: str = Field(pattern=r"^REQ\d+\s+\S")
     legal_basis: str = Field(min_length=1)
     sub_requirement_label: str
     #: The objective itself (CSV column `Control_Objective`).
@@ -53,22 +59,30 @@ class ControlObjective(BaseModel):
 
     @model_validator(mode="after")
     def _derivations_hold(self) -> ControlObjective:
-        if self.id.split(".", 1)[0] != self.macro_id:
-            raise ValueError(f"id {self.id!r} is not under macro requirement {self.macro_id!r}")
         _ = self.regimes  # evaluated for its side effect: raises on a basis it cannot place
         return self
 
     @computed_field
     @property
     def macro_id(self) -> str:
-        """"R1" from "R1 Human Agency and Oversight"."""
+        """"REQ1" from "REQ1 Human Agency and Oversight"."""
         return self.macro_requirement.split(None, 1)[0]
 
     @computed_field
     @property
     def macro_title(self) -> str:
-        """"Human Agency and Oversight" from "R1 Human Agency and Oversight"."""
+        """"Human Agency and Oversight" from "REQ1 Human Agency and Oversight"."""
         return self.macro_requirement.split(None, 1)[1]
+
+    @computed_field
+    @property
+    def set_code(self) -> str:
+        """"O" for the built-in set, "BNK" for BNK3."""
+        return self.id.rstrip("0123456789")
+
+    @property
+    def number(self) -> int:
+        return int(self.id[len(self.set_code):])
 
     @computed_field
     @property
@@ -125,19 +139,22 @@ class ControlObjective(BaseModel):
             elif regimes and basis.startswith(("Art", "Annex", "Recital")):
                 # "AI Act Art. 11; Annex IV": the second cites the same instrument.
                 regimes.append(regimes[-1])
+            elif self.set_code != BUILTIN_CODE:
+                # a user's set may rest on a policy or a standard of its own
+                regimes.append("other")
             else:
                 raise ValueError(f"legal basis {basis!r} fits no regime")
         return regimes
 
     @property
-    def sort_key(self) -> tuple[int, int]:
-        """Requirement order, so R9.9 precedes R10.1 (string order would not)."""
-        macro, _, sub = self.id[1:].partition(".")
-        return (int(macro), int(sub))
+    def sort_key(self) -> tuple[int, str, int]:
+        """The built-in set first, then each set by its code; by number within a set, so O9
+        precedes O10 (string order would not)."""
+        return (0 if self.set_code == BUILTIN_CODE else 1, self.set_code, self.number)
 
 
 class MacroRequirement(BaseModel):
-    """A macro requirement (R1 ... R11) with the objectives under it."""
+    """A macro requirement (REQ1 ... REQ11) with the objectives under it."""
 
     id: str
     title: str

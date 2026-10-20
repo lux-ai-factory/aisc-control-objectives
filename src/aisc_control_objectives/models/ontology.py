@@ -49,11 +49,7 @@ def _refs(node: dict, predicate: str) -> list[str]:
 
 
 class _Graph:
-    """The node table, with the four questions this parser asks of it.
-
-    A tiny class rather than five closures inside the parser: the traversal
-    reads as a walk over the graph once the graph can answer for itself.
-    """
+    """The node table, with the lookups the parser makes on it."""
 
     def __init__(self, nodes: list):
         self.by_id: dict[str, dict] = {

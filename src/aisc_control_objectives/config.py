@@ -3,10 +3,6 @@
 Every operator-owned knob lives here. Precedence: environment > TOML file >
 defaults, resolved once at startup by `RunConfig.load`. The model is named the
 way BAF names it, because BAF is what reaches the model.
-
-The knobs of the retired recommendation pipeline (review rounds, guards, the
-high-risk floor) are gone with it; what is left is the model the service talks
-to. New knobs land here as the card-to-objectives mapping is specified.
 """
 
 from __future__ import annotations
@@ -40,8 +36,7 @@ class RunConfig(BaseModel):
 
     @classmethod
     def load(cls, env: Mapping[str, str], path: Path | str | None) -> RunConfig:
-        """Effective config: defaults < TOML file < environment. Env vars are an
-        escape hatch over the committed config file."""
+        """Effective config: defaults < TOML file < environment."""
         data: dict[str, Any] = {}
         if path is not None:
             file_path = Path(path)

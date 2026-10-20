@@ -4,9 +4,6 @@ Markdown rather than Python strings, so how a step behaves can be changed
 without touching code, which is the same reason the qualification app's filler
 keeps its skills as files. Frontmatter (BAF's format: name, description) is
 stripped, because it addresses the reader, not the model.
-
-Its own module because both model-facing steps need it, and having one of them
-import it from the other made a sibling look like a dependency of its twin.
 """
 
 from __future__ import annotations

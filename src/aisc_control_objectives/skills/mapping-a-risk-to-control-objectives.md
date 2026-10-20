@@ -56,7 +56,7 @@ A single JSON object, nothing before it and nothing after it:
   "risk_id": "risk2",
   "objectives": [
     {
-      "objective_id": "R1.1",
+      "objective_id": "O1",
       "quote": "<a literal span of the risk chain>",
       "rationale": "<one sentence: what about this risk this objective answers>"
     }

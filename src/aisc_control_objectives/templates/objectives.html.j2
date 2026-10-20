@@ -2,14 +2,14 @@
 
 {% block content %}
   <div class="co-header">
-    <h1>Control Objectives</h1>
+    <h1>Objective catalogue</h1>
     <p>The requirements an AI system has to satisfy under the EU AI Act, as {{ total }} control
-       objectives across {{ macros | length }} macro requirements.</p>
+       objectives across {{ macros | length }} dimensions.</p>
   </div>
 
   <div class="co-stats">
     <div class="co-stat"><div class="v">{{ total }}</div><div class="k">Objectives</div></div>
-    <div class="co-stat"><div class="v">{{ macros | length }}</div><div class="k">Macro requirements</div></div>
+    <div class="co-stat"><div class="v">{{ macros | length }}</div><div class="k">Dimensions</div></div>
   </div>
 
   <div class="qf-section">

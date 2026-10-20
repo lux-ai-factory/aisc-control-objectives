@@ -1,4 +1,4 @@
-"""Composition root + runnable entrypoint.
+"""Composition root and entry point (`python -m aisc_control_objectives.server`).
 
 Loads the control objectives (bundled CSV, no network and no database) and
 serves them, and the projects assessed against them. The model maps a system's
@@ -7,14 +7,21 @@ aisc_control_objectives.llm): BAF_LLM_PROVIDER and BAF_LLM_MODEL name it, and th
 variable carries the key.
 
 Env:
+  DATABASE_URL             the platform database: who is in which project, nothing else
+  PROJECT_DATABASE_URL     a project's own database, `{database}` where project_<hex> goes
+                           (unset: DATABASE_URL with its database replaced by {database})
   CONTROL_OBJECTIVES_CONFIG_FILE       path to the TOML config (default <repo>/control-objectives.toml)
   CONTROL_OBJECTIVES_FILE   override the bundled objectives CSV
   BAF_LLM_PROVIDER / BAF_LLM_MODEL        which model, BAF's names
   BAF_LLM_BASE_URL         endpoint for the ollama / compatible providers
-  MISTRAL_API_KEY / OPENAI_API_KEY / …    the provider's own key
+  MISTRAL_API_KEY / OPENAI_API_KEY / ...  the provider's own key
+  PLATFORM_URL / PLATFORM_INTERNAL_TOKEN  where to ask for a project's own model choice
+                                          (both set: each map uses the model its project
+                                          chose; no choice: the model above)
+  LLM_RESOLVE_TIMEOUT      seconds the platform may take to answer (default 5)
   CONTROL_OBJECTIVES_PORT              port to serve on (default 8090)
   CONTROL_OBJECTIVES_ROOT_PATH         sub-path when behind a reverse proxy
-  CONTROL_OBJECTIVES_CORS_ORIGINS      comma-separated allowlist (default permissive)
+  CONTROL_OBJECTIVES_CORS_ORIGINS      comma-separated allowlist (default none: same-origin)
 
 A `.env` file next to the repo root is loaded if present (simple KEY=VALUE
 lines), so API keys can live in a file instead of the shell environment.
@@ -26,13 +33,14 @@ import os
 from collections.abc import Mapping
 from pathlib import Path
 
+from aisc_control_objectives import baf_llm
 from aisc_control_objectives.api.app import create_app
 from aisc_control_objectives.config import RunConfig
 from aisc_control_objectives.control_objectives import default_csv_path, load_control_objectives
-from aisc_control_objectives.db.repository import ProjectRepository
+from aisc_control_objectives.projectdb import ProjectDatabases
 from aisc_control_objectives.projects import Projects
 from aisc_control_objectives.risk_mapping import RiskMapper
-from aisc_control_objectives.settings import database_url
+from aisc_control_objectives.settings import database_url, project_database_url
 
 
 def _repo_root() -> Path:
@@ -52,9 +60,9 @@ def _load_dotenv() -> None:
     """Minimal .env loader (no dependency). Existing env vars win.
 
     Accepts `KEY=value`, an optional `export ` prefix, quoted values, and a
-    trailing `# comment` on an unquoted value. Anything else is not supported:
-    a key that looks set and is not surfaces only as an opaque provider error
-    on a card page, so the accepted shapes are pinned by tests.
+    trailing `# comment` on an unquoted value. Nothing else is parsed: a key
+    that looks set but is not shows up only as an opaque provider error later,
+    so tests pin the accepted shapes.
     """
     env_path = _repo_root() / ".env"
     if not env_path.is_file():
@@ -75,16 +83,23 @@ def _load_dotenv() -> None:
         os.environ.setdefault(key.strip(), value)
 
 
+def reproducible(complete):
+    """A completer that asks the model for temperature 0.0: the same card and catalogue give the same
+    mapping. (The shared completer sends no temperature unless asked, since some models refuse any.)"""
+    def mapping(system: str, user: str) -> str:
+        return complete(system, user, temperature=0.0)
+    return mapping
+
+
 def _build_completer(config: RunConfig):
     """The one way to a model: a BAF wrapper, per aisc_control_objectives.llm.
 
-    A provider that is missing its key raises here, at startup, where the
-    message says which variable; the alternative is every upload failing with
-    a provider error on the card page.
+    A provider that is missing its key raises here, at startup, with a message
+    that names the variable, rather than on every mapping run later.
     """
     from aisc_control_objectives.llm import build_llm, completer
 
-    return completer(build_llm(config.provider, config.model))
+    return reproducible(completer(build_llm(config.provider, config.model)))
 
 
 def build_app():
@@ -101,12 +116,25 @@ def build_app():
     cors_env = os.environ.get("CONTROL_OBJECTIVES_CORS_ORIGINS", "").strip()
     cors_origins = [o.strip() for o in cors_env.split(",") if o.strip()] or None
     complete = _build_completer(config)
-    repository = ProjectRepository(database_url(), objectives_digest=objectives.digest)
+    startup = baf_llm.config_from_env(os.environ, config.provider, config.model)
+
+    def mapper_for(pid: str):
+        """The mapper for one project: the model it chose on the platform, else the
+        startup one. Asked at every map, so a changed choice applies to the next."""
+        chosen = baf_llm.config_for(pid, "risk_mapper", fallback=startup)
+        llm = baf_llm.build_llm(chosen, agent_name="control_objectives_llm")
+        return (RiskMapper(complete=reproducible(baf_llm.completer(llm)), catalogue=objectives),
+                f"{chosen.provider}/{chosen.model}")
+
+    # Each project's assessments are in its own database, opened per request
+    # by the gate after membership is decided; nothing connects here.
+    databases = ProjectDatabases(database_url(), project_database_url())
     projects = Projects(
-        repository=repository,
+        repository=None,
         catalogue=objectives,
         mapper=RiskMapper(complete=complete, catalogue=objectives),
         model=f"{config.provider}/{config.model}",
+        mapper_for=mapper_for,
     )
     return create_app(
         objectives,
@@ -115,6 +143,10 @@ def build_app():
         root_path=os.environ.get("CONTROL_OBJECTIVES_ROOT_PATH", ""),
         cors_origins=cors_origins,
         source_name=source_name,
+        # Who is in a project, read from the platform database, and the door
+        # to each project's own database.
+        engine=databases.platform,
+        databases=databases,
     )
 
 
