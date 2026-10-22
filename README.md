@@ -101,7 +101,7 @@ Run it from the aisc folder. It makes the secrets if they are missing (the servi
 
 Then open http://localhost:8100, sign in, open a project and choose step 2. To rebuild only this
 service after a change, run `uv run scripts/aisc.py secrets` in the aisc folder. It prints this install's
-exact compose command. Add `up -d --build control-objectives` to it.
+exact compose command, which ends in `up -d`. Append `--build control-objectives` to it.
 
 The compose file defaults the model to `ollama` / `mistral:latest` on the host
 (`host.docker.internal:11434`), which needs no key. For a hosted model, set
