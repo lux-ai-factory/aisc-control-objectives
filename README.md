@@ -93,13 +93,15 @@ at `/control-objectives` behind the gateway.
 From the root of the aisc repo (the repo this one is a submodule of, at `apps/control-objectives`):
 
 ```bash
-./scripts/secrets.sh     # once: writes env.secrets and env.runtime (the service needs PLATFORM_RISK_MAPPER_TOKEN)
-docker compose -p aisc --env-file env.runtime -f docker-compose.plugin_downloader.yml \
-  -f docker-compose-infra.development.yml -f docker-compose.development.yml up -d --build
+uv run scripts/aisc.py start
 ```
 
+Run it from the aisc folder. It makes the secrets if they are missing (the service needs
+`PLATFORM_RISK_MAPPER_TOKEN`), builds and starts the stack, and keeps port 443 answering on an https install.
+
 Then open http://localhost:8100, sign in, open a project and choose step 2. To rebuild only this
-service after a change, add `control-objectives` at the end of the same `up -d --build` command.
+service after a change, run `uv run scripts/aisc.py secrets` in the aisc folder. It prints this install's
+exact compose command. Add `up -d --build control-objectives` to it.
 
 The compose file defaults the model to `ollama` / `mistral:latest` on the host
 (`host.docker.internal:11434`), which needs no key. For a hosted model, set
