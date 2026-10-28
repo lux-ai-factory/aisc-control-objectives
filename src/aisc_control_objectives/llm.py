@@ -37,7 +37,6 @@ from aisc_control_objectives import baf_llm
 from aisc_control_objectives.baf_llm import (  # noqa: F401  re-exported for callers of this module
     DEFAULT_MODEL,
     DEFAULT_PROVIDER,
-    OPTIONAL_KEY,
     PROVIDERS,
     Completer,
     completer,

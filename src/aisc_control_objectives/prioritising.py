@@ -89,9 +89,6 @@ class Severity(BaseModel):
             return UNRATED
         return self.impact[risk_id] * self.likelihood[risk_id]
 
-    def rated(self, risk_id: str) -> bool:
-        return risk_id in self.impact or risk_id in self.likelihood
-
     @property
     def risk_ids(self) -> set[str]:
         return set(self.impact) | set(self.likelihood) | set(self.comments)

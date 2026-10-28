@@ -137,7 +137,6 @@ class Opened:
     """A project database the caller was let into."""
 
     pid: str
-    database: str
     engine: Engine
     access: Admitted
 
@@ -182,7 +181,7 @@ class ProjectDatabases:
         admitted = admit(project, caller, "POST" if write else "GET",
                          connect=lambda: closing(self.platform.raw_connection()))
         name = database_name(admitted.pid)
-        return Opened(pid=admitted.pid, database=name, engine=self._engine_for(name), access=admitted)
+        return Opened(pid=admitted.pid, engine=self._engine_for(name), access=admitted)
 
     def _engine_for(self, name: str) -> Engine:
         with self._lock:
