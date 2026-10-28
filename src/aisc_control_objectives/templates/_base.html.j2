@@ -188,7 +188,6 @@
               font-family: "IBM Plex Mono", ui-monospace, monospace; }
   .co-obj-head h3 { font-size: 15px; margin: 0; flex: 1; min-width: 220px; }
   .co-obj p.co-text { margin: 0 0 12px; font-size: 15px; line-height: 1.55; }
-  .co-obj--out h3, .co-obj--out .co-text { color: var(--muted); }
 
   .qf-tag {
     display: inline-block; background: var(--panel-2); border: 1px solid var(--border);
@@ -196,14 +195,8 @@
     font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
   }
   .qf-tag--in { background: var(--info-soft); border-color: #99d6ff; color: #00337a; }
-  .qf-tag--voluntary { background: var(--pink-soft); border-color: #f5b8cd; color: #8a1242; }
   .qf-tag--pending { background: #fff7d6; border-color: #f2df9a; color: #6b5300; }
   .qf-tag--tier1 { background: var(--primary); border-color: var(--primary); color: #ffffff; }
-  .qf-tag--tier2 { background: var(--info-soft); border-color: #99d6ff; color: #00337a; }
-  .qf-tag--tier3 { background: var(--panel-2); border-color: var(--border); color: var(--muted); }
-  .co-tier--1 { border-left: 4px solid var(--primary); }
-  .co-tier--2 { border-left: 4px solid var(--info-soft); }
-  .co-tier--no .co-obj, .co-tier--undetermined .co-obj { opacity: 0.75; }
   /* Step 2: the risk register and the risk and control matrix */
   .co-register, .co-matrix { width: 100%; border-collapse: collapse; font-size: 13.5px; }
   .co-register th, .co-matrix th { text-align: left; font-size: 11px; font-weight: 700; letter-spacing: .06em;
@@ -306,8 +299,6 @@
   details.co-fold:not([open]) > summary h2 { margin-bottom: 0; }
   details.co-fold > summary { align-items: center; }
   /* A comment on a severity */
-  .co-sev-label { display: block; margin-top: 10px; font-size: 12px; }
-  .co-sev-label span { color: var(--muted); font-weight: 400; }
   .field textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 13px; resize: vertical; }
   .co-sev-comment { margin: 4px 0 0; font-size: 13px; color: var(--muted); font-style: italic; }
   /* Suggest with AI, and its ? */
@@ -353,20 +344,6 @@
   .co-dim--r9 { background: #efebe9; border-color: #d5cbc6; color: #4e342e; }
   .co-dim--r10 { background: #eceff1; border-color: #cbd3d8; color: #37474f; }
   .co-dim--r11 { background: #f4f4f4; border-color: #d6d6d6; color: #424242; }
-  .co-stat--tier1 { background: var(--primary); border-color: var(--primary); }
-  .co-stat--tier1 .v, .co-stat--tier1 .k { color: #ffffff; }
-  .co-why { color: var(--text); font-weight: 500; }
-  .co-why b { font-weight: 800; }
-
-  /* One row per risk: the chain on the left, its severity on the right */
-  .co-risk { display: grid; grid-template-columns: minmax(0, 1fr) 240px; gap: 24px;
-             padding: 18px 0; border-top: 1px solid var(--border); }
-  .co-risk:first-of-type { border-top: 0; padding-top: 4px; }
-  .co-risk h3 { font-size: 16px; margin: 0 0 10px; }
-  .co-risk .qf-dl { grid-template-columns: 130px 1fr; }
-  .co-risk .field { margin-bottom: 0; }
-  .co-risk .qf-tag { margin: 0 4px 4px 0; text-transform: none; letter-spacing: 0; font-weight: 600; }
-  @media (max-width: 720px) { .co-risk { grid-template-columns: 1fr; } }
 
   .qf-dl {
     display: grid; grid-template-columns: 150px 1fr; gap: 6px 18px;
