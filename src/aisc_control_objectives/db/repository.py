@@ -129,7 +129,7 @@ class ProjectRepository:
         return ProjectRepository(self._url or self._engine, self._objectives_digest, pid=self._pid)
 
     def create_all(self) -> None:
-        """Tests and first run. Deployments use `alembic upgrade head`."""
+        """For tests. Deployments use `alembic upgrade head`."""
         with self._engine.begin() as connection:
             # In a project database the platform's template has made the schema
             # and this role may not make one; in a scratch database it is the

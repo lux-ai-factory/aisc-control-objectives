@@ -132,7 +132,7 @@ class Graph(Base):
     project_id: Mapped[str] = mapped_column(
         ForeignKey("project.id", ondelete="CASCADE"), primary_key=True
     )
-    #: Exactly what was uploaded. An export serves these bytes back.
+    #: Exactly the card's JSON-LD as read from qualification.
     jsonld: Mapped[str] = mapped_column(Text, nullable=False)
     #: sha256 of the bytes: the graph's identity.
     digest: Mapped[str] = mapped_column(String(64), nullable=False)

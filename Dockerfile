@@ -12,8 +12,8 @@ COPY pyproject.toml uv.lock ./
 COPY src ./src
 # Dependencies come from uv.lock, so two builds a month apart install the same
 # versions. The project itself is installed editable, without deps, so it imports
-# from /app/src and finds control-objectives.toml and .env at /app rather than in
-# site-packages.
+# from /app/src and finds control-objectives.toml at /app rather than in
+# site-packages (.env is not copied: .dockerignore leaves it out).
 RUN uv export --frozen --no-dev --no-emit-project --no-hashes -o /tmp/requirements.txt \
  && uv pip install --system --no-cache -r /tmp/requirements.txt \
  && uv pip install --system --no-cache --no-deps -e . \
