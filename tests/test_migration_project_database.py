@@ -42,7 +42,9 @@ CARRIED = "20261018100000_carried"
 #: An update to a changed card keeps what it replaces.
 CARD = "20261018200000_card_archive"
 #: The built-in short profile's new name.
-HEAD = "20261018300000_profile_name"
+PROFILE_NAME = "20261018300000_profile_name"
+#: The stored card no longer keeps a count of its risks, which nothing read.
+HEAD = "20261029000000_graph_risk_count"
 TABLES = ("project", "graph", "risk", "mapped_objective", "mapping_run", "objective_selection",
           "objective_set", "objective_draft", "objective_set_version", "objective_set_version_item",
           "objective_profile", "objective_profile_version", "objective_profile_version_item", "objective_key",
@@ -144,7 +146,8 @@ def test_the_chain_is_baseline_selection_rename_source():
     config.set_main_option("script_location", str(projectdb.ALEMBIC_DIR))
     script = ScriptDirectory.from_config(config)
     assert script.get_heads() == [HEAD]
-    assert script.get_revision(HEAD).down_revision == CARD
+    assert script.get_revision(HEAD).down_revision == PROFILE_NAME
+    assert script.get_revision(PROFILE_NAME).down_revision == CARD
     assert script.get_revision(CARD).down_revision == CARRIED
     assert script.get_revision(CARRIED).down_revision == BY_HAND
     assert script.get_revision(BY_HAND).down_revision == LEDGER
@@ -503,5 +506,35 @@ def test_the_stored_short_profile_is_renamed_and_keeps_its_id(database_url):
         with engine.connect() as connection:
             names = dict(connection.execute(text("SELECT id, name FROM control_objectives.objective_profile")).all())
         assert names == {"fairness-oversight": "Fairness and oversight", "a1b2": "Annex IV reduced"}
+    finally:
+        drop()
+
+
+def test_the_stored_card_keeps_no_count_of_its_risks(database_url):
+    """The count was written and never read: the risk rows are the count. A database that has the
+    column loses it; one without it migrates all the same."""
+    from alembic import command
+    from alembic.config import Config
+
+    from aisc_control_objectives import projectdb
+    from aisc_control_objectives.db import tables
+
+    assert "risks" not in tables.Graph.__table__.columns
+    engine, drop = _scratch(database_url, "alembic_graph_risks")
+    try:
+        config = Config(str(projectdb.ALEMBIC_INI))
+        config.set_main_option("script_location", str(projectdb.ALEMBIC_DIR))
+        with engine.begin() as connection:
+            config.attributes["connection"] = connection
+            command.upgrade(config, PROFILE_NAME)
+        with engine.connect() as connection:
+            assert ("graph", "risks") in [c[:2] for c in _columns(connection)]
+        projectdb.migrate(engine)
+        with engine.connect() as connection:
+            assert ("graph", "risks") not in [c[:2] for c in _columns(connection)]
+        with engine.begin() as connection:
+            connection.execute(text("UPDATE control_objectives.alembic_version SET version_num = :v"),
+                               {"v": PROFILE_NAME})
+        projectdb.migrate(engine)
     finally:
         drop()

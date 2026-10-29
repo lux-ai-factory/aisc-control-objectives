@@ -642,7 +642,6 @@ class ProjectRepository:
                 project_id=project.id,
                 jsonld=jsonld,
                 digest=digest_of(jsonld),
-                risks=len(ontology.risks),
             )
         )
         for risk in ontology.risks:

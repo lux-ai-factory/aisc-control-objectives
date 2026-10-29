@@ -136,7 +136,6 @@ class Graph(Base):
     jsonld: Mapped[str] = mapped_column(Text, nullable=False)
     #: sha256 of the bytes: the graph's identity.
     digest: Mapped[str] = mapped_column(String(64), nullable=False)
-    risks: Mapped[int] = mapped_column(Integer, default=0)
     uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     project: Mapped[Project] = relationship(back_populates="graph")
