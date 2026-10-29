@@ -79,6 +79,28 @@ def test_the_api_clears_a_rating_with_null(client, start, platform_project):
     assert r.json()["severity"]["impact"] == {"risk1": 2} and r.json()["severity"]["likelihood"] == {}
 
 
+def test_a_risk_rated_on_one_part_only_shows_as_not_rated_and_counts_nothing(client, start, platform_project):
+    """Impact without likelihood (or the other way round) is no rating: no level in the register or the
+    matrix, not counted as rated, and no score for the objectives it links to."""
+    http, _ = client
+    a = start()
+    http.post(_api(platform_project, a, "/ratings"), json={"risk2": {"impact": 5}, "risk4": {"likelihood": 4}})
+    http.post(_api(platform_project, a, "/map"))                     # risk2 -> O1, O4, O2; risk4 -> O7, O16, O11
+    page = page_of(http, platform_project, a)
+    register = re.search(r'<table class="co-register">(.*?)</table>', page, re.S).group(1)
+    matrix = matrix_of(page)
+    for risk in ("risk2", "risk4"):
+        row = re.search(rf'<tr id="risk-{risk}">(.*?)</tr>', register, re.S).group(1)
+        assert re.search(r'<span class="co-rating co-rating--not-rated">Not rated</span>\s*</td>', row), risk
+        assert "co-band" not in row
+        mrow = re.search(rf'<tr class="co-mrow" data-risk="{risk}"[^>]*>(.*?)</tr>', matrix, re.S).group(1)
+        assert '<span class="co-rating co-rating--not-rated">Not rated</span>' in mrow, risk
+    assert "0 of 5 rated" in " ".join(page.split())
+    scores = {p["objective_id"]: p["score"] for p in body_of(http, platform_project, a)["priorities"]}
+    assert all(scores[oid] == 0 for oid in ("O1", "O4", "O2", "O7", "O16", "O11"))
+    assert not any(p["key"] for p in body_of(http, platform_project, a)["priorities"])
+
+
 def test_the_register_lists_risks_by_rating_with_their_band(client, start, platform_project):
     http, _ = client
     a = start()
