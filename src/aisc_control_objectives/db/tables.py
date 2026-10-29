@@ -10,9 +10,11 @@ ideas worth copying from `KnowledgeGraph` are here too:
 - **It carries a digest**, its identity, so re-uploading the same graph is a
   no-op rather than a silent rebuild.
 
-What is *not* here: scores and default key objectives. They are a pure function
-of the catalogue, the ratings and the mapping, so storing them would only let
-them go stale. `objectives_digest` records which catalogue a project was
+What is *not* here: scores. They are a pure function of the catalogue, the
+ratings and the mapping, so storing them would only let them go stale. The one
+derived thing stored is which selected objectives are priority
+(`objective_selection.priority_ids`), for the report, and every change that can
+move it writes it again in the same transaction. `objectives_digest` records which catalogue a project was
 assessed against, so a re-exported CSV cannot change an old assessment's scores
 without the page being able to say so.
 """
@@ -266,6 +268,11 @@ class ObjectiveSelectionRow(Base):
     )
     #: "O1", ... No foreign key, as for mapped_objective: the catalogue is a CSV.
     objective_ids: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
+    #: The selected objectives that are priority, in the selection's order: the assessor's choices
+    #: (objective_key) over the default rule. Written again with every change that can move them, so
+    #: the report reads what the page shows; the scores behind them are still computed on read.
+    priority_ids: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list,
+                                                    server_default="{}")
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, onupdate=_now
     )

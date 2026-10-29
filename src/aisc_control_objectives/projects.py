@@ -9,24 +9,32 @@
     AGENTIC  map_risks() ───► map_risks_of()     which objectives mitigate each risk
              │                map_by_hand()      or a person's mapping of one risk
              ▼
-    view()                                       scores and default key objectives, computed, never stored
+    view()                                       scores and default key objectives, computed on read
 
 The risks decide the order of the catalogue. Everything derivable is computed in
 `view()` rather than written down, so a changed rating cannot leave a stale score
 behind. What is written down is what cannot be recomputed: the uploaded bytes, the
-ratings, the mapping, the assessor's key choices, and what the mapping cost.
+ratings, the mapping, the assessor's key choices, and what the mapping cost. The one
+exception is which selected objectives are priority, stored for the report
+(`priority_ids`): every write that can move them stores them again in its own
+transaction, worked out by `priority_ids` below, the same code as the page's.
 """
 
 from __future__ import annotations
 
 import copy
 import logging
+import os
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from aisc_control_objectives.baf_llm import ResolveError
-from aisc_control_objectives.control_objectives import ControlObjectiveCatalogue
+from aisc_control_objectives.control_objectives import (
+    ControlObjectiveCatalogue,
+    load_control_objectives,
+    objectives_source,
+)
 from aisc_control_objectives.db.repository import (
     AssessmentChanged,
     ProjectRecord,
@@ -52,6 +60,31 @@ MapperFor = Callable[[str], tuple[Mapper, str]]
 
 class ModelUnavailable(RuntimeError):
     """The project's model could not be had; nothing was saved."""
+
+
+def priorities_of(record: ProjectRecord, catalogue: ControlObjectiveCatalogue) -> list[Priority]:
+    """Every objective's score, rank and priority, from what the assessment holds."""
+    return prioritise(
+        catalogue,
+        record.severity,
+        record.mapping_run.mappings if record.mapping_run else {},
+        record.ontology.risks,
+        keys=record.keys,
+    )
+
+
+def priority_ids(record: ProjectRecord, catalogue: ControlObjectiveCatalogue) -> list[str]:
+    """The selected objectives that are priority, in the selection's order: the assessor's choices
+    over the default rule."""
+    key = {priority.objective_id for priority in priorities_of(record, catalogue) if priority.key}
+    return [oid for oid in record.selected or [] if oid in key]
+
+
+def store_every_priority(connection) -> None:
+    """Store the priority objectives of every assessment in the database `connection` is in, on the
+    objectives the service serves (CONTROL_OBJECTIVES_FILE, else the bundled CSV)."""
+    catalogue = load_control_objectives(objectives_source(os.environ)[0])
+    Projects(ProjectRepository(connection), catalogue, mapper=None).store_every_priority()
 
 
 def _mapping_state(record: ProjectRecord) -> tuple:
@@ -108,7 +141,7 @@ class Projects:
 
         `repository` is None in the service as deployed: each request works on
         the repository of the one project database it was let into, `bound()`."""
-        self._repository = repository
+        self._repository = self._storing_priority(repository)
         #: The profile a project's first assessment starts on.
         self._default_profile = default_profile
         self._catalogue = catalogue
@@ -120,8 +153,26 @@ class Projects:
         """The same service on one project's repository (a copy, so a subclass
         and its configuration are kept as they are)."""
         bound = copy.copy(self)
-        bound._repository = repository
+        bound._repository = bound._storing_priority(repository)
         return bound
+
+    def _storing_priority(self, repository: ProjectRepository | None) -> ProjectRepository | None:
+        """The repository, storing the priority objectives with every write that can move them."""
+        return None if repository is None else repository.storing_priority(self._priority_ids)
+
+    def _priority_ids(self, connection, record: ProjectRecord) -> list[str]:
+        """`priority_ids`, inside a write's transaction: the profile's objectives are read on its
+        connection, so a project database's small pool is never asked for a second one."""
+        if record.profile_version_id is None:
+            catalogue = self._catalogue
+        else:
+            catalogue = Library(connection, self._catalogue).catalogue_of(record.profile_version_id)
+        return priority_ids(record, catalogue)
+
+    def store_every_priority(self) -> None:
+        """Store the priority objectives of every assessment of the database: what an existing database
+        gets when the column is added."""
+        self._repository.store_every_priority()
 
     def create(
         self, project: str, name: str, jsonld: str, raw: object, system_id: str, record=None
@@ -374,17 +425,10 @@ class Projects:
         return [self._derive(record) for record in self._repository.list()]
 
     def _derive(self, record: ProjectRecord) -> ProjectView:
-        """Priorities, computed from what is stored. Never written back: a changed
+        """Priorities, computed from what is stored. The scores are never written back: a changed
         rating must not leave a stale score."""
         catalogue = self._catalogue_for(record)
-        priorities = prioritise(
-            catalogue,
-            record.severity,
-            record.mapping_run.mappings if record.mapping_run else {},
-            record.ontology.risks,
-            keys=record.keys,
-        )
-        return ProjectView(record=record, priorities=priorities, catalogue=catalogue,
+        return ProjectView(record=record, priorities=priorities_of(record, catalogue), catalogue=catalogue,
                            profile=self.library.version_info(record.profile_version_id))
 
 

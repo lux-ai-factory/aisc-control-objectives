@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 
 from pydantic import ValidationError
@@ -37,6 +37,15 @@ COLUMNS: dict[str, str] = {
 def default_csv_path() -> Path:
     """The bundled objectives CSV."""
     return Path(__file__).resolve().parent / "data" / "ai_act_control_objectives.csv"
+
+
+def objectives_source(env: Mapping[str, str]) -> tuple[Path | None, str]:
+    """(override path or None, the file name the page shows). A blank
+    CONTROL_OBJECTIVES_FILE, as templated env files leave it, means the bundled CSV."""
+    override = (env.get("CONTROL_OBJECTIVES_FILE") or "").strip()
+    if not override:
+        return None, default_csv_path().name
+    return Path(override), Path(override).name
 
 
 class ControlObjectiveCatalogue:

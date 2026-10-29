@@ -30,13 +30,12 @@ lines), so API keys can live in a file instead of the shell environment.
 from __future__ import annotations
 
 import os
-from collections.abc import Mapping
 from pathlib import Path
 
 from aisc_control_objectives import baf_llm
 from aisc_control_objectives.api.app import create_app
 from aisc_control_objectives.config import RunConfig
-from aisc_control_objectives.control_objectives import default_csv_path, load_control_objectives
+from aisc_control_objectives.control_objectives import load_control_objectives, objectives_source
 from aisc_control_objectives.projectdb import ProjectDatabases
 from aisc_control_objectives.projects import Projects
 from aisc_control_objectives.risk_mapping import RiskMapper
@@ -45,15 +44,6 @@ from aisc_control_objectives.settings import database_url, project_database_url
 
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
-
-
-def objectives_source(env: Mapping[str, str]) -> tuple[Path | None, str]:
-    """(override path or None, the file name the page shows). A blank
-    CONTROL_OBJECTIVES_FILE, as templated env files leave it, means the bundled CSV."""
-    override = (env.get("CONTROL_OBJECTIVES_FILE") or "").strip()
-    if not override:
-        return None, default_csv_path().name
-    return Path(override), Path(override).name
 
 
 def _load_dotenv() -> None:

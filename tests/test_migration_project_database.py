@@ -44,7 +44,9 @@ CARD = "20261018200000_card_archive"
 #: The built-in short profile's new name.
 PROFILE_NAME = "20261018300000_profile_name"
 #: The stored card no longer keeps a count of its risks, which nothing read.
-HEAD = "20261029000000_graph_risk_count"
+GRAPH_RISK_COUNT = "20261029000000_graph_risk_count"
+#: The selection stores which of its objectives are priority, for the report.
+HEAD = "20261030000000_priority_ids"
 TABLES = ("project", "graph", "risk", "mapped_objective", "mapping_run", "objective_selection",
           "objective_set", "objective_draft", "objective_set_version", "objective_set_version_item",
           "objective_profile", "objective_profile_version", "objective_profile_version_item", "objective_key",
@@ -146,7 +148,8 @@ def test_the_chain_is_baseline_selection_rename_source():
     config.set_main_option("script_location", str(projectdb.ALEMBIC_DIR))
     script = ScriptDirectory.from_config(config)
     assert script.get_heads() == [HEAD]
-    assert script.get_revision(HEAD).down_revision == PROFILE_NAME
+    assert script.get_revision(HEAD).down_revision == GRAPH_RISK_COUNT
+    assert script.get_revision(GRAPH_RISK_COUNT).down_revision == PROFILE_NAME
     assert script.get_revision(PROFILE_NAME).down_revision == CARD
     assert script.get_revision(CARD).down_revision == CARRIED
     assert script.get_revision(CARRIED).down_revision == BY_HAND
@@ -536,5 +539,51 @@ def test_the_stored_card_keeps_no_count_of_its_risks(database_url):
             connection.execute(text("UPDATE control_objectives.alembic_version SET version_num = :v"),
                                {"v": PROFILE_NAME})
         projectdb.migrate(engine)
+    finally:
+        drop()
+
+
+def test_an_existing_assessment_gets_its_priority_objectives_stored(database_url, objectives, fixtures_dir):
+    """The migration works out, by the service's own rule, which selected objectives of each existing
+    assessment are priority, whether or not the database has the column already."""
+    import json
+
+    from aisc_control_objectives import projectdb
+    from aisc_control_objectives.db.repository import ProjectRepository
+    from aisc_control_objectives.projects import Projects
+    from step2_support import FakeMapper
+
+    engine, drop = _scratch(database_url, "alembic_priority")
+    try:
+        projectdb.migrate(engine)
+        system = str(uuid.uuid4())
+        with engine.begin() as connection:
+            connection.execute(text("INSERT INTO project.system (pid, number, name) VALUES (:p, 1, 'MCAS')"),
+                               {"p": system})
+        projects = Projects(ProjectRepository(engine, pid=str(uuid.uuid4())), objectives, FakeMapper())
+        graph = json.loads((fixtures_dir / "mcas.ontology.jsonld").read_text())
+        a = projects.create(None, "MCAS", json.dumps(graph), graph, system).record.id
+        projects.use_profile(a, "full-ai-act")
+        projects.map_risks_of(a)
+        projects.rate(a, {f"risk{n}": 5 for n in range(5)}, {f"risk{n}": 4 for n in range(5)})
+        projects.set_keys(a, {"O9": True})
+        view = projects.view(a)
+        expected = [oid for oid in view.record.selected
+                    if oid in {p.objective_id for p in view.priorities if p.key}]
+        assert "O9" in expected and len(expected) > 1
+
+        def priority_after_migrating() -> list[str]:
+            with engine.begin() as connection:
+                connection.execute(text("UPDATE control_objectives.alembic_version SET version_num = :v"),
+                                   {"v": GRAPH_RISK_COUNT})
+            projectdb.migrate(engine)
+            with engine.connect() as connection:
+                return connection.execute(text(
+                    "SELECT priority_ids FROM control_objectives.objective_selection")).scalar()
+
+        assert priority_after_migrating() == expected                 # the column is there already
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE control_objectives.objective_selection DROP COLUMN priority_ids"))
+        assert priority_after_migrating() == expected                 # a database from before it
     finally:
         drop()

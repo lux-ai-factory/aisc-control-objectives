@@ -8,6 +8,7 @@ domain keeps validating its own shape on the way back out.
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import uuid
@@ -16,7 +17,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from sqlalchemy import func, select, text
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.schema import CreateSchema
 
@@ -93,16 +94,25 @@ class AssessmentChanged(RuntimeError):
     """The assessment changed while the model was mapping it; the run was not saved."""
 
 
+#: (the connection of a write's transaction, the assessment as that write leaves it) -> the selected
+#: objectives that are priority. The service gives it: it knows the profiles' objectives.
+PriorityOf = Callable[[Connection, "ProjectRecord"], list[str]]
+
+
 class ProjectRepository:
     """The assessments of one project, in that project's database.
 
     Given a URL it makes its own engine (tests, scripts); given an engine (the
     one `ProjectDatabases.open` let the caller into) it uses that. `pid` is the
     project the database belongs to, which every record it returns carries.
+
+    With `priority_of`, every write that can move the priority objectives stores them on the
+    selection (`priority_ids`) before its transaction ends; without it they are not written.
     """
 
     def __init__(
-        self, url_or_engine: str | Engine, objectives_digest: str = "", *, pid: str | None = None
+        self, url_or_engine: str | Engine | Connection, objectives_digest: str = "", *, pid: str | None = None,
+        priority_of: PriorityOf | None = None,
     ):
         if isinstance(url_or_engine, str):
             self._engine = projectdb.make_engine(url_or_engine, pool_pre_ping=True)
@@ -113,6 +123,7 @@ class ProjectRepository:
         self._sessions = sessionmaker(self._engine, expire_on_commit=False)
         self._objectives_digest = objectives_digest
         self._pid = pid
+        self._priority_of = priority_of
 
     @property
     def engine(self):
@@ -126,7 +137,14 @@ class ProjectRepository:
 
     def reopened(self) -> ProjectRepository:
         """A second repository on the same database: what a restart would give."""
-        return ProjectRepository(self._url or self._engine, self._objectives_digest, pid=self._pid)
+        return ProjectRepository(self._url or self._engine, self._objectives_digest, pid=self._pid,
+                                 priority_of=self._priority_of)
+
+    def storing_priority(self, priority_of: PriorityOf) -> ProjectRepository:
+        """The same repository, storing the priority objectives `priority_of` works out with each write."""
+        storing = copy.copy(self)
+        storing._priority_of = priority_of
+        return storing
 
     def create_all(self) -> None:
         """For tests. Deployments use `alembic upgrade head`."""
@@ -205,6 +223,7 @@ class ProjectRepository:
                 number, _latest = self._version_numbers(session, source.system_id)
                 carried = self._carry(session, row, self._work_of(session, source), number,
                                       carry_objectives, order)
+            self._store_priority(session, row.id)
             if record is not None:
                 change = {"id": row.id, "risks": len(row.risks), "profile_version": row.profile_version_id}
                 if carried is not None:
@@ -258,6 +277,7 @@ class ProjectRepository:
             project.updated_at = tables._now()
             session.flush()
             session.expire(project, ["risks"])
+            self._store_priority(session, project_id)
             if record is not None:
                 record(session, {"assessment": project_id, "digest_before": digest_before,
                                  "digest_after": digest_of(jsonld), "risks": len(project.risks),
@@ -377,6 +397,7 @@ class ProjectRepository:
                     changed.append({"assessment": project_id, "risk": row.risk_id, "before": before, "after": after})
             if changed:
                 project.updated_at = tables._now()          # Child rows only: no UPDATE would move it
+                self._store_priority(session, project_id)
             if record is not None and changed:
                 record(session, changed)
 
@@ -396,6 +417,7 @@ class ProjectRepository:
             after = self._keys_of(session, project_id)
             if before != after:
                 session.get(tables.Project, project_id).updated_at = tables._now()
+                self._store_priority(session, project_id)
             if record is not None and before != after:
                 record(session, {"before": before, "after": after})
 
@@ -410,6 +432,7 @@ class ProjectRepository:
                 session.delete(key)
             session.flush()
             session.get(tables.Project, project_id).updated_at = tables._now()
+            self._store_priority(session, project_id)
             if record is not None:
                 record(session, {"before": before, "after": self._keys_of(session, project_id)})
 
@@ -427,6 +450,27 @@ class ProjectRepository:
             session.add(tables.ObjectiveSelectionRow(project_id=project.id, objective_ids=ids))
         else:
             project.selection.objective_ids = ids
+
+    def _store_priority(self, session: Session, project_id: str) -> None:
+        """Write the selection's priority objectives as this transaction leaves the assessment. The
+        assessment row is locked first, so two writes at once store them in the order they commit,
+        the last from everything both wrote."""
+        if self._priority_of is None:
+            return
+        session.flush()
+        session.expire_all()
+        project = session.get(tables.Project, project_id, with_for_update=True)
+        if project.selection is None:
+            return
+        ids = list(self._priority_of(session.connection(), self._to_record(session, project)))
+        if project.selection.priority_ids != ids:
+            project.selection.priority_ids = ids
+
+    def store_every_priority(self) -> None:
+        """Store the priority objectives of every assessment of this database, in one transaction."""
+        with self._sessions.begin() as session:
+            for project_id in session.scalars(select(tables.Project.id).order_by(tables.Project.id)).all():
+                self._store_priority(session, project_id)
 
     def save_mapping_run(
         self, project_id: str, run: MappingRun, model: str = "",
@@ -486,6 +530,7 @@ class ProjectRepository:
                     model=model,
                 )
             )
+            self._store_priority(session, project_id)
             if record is not None:
                 record(session, {"archived": kept})
 
@@ -531,6 +576,7 @@ class ProjectRepository:
             after = sorted(item.objective_id for item in objectives)
             if before != after:
                 project.updated_at = tables._now()
+            self._store_priority(session, project_id)
             if record is not None and before != after:
                 record(session, {"before": before, "after": after})
 
@@ -557,6 +603,7 @@ class ProjectRepository:
                 ids = list(project.selection.objective_ids)
                 dropped |= {oid for oid in ids if oid not in keep}
                 project.selection.objective_ids = [oid for oid in ids if oid in keep]
+            self._store_priority(session, project_id)
             if record is not None and version_before != profile_version_id:
                 record(session, {"before": version_before, "after": profile_version_id, "dropped": sorted(dropped)})
             return sorted(dropped)
