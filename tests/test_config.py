@@ -52,3 +52,13 @@ def test_unrelated_vars_are_ignored():
 def test_a_non_string_model_is_rejected():
     with pytest.raises(ValidationError):
         RunConfig.model_validate({"model": 3})
+
+
+def test_the_compose_env_file_holds_only_commented_examples():
+    """Compose sets the root path and the model itself and the port stays at its default: a value
+    in env.development would only be one more place that looks like it decides them."""
+    from pathlib import Path
+
+    env_file = Path(__file__).resolve().parents[1] / "env.development"
+    settings = [line for line in env_file.read_text().splitlines() if line.strip() and not line.lstrip().startswith("#")]
+    assert settings == []
