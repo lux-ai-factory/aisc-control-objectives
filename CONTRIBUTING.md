@@ -16,7 +16,7 @@ You do not need to sign the CLA separately — by submitting a pull request, iss
 
 ## How to Contribute
 
-1. Fork the repository and create your branch from `feat/unified-modules`.
+1. Fork the repository and create your branch from `pilot`.
 2. Follow our coding guidelines and documentation standards.
 3. Include appropriate tests and documentation with your pull request.
 4. Submit a pull request with a clear description of your changes.

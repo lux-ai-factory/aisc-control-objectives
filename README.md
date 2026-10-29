@@ -290,7 +290,7 @@ docs/                    SPEC.md and INTEGRATION_AISC.md describe an earlier des
 
 ## Contributing
 
-- Work on `feat/unified-modules`, the only branch in use.
+- Work on `pilot`, the only branch in use.
 - **Schema changes need a migration.** Change `db/tables.py`, then add a revision under
   `alembic/versions/` (file names are timestamps). Migrations run per project database: the
   service runs them on first open, `python -m aisc_control_objectives.migrate_projects` runs
