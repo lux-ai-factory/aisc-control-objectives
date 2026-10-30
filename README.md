@@ -81,8 +81,10 @@ flowchart LR
   before standards-grounded, then catalogue order, with voluntary objectives last. By default the
   priority objectives are the first seven by rank whose highest risk is High or Critical; a
   voluntary objective is never priority by default. The assessor's own choices override the
-  default. Scores and default priorities are never stored, so a changed rating can never leave a
-  stale score.
+  default. Scores are never stored, so a changed rating can never leave a stale score. The
+  selection keeps the resulting priority objectives (`objective_selection.priority_ids`) for the
+  readers that do not rank (the report, the Evidence map): every change that can move them writes
+  them again.
 - **The ledger.** With `LEDGER_MODE` set to `record` or `enforce` (the stack sets `record`), every
   write also records an event through the project database's `ledger.emit`, in the same
   transaction (`ledger.py`). The platform relays those events to the immudb ledger. A mapping run
@@ -348,6 +350,7 @@ docs/                    SPEC.md and INTEGRATION_AISC.md describe an earlier des
   (`scripts/tests/test_llm_keys.py`) requires the two to be byte-identical.
 - The risk mapper's instructions are markdown in `src/aisc_control_objectives/skills/`; change how
   the mapping reasons there rather than in Python.
-- Nothing derived is stored: scores and default priority objectives are recomputed on every read.
+- Scores are recomputed on every read. The one derived value stored is the selection's
+  `priority_ids`, written again by every change that can move the priority objectives.
 
 See `CONTRIBUTING.md` for the contribution terms.
