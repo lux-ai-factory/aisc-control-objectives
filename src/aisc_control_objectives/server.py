@@ -6,25 +6,12 @@ risks onto the objectives that mitigate them, and it is reached BAF's way (see
 aisc_control_objectives.llm): BAF_LLM_PROVIDER and BAF_LLM_MODEL name it, and the provider's own
 variable carries the key.
 
-Env:
-  DATABASE_URL             the platform database: who is in which project, nothing else
-  PROJECT_DATABASE_URL     a project's own database, `{database}` where project_<hex> goes
-                           (unset: DATABASE_URL with its database replaced by {database})
-  CONTROL_OBJECTIVES_CONFIG_FILE       path to the TOML config (default <repo>/control-objectives.toml)
-  CONTROL_OBJECTIVES_FILE   override the bundled objectives CSV
-  BAF_LLM_PROVIDER / BAF_LLM_MODEL        which model, BAF's names
-  BAF_LLM_BASE_URL         endpoint for the ollama / compatible providers
-  MISTRAL_API_KEY / OPENAI_API_KEY / ...  the provider's own key
-  PLATFORM_URL / PLATFORM_INTERNAL_TOKEN  where to ask for a project's own model choice
-                                          (both set: each map uses the model its project
-                                          chose; no choice: the model above)
-  LLM_RESOLVE_TIMEOUT      seconds the platform may take to answer (default 5)
-  CONTROL_OBJECTIVES_PORT              port to serve on (default 8090)
-  CONTROL_OBJECTIVES_ROOT_PATH         sub-path when behind a reverse proxy
-  CONTROL_OBJECTIVES_CORS_ORIGINS      comma-separated allowlist (default none: same-origin)
+Every environment variable the service reads, with its default, is in the
+Configuration table of the README.
 
-A `.env` file next to the repo root is loaded if present (simple KEY=VALUE
-lines), so API keys can live in a file instead of the shell environment.
+A `.env` file in apps/control-objectives (this repository's root) is loaded if
+present (simple KEY=VALUE lines), so API keys can live in a file instead of the
+shell environment.
 """
 
 from __future__ import annotations
