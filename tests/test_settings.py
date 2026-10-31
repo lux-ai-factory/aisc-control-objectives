@@ -4,14 +4,9 @@ PROJECT_DATABASE_URL."""
 import pytest
 
 from aisc_control_objectives.settings import (
-    DEFAULT_URL,
     database_url,
     project_database_url,
 )
-
-
-def test_no_database_url_yields_the_default():
-    assert database_url({}) == DEFAULT_URL
 
 
 def test_a_plain_postgresql_url_gets_the_installed_driver():
@@ -24,7 +19,7 @@ def test_a_url_that_names_its_driver_is_kept():
     assert database_url({"DATABASE_URL": url}) == url
 
 
-def test_a_query_string_is_dropped():
+def test_the_prisma_schema_parameter_is_dropped():
     url = database_url({"DATABASE_URL": "postgresql://user:pw@db:5432/platform?schema=public"})
     assert url == "postgresql+psycopg://user:pw@db:5432/platform"
 
@@ -37,7 +32,7 @@ def test_the_project_template_is_derived_from_the_platform_url():
 def test_an_explicit_project_template_wins_and_is_normalised():
     env = {
         "DATABASE_URL": "postgresql://user:pw@db:5432/platform",
-        "PROJECT_DATABASE_URL": "postgresql://other:pw@projects:5433/{database}?sslmode=disable",
+        "PROJECT_DATABASE_URL": "postgresql://other:pw@projects:5433/{database}?schema=controls",
     }
     assert project_database_url(env) == "postgresql+psycopg://other:pw@projects:5433/{database}"
 
