@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from aisc_control_objectives.llm import (
     PROVIDERS,
@@ -150,3 +150,18 @@ class TestParseInto:
     def test_an_answer_that_does_not_fit_the_shape_says_so(self):
         with pytest.raises(ValueError, match="Framing"):
             parse_into('{"frames": [{"wrong": 1}]}', Framing)
+
+    def test_an_answer_that_does_not_fit_is_read_each_way_once(self):
+        """As given, then with its fields decoded: two readings, no third to fetch the error."""
+        calls = []
+
+        class Counted(Framing):
+            @classmethod
+            def model_validate(cls, obj, *args, **kwargs):
+                calls.append(obj)
+                return super().model_validate(obj, *args, **kwargs)
+
+        with pytest.raises(ValueError, match="Counted") as raised:
+            parse_into('{"frames": [{"wrong": 1}], "note": "x"}', Counted)
+        assert len(calls) == 2
+        assert isinstance(raised.value.__cause__, ValidationError)

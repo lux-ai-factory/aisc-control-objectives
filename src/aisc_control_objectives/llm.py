@@ -99,8 +99,8 @@ def parse_into(text: str, output_format: type[T]) -> T:
 
     try:
         return output_format.model_validate(obj)
-    except ValidationError:
-        pass
+    except ValidationError as exc:
+        first_error = exc
     # A field arrived as a JSON string ({"frames": "[...]"}): decode each
     # string-encoded value in place and retry.
     decoded = {key: _try_json(value) for key, value in obj.items()}
@@ -116,9 +116,6 @@ def parse_into(text: str, output_format: type[T]) -> T:
                 return output_format.model_validate(inner)
             except ValidationError:
                 pass
-    try:
-        return output_format.model_validate(obj)
-    except ValidationError as exc:
-        raise ValueError(
-            f"the model's answer does not fit {output_format.__name__}: {exc}"
-        ) from exc
+    raise ValueError(
+        f"the model's answer does not fit {output_format.__name__}: {first_error}"
+    ) from first_error
