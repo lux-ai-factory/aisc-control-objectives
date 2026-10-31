@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 
-from fastapi import Body, HTTPException, Request
+from fastapi import Body, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
 
 from aisc_control_objectives import ledger
@@ -59,6 +59,13 @@ def _profile_view(view) -> dict:
     }
 
 
+async def posted_form(request: Request):
+    """The form a page posted, read on the event loop by a dependency, so that the handler itself can be
+    plain `def`: FastAPI then runs it in its threadpool, and its model calls, platform lookups and database
+    writes never hold up the other requests."""
+    return await request.form()
+
+
 def register_library(app, projects_of, root_path: str) -> None:
     def library(request: Request):
         return projects_of(request).library
@@ -66,8 +73,7 @@ def register_library(app, projects_of, root_path: str) -> None:
     def page(project: str, path: str) -> RedirectResponse:
         return RedirectResponse(url=f"{root_path}/p/{project}{path}", status_code=303)
 
-    async def form_fields(request: Request) -> dict:
-        form = await request.form()
+    def form_fields(form) -> dict:
         return {name: str(form.get(name) or "") for name in FIELDS}
 
     # Pages
@@ -77,8 +83,7 @@ def register_library(app, projects_of, root_path: str) -> None:
         return HTMLResponse(render_sets_page(library(request), root_path=root_path, project=project))
 
     @app.post("/p/{project}/sets", include_in_schema=False)
-    async def make_set_form(project: str, request: Request):
-        form = await request.form()
+    def make_set_form(project: str, request: Request, form=Depends(posted_form)):
         try:
             made = library(request).create_set(str(form.get("code") or ""), str(form.get("name") or ""),
                                                str(form.get("description") or ""), who=_who(request), who_sub=_who_sub(request), record=lambda s, c: ledger.emit(
@@ -98,9 +103,9 @@ def register_library(app, projects_of, root_path: str) -> None:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @app.post("/p/{project}/sets/{set_id}/objectives", include_in_schema=False)
-    async def add_objective_form(project: str, set_id: str, request: Request):
+    def add_objective_form(project: str, set_id: str, request: Request, form=Depends(posted_form)):
         try:
-            made = library(request).add_objective(set_id, await form_fields(request), record=lambda s, c: ledger.emit(
+            made = library(request).add_objective(set_id, form_fields(form), record=lambda s, c: ledger.emit(
                 s, "objective.added", item_type="objective",
                 item_id=ledger_events.objective_item(set_id, c["id"]), details={"set": set_id},
                 content=c["after"]))
@@ -111,9 +116,10 @@ def register_library(app, projects_of, root_path: str) -> None:
         return page(project, f"/sets/{set_id}#obj-{made}")
 
     @app.post("/p/{project}/sets/{set_id}/objectives/{objective_id}", include_in_schema=False)
-    async def edit_objective_form(project: str, set_id: str, objective_id: str, request: Request):
+    def edit_objective_form(project: str, set_id: str, objective_id: str, request: Request,
+                            form=Depends(posted_form)):
         try:
-            library(request).edit_objective(set_id, objective_id, await form_fields(request), record=lambda s, c: ledger.emit(
+            library(request).edit_objective(set_id, objective_id, form_fields(form), record=lambda s, c: ledger.emit(
                 s, "objective.edited", item_type="objective",
                 item_id=ledger_events.objective_item(set_id, objective_id), details={"set": set_id},
                 content=c["after"], before=c["before"], after=c["after"]))
@@ -167,8 +173,7 @@ def register_library(app, projects_of, root_path: str) -> None:
         return HTMLResponse(render_profile_page(library(request), None, root_path=root_path, project=project))
 
     @app.post("/p/{project}/profiles", include_in_schema=False)
-    async def make_profile_form(project: str, request: Request):
-        form = await request.form()
+    def make_profile_form(project: str, request: Request, form=Depends(posted_form)):
         try:
             made = library(request).create_profile(
                 str(form.get("name") or ""), str(form.get("description") or ""),
@@ -186,8 +191,7 @@ def register_library(app, projects_of, root_path: str) -> None:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @app.post("/p/{project}/profiles/{profile_id}", include_in_schema=False)
-    async def save_profile_form(project: str, profile_id: str, request: Request):
-        form = await request.form()
+    def save_profile_form(project: str, profile_id: str, request: Request, form=Depends(posted_form)):
         try:
             library(request).save_profile(
                 profile_id, [str(v) for v in form.getlist("objective")], who=_who(request),

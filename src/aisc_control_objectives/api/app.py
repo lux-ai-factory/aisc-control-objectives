@@ -26,7 +26,7 @@ from typing import Literal
 from urllib.parse import urlencode
 
 from aisc_identity.headers import token_from_headers
-from fastapi import Body, FastAPI, HTTPException, Query, Request
+from fastapi import Body, Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import (
     FileResponse,
@@ -40,7 +40,7 @@ from sqlalchemy.exc import DBAPIError, IntegrityError
 from aisc_control_objectives import ledger, projectdb, upstream
 from aisc_control_objectives.access import NOT_FOUND, ProjectAccess
 from aisc_control_objectives.api import ledger_events
-from aisc_control_objectives.api.library_routes import register_library
+from aisc_control_objectives.api.library_routes import posted_form, register_library
 from aisc_control_objectives.config import RunConfig
 from aisc_control_objectives.control_objectives import ControlObjectiveCatalogue
 from aisc_control_objectives.db.repository import ProjectRepository, digest_of
@@ -349,7 +349,7 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
         )
 
     @app.post("/p/{project}/projects", include_in_schema=False)
-    async def start_assessment_form(project: str, request: Request):
+    def start_assessment_form(project: str, request: Request, form=Depends(posted_form)):
         """"Start assessment": of the project's latest AI card version.
 
         No file: the platform says which version is the latest, qualification
@@ -361,7 +361,6 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
         projects = projects_of(request)
         opened = getattr(request.state, "opened", None)
         pid = opened.pid if opened is not None else project
-        form = await request.form()
         name = str(form.get("name") or "").strip()
         # Behind the gateway the token arrives as X-Auth-Request-Access-Token
         # and there is no Authorization header; a direct API client sends
@@ -430,13 +429,12 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
         )
 
     @app.post("/p/{project}/projects/{project_id}/map", include_in_schema=False)
-    async def map_form(project: str, project_id: str, request: Request):
+    def map_form(project: str, project_id: str, request: Request, form=Depends(posted_form)):
         """The one agentic step, on a button: it costs a model call per risk. "Also replace objectives
         I linked by hand" maps the risks a person mapped as well, once the page has asked."""
         projects, view, why = editable(request, project_id)
         if why is not None:
             return PlainTextResponse(why, status_code=409)
-        form = await request.form()
         replace = bool(form.get("replace"))
         if replace and view.record.by_hand and not form.get("confirmed"):
             return RedirectResponse(
@@ -469,12 +467,11 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
         return RedirectResponse(url=_assessment_url(root_path, project, project_id), status_code=303)
 
     @app.post("/p/{project}/projects/{project_id}/risks/{risk_id}/mapping", include_in_schema=False)
-    async def map_by_hand_form(project: str, project_id: str, risk_id: str, request: Request):
+    def map_by_hand_form(project: str, project_id: str, risk_id: str, request: Request, form=Depends(posted_form)):
         """A person's mapping of one risk: the ticked objectives, and only those."""
         projects, view, why = editable(request, project_id)
         if why is not None:
             return PlainTextResponse(why, status_code=409)
-        form = await request.form()
         try:
             projects.map_by_hand(project_id, risk_id, [str(v) for v in form.getlist("objective")],
                                  on_save=ledger_events.on_mapping_edited(project_id, risk_id))
@@ -487,12 +484,11 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
         )
 
     @app.post("/p/{project}/projects/{project_id}/profile", include_in_schema=False)
-    async def profile_form(project: str, project_id: str, request: Request):
+    def profile_form(project: str, project_id: str, request: Request, form=Depends(posted_form)):
         """Run the assessment on another objective profile, or on its profile's newer version."""
         projects, view, why = editable(request, project_id)
         if why is not None:
             return PlainTextResponse(why, status_code=409)
-        form = await request.form()
         try:
             switched = projects.use_profile(project_id, str(form.get("profile") or ""),
                                             record=ledger_events.on_profile_switched(project_id))
@@ -505,11 +501,10 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
         return RedirectResponse(url=url, status_code=303)
 
     @app.post("/p/{project}/projects/{project_id}/severity", include_in_schema=False)
-    async def rate_form(project: str, project_id: str, request: Request):
+    def rate_form(project: str, project_id: str, request: Request, form=Depends(posted_form)):
         projects, view, why = editable(request, project_id)
         if why is not None:
             return PlainTextResponse(why, status_code=409)
-        form = await request.form()
         try:
             # per risk: `impact:<risk id>`, `likelihood:<risk id>` (1-5, blank clears it; a risk the
             # form does not name keeps what it had) and an optional `comment:<risk id>` (a blank one
@@ -532,14 +527,13 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
 
 
     @app.post("/p/{project}/projects/{project_id}/key", include_in_schema=False)
-    async def key_form(project: str, project_id: str, request: Request):
+    def key_form(project: str, project_id: str, request: Request, form=Depends(posted_form)):
         """The key ticks of the matrix. Only a tick the assessor changed is saved as their choice:
         `shown` says what the page showed (`<objective id>:1` key, `:0` not), and every tick left as
         it was keeps following the ratings. Without it, the comparison is with what is key now."""
         projects, view, why = editable(request, project_id)
         if why is not None:
             return PlainTextResponse(why, status_code=409)
-        form = await request.form()
         ticked = {str(v) for v in form.getlist("key")}
         shown = {}
         for value in form.getlist("shown"):
@@ -558,13 +552,12 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
         )
 
     @app.post("/p/{project}/projects/{project_id}/keys/reset", include_in_schema=False)
-    async def reset_keys_form(project: str, project_id: str, request: Request):
+    def reset_keys_form(project: str, project_id: str, request: Request, form=Depends(posted_form)):
         """"Reset keys to defaults": every key choice of the assessment is removed, once the page has
         asked, and every objective follows the ratings again."""
         projects, view, why = editable(request, project_id)
         if why is not None:
             return PlainTextResponse(why, status_code=409)
-        form = await request.form()
         if not form.get("confirmed"):
             return RedirectResponse(
                 url=_assessment_url(root_path, project, project_id) + "?reset=ask#matrix", status_code=303)
