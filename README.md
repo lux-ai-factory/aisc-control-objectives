@@ -225,7 +225,7 @@ makes it one.
 | Method and path | Purpose |
 |---|---|
 | `GET /health` | Liveness. |
-| `GET /api/config` | The model the service is configured with. |
+| `GET /api/config` | The service's default model; a project's own choice on the platform wins. |
 | `GET /api/control-objectives[?mode=control\|test]` | The built-in objectives, in catalogue order. |
 | `GET /api/control-objectives/{id}` | One objective, 404 if unknown. |
 | `GET /api/macro-requirements` | REQ1 ... REQ11 with their objectives. |
