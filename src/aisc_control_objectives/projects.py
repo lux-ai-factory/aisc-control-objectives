@@ -305,8 +305,8 @@ class Projects:
         - `on_start(session, run_id)` records the request, in a transaction of its own, before the first
           model call, so a long run cannot push it past the relay's window;
         - `on_save(session, outcome)` records the run (its id, outcome, model and each model call) inside the
-          save's transaction. A run that raises, or a model that cannot be had, is recorded in a
-          transaction of its own, then raised again."""
+          save's transaction. A run that raises, or a model that cannot be had for any reason, is recorded
+          in a transaction of its own, then raised again (the model: as ModelUnavailable)."""
         from aisc_control_objectives import ledger
 
         record = self._repository.get(project_id)
@@ -317,10 +317,15 @@ class Projects:
         if self._mapper_for is not None:
             try:
                 mapper, model = self._mapper_for(record.project)
-            except (ResolveError, ValueError) as exc:
+            except Exception as exc:
+                # the expected refusals say why in words meant for the user; anything else (a bug, an
+                # outage) is logged, and shown only as the stored error would be, without secrets
                 self._record_failure(on_save, {"run_id": run_id, "run": None, "error": "model_unreachable",
                                                "model": None, "calls": calls})
-                raise ModelUnavailable(str(exc)) from exc
+                if isinstance(exc, (ResolveError, ValueError)):
+                    raise ModelUnavailable(str(exc)) from exc
+                _log.exception("the model of project %s could not be had", record.project)
+                raise ModelUnavailable(safe_error(str(exc)) or "the model could not be had") from exc
         catalogue = self._catalogue_for(record)
         # the model is shown the catalogue its proposals are checked against: the profile's
         if hasattr(mapper, "for_catalogue"):

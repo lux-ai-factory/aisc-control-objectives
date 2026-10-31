@@ -708,3 +708,28 @@ def test_keeping_the_ais_mapping_by_hand_records_that_a_person_now_owns_it(clien
     [edited] = outbox(repository, "mapping.risk.edited")
     assert edited["before"] == edited["after"] == sorted(mapped)
     assert edited["details"] == {"added": [], "removed": [], "by_hand": True}
+
+
+def test_any_error_getting_the_model_records_the_request_and_its_failure_and_answers_502(
+        repository, objectives, mapper, start, platform_project):
+    """Not only the expected refusals: a bug or an outage while the model is being had is recorded as
+    model_unreachable, and the caller gets a 502 that never quotes the error's secrets."""
+    from fastapi.testclient import TestClient
+
+    from aisc_control_objectives.api.app import create_app
+    from aisc_control_objectives.config import RunConfig
+    from aisc_control_objectives.library import FULL_AI_ACT
+    from aisc_control_objectives.projects import Projects
+
+    def broken(pid):
+        raise RuntimeError("connection to https://llm.example/v1?key=sk-proj-abcdefghijklmnopqrstuvwxyz refused")
+    projects = Projects(repository, objectives, mapper, model="fake/model", default_profile=FULL_AI_ACT,
+                        mapper_for=broken)
+    http = TestClient(create_app(objectives, projects, base_config=RunConfig()))
+    a = start()                                                       # same database, another Projects
+    r =http.post(_api(platform_project, a, "/map"))
+    assert r.status_code == 502
+    assert "sk-proj-abcdefghijklmnopqrstuvwxyz" not in r.text
+    rows = outbox(repository)
+    assert [x["action"] for x in rows] == ["ai.mapping.requested", "ai.mapping.failed"]
+    assert rows[1]["details"]["error"] == "model_unreachable"
