@@ -1,7 +1,9 @@
 """What step 2's ledger events say, worked out from what a write changed.
 
-The handlers call `ledger.emit` themselves, in the write's transaction (api/app.py, library_routes.py);
-these helpers only shape the details, and write the AI run's own events (`mapping_outcome`).
+Every event is written with `ledger.emit`, in the write's transaction. An assessment's actions are
+recorded by the `on_*` recorders here, which the page's forms and the JSON API both hand to Projects, so
+the two can never record one action two ways; the library's are written in library_routes.py. The other
+helpers shape the details, and write the AI run's own events (`mapping_outcome`).
 """
 from __future__ import annotations
 
@@ -152,3 +154,47 @@ def mapping_outcome(session, project_id: str, outcome: dict) -> None:
                     model=model, details=details,
                     content={"risks": {rid: [o.objective_id for o in saved(rid, m).objectives]
                                        for rid, m in run.mappings.items()}})
+
+
+# The recorders: what each assessment action hands Projects, the same for a form and its API route
+
+def on_mapping_requested(assessment: str):
+    """ai.mapping.requested, before the run's first model call."""
+    return lambda session, run_id: ledger.emit(session, "ai.mapping.requested", item_type="assessment",
+                                               item_id=assessment, run_id=run_id)
+
+
+def on_mapping_run(assessment: str):
+    """The run's own events, in its save's transaction (`mapping_outcome`)."""
+    return lambda session, outcome: mapping_outcome(session, assessment, outcome)
+
+
+def on_mapping_edited(assessment: str, risk: str):
+    """mapping.risk.edited: a person's mapping of one risk."""
+    return lambda session, change: ledger.emit(
+        session, "mapping.risk.edited", item_type="risk_mapping", item_id=risk_item(assessment, risk),
+        before=change["before"], after=change["after"], details=mapping_edit(change))
+
+
+def on_rated():
+    """risk.rated and risk.rating_comment.set, one per risk whose rating or comment changed."""
+    def record(session, changed: list[dict]) -> None:
+        for e in ratings(changed):
+            ledger.emit(session, "risk.rated", **e)
+        for e in comments(changed):
+            ledger.emit(session, "risk.rating_comment.set", **e)
+    return record
+
+
+def on_keys_set(assessment: str):
+    """objective.key.set: key choices set, or reset to the defaults."""
+    return lambda session, change: ledger.emit(session, "objective.key.set", item_type="assessment",
+                                               item_id=assessment, before=change["before"],
+                                               after=change["after"], details=keys(change))
+
+
+def on_profile_switched(assessment: str):
+    """assessment.profile.switched: the profile versions before and after, and what the switch dropped."""
+    return lambda session, change: ledger.emit(
+        session, "assessment.profile.switched", item_type="assessment", item_id=assessment,
+        details={"version_before": change["before"], "version_after": change["after"], "dropped": change["dropped"]})

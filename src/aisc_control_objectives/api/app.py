@@ -273,14 +273,21 @@ def create_app(
             raise HTTPException(status_code=404, detail=f"Unknown project {project_id}")
         return view
 
-    _register_pages(app, objectives, projects_of, view_in, source_name, root_path)
+    def editable(request: Request, project_id: str):
+        """The service, the assessment, and why it may no longer change (None when it may): each
+        family of routes refuses a write with that reason its own way (the pages as text, the API as JSON)."""
+        projects = projects_of(request)
+        view = view_in(request, project_id)
+        return projects, view, _read_only(projects, view)
+
+    _register_pages(app, objectives, projects_of, editable, source_name, root_path)
     _register_objective_api(app, objectives, config)
-    _register_project_api(app, projects_of, view_in)
+    _register_project_api(app, projects_of, view_in, editable)
     register_library(app, projects_of, root_path)
     return app
 
 
-def _register_pages(app, objectives, projects_of, view_in, source_name, root_path):
+def _register_pages(app, objectives, projects_of, editable, source_name, root_path):
     """The pages, and the forms that post to them.
 
     Anything that reads or writes an assessment lives under `/p/{project}`:
@@ -403,9 +410,8 @@ def _register_pages(app, objectives, projects_of, view_in, source_name, root_pat
     )
     def project_page(project: str, project_id: str, request: Request, dropped: str = "",
                      replace: str = "", reset: str = "") -> HTMLResponse:
-        view = view_in(request, project_id)
-        read_only = _read_only(projects_of(request), view)
-        library = projects_of(request).library
+        projects, view, read_only = editable(request, project_id)
+        library = projects.library
         # `dropped` comes back from a profile switch in the address, where anyone can write
         # anything: only ids of real objectives are shown
         named = [oid for oid in dict.fromkeys(dropped.split(",")) if oid]
@@ -427,9 +433,8 @@ def _register_pages(app, objectives, projects_of, view_in, source_name, root_pat
     async def map_form(project: str, project_id: str, request: Request):
         """The one agentic step, on a button: it costs a model call per risk. "Also replace objectives
         I linked by hand" maps the risks a person mapped as well, once the page has asked."""
-        projects = projects_of(request)
-        view = view_in(request, project_id)
-        if (why := _read_only(projects, view)) is not None:
+        projects, view, why = editable(request, project_id)
+        if why is not None:
             return PlainTextResponse(why, status_code=409)
         form = await request.form()
         replace = bool(form.get("replace"))
@@ -437,9 +442,9 @@ def _register_pages(app, objectives, projects_of, view_in, source_name, root_pat
             return RedirectResponse(
                 url=_assessment_url(root_path, project, project_id) + "?replace=ask#matrix", status_code=303)
         try:
-            projects.map_risks_of(project_id, replace=replace, on_start=lambda s, run_id: ledger.emit(
-                s, "ai.mapping.requested", item_type="assessment", item_id=project_id, run_id=run_id),
-                on_save=lambda s, o: ledger_events.mapping_outcome(s, project_id, o))
+            projects.map_risks_of(project_id, replace=replace,
+                                  on_start=ledger_events.on_mapping_requested(project_id),
+                                  on_save=ledger_events.on_mapping_run(project_id))
         except ModelUnavailable as exc:
             return PlainTextResponse(str(exc), status_code=502)
         except AssessmentChanged as exc:
@@ -452,9 +457,8 @@ def _register_pages(app, objectives, projects_of, view_in, source_name, root_pat
     @app.post("/p/{project}/projects/{project_id}/card", include_in_schema=False)
     def card_form(project: str, project_id: str, request: Request):
         """"Update": the card of the assessment's version changed; read it again and carry the work over."""
-        projects = projects_of(request)
-        view = view_in(request, project_id)
-        if (why := _read_only(projects, view)) is not None:
+        projects, view, why = editable(request, project_id)
+        if why is not None:
             return PlainTextResponse(why, status_code=409)
         try:
             _update_card(projects, project_id, view, _pid(request, project), _caller(request))
@@ -467,18 +471,13 @@ def _register_pages(app, objectives, projects_of, view_in, source_name, root_pat
     @app.post("/p/{project}/projects/{project_id}/risks/{risk_id}/mapping", include_in_schema=False)
     async def map_by_hand_form(project: str, project_id: str, risk_id: str, request: Request):
         """A person's mapping of one risk: the ticked objectives, and only those."""
-        projects = projects_of(request)
-        view = view_in(request, project_id)
-        if (why := _read_only(projects, view)) is not None:
+        projects, view, why = editable(request, project_id)
+        if why is not None:
             return PlainTextResponse(why, status_code=409)
         form = await request.form()
         try:
             projects.map_by_hand(project_id, risk_id, [str(v) for v in form.getlist("objective")],
-                                 on_save=lambda s, c: ledger.emit(
-                                     s, "mapping.risk.edited", item_type="risk_mapping",
-                item_id=ledger_events.risk_item(project_id, risk_id),
-                                     before=c["before"], after=c["after"],
-                                     details=ledger_events.mapping_edit(c)))
+                                 on_save=ledger_events.on_mapping_edited(project_id, risk_id))
         except ValueError as exc:
             return PlainTextResponse(f"Invalid links: {exc}", status_code=400)
         except AssessmentChanged as exc:
@@ -490,15 +489,13 @@ def _register_pages(app, objectives, projects_of, view_in, source_name, root_pat
     @app.post("/p/{project}/projects/{project_id}/profile", include_in_schema=False)
     async def profile_form(project: str, project_id: str, request: Request):
         """Run the assessment on another objective profile, or on its profile's newer version."""
-        projects = projects_of(request)
-        view = view_in(request, project_id)
-        if (why := _read_only(projects, view)) is not None:
+        projects, view, why = editable(request, project_id)
+        if why is not None:
             return PlainTextResponse(why, status_code=409)
         form = await request.form()
         try:
-            switched = projects.use_profile(project_id, str(form.get("profile") or ""), record=lambda s, c: ledger.emit(
-                s, "assessment.profile.switched", item_type="assessment", item_id=project_id,
-                details={"version_before": c["before"], "version_after": c["after"], "dropped": c["dropped"]}))
+            switched = projects.use_profile(project_id, str(form.get("profile") or ""),
+                                            record=ledger_events.on_profile_switched(project_id))
         except ValueError as exc:
             return PlainTextResponse(f"Invalid profile: {exc}", status_code=400)
         # the page says what the switch dropped
@@ -509,9 +506,8 @@ def _register_pages(app, objectives, projects_of, view_in, source_name, root_pat
 
     @app.post("/p/{project}/projects/{project_id}/severity", include_in_schema=False)
     async def rate_form(project: str, project_id: str, request: Request):
-        projects = projects_of(request)
-        view = view_in(request, project_id)
-        if (why := _read_only(projects, view)) is not None:
+        projects, view, why = editable(request, project_id)
+        if why is not None:
             return PlainTextResponse(why, status_code=409)
         form = await request.form()
         try:
@@ -525,9 +521,8 @@ def _register_pages(app, objectives, projects_of, view_in, source_name, root_pat
                 key.split(":", 1)[1]: str(value)
                 for key, value in form.items() if key.startswith("comment:")
             }
-            projects.rate(project_id, part("impact:"), part("likelihood:"), comments, record=lambda s, changed: (
-                [ledger.emit(s, "risk.rated", **e) for e in ledger_events.ratings(changed)],
-                [ledger.emit(s, "risk.rating_comment.set", **e) for e in ledger_events.comments(changed)]))
+            projects.rate(project_id, part("impact:"), part("likelihood:"), comments,
+                          record=ledger_events.on_rated())
         except ValueError as exc:
             return PlainTextResponse(f"Invalid rating: {exc}", status_code=400)
         # back on the part of the page's menu the ratings were saved from
@@ -541,9 +536,8 @@ def _register_pages(app, objectives, projects_of, view_in, source_name, root_pat
         """The key ticks of the matrix. Only a tick the assessor changed is saved as their choice:
         `shown` says what the page showed (`<objective id>:1` key, `:0` not), and every tick left as
         it was keeps following the ratings. Without it, the comparison is with what is key now."""
-        projects = projects_of(request)
-        view = view_in(request, project_id)
-        if (why := _read_only(projects, view)) is not None:
+        projects, view, why = editable(request, project_id)
+        if why is not None:
             return PlainTextResponse(why, status_code=409)
         form = await request.form()
         ticked = {str(v) for v in form.getlist("key")}
@@ -556,9 +550,7 @@ def _register_pages(app, objectives, projects_of, view_in, source_name, root_pat
             shown = {p.objective_id: p.key for p in view.priorities if p.risk_ids}
         changed = {oid: oid in ticked for oid in set(shown) | ticked if (oid in ticked) != shown.get(oid, False)}
         try:
-            projects.set_keys(project_id, changed, record=lambda s, c: ledger.emit(
-                s, "objective.key.set", item_type="assessment", item_id=project_id, before=c["before"],
-                after=c["after"], details=ledger_events.keys(c)))
+            projects.set_keys(project_id, changed, record=ledger_events.on_keys_set(project_id))
         except ValueError as exc:
             return PlainTextResponse(f"Invalid key objectives: {exc}", status_code=400)
         return RedirectResponse(
@@ -569,17 +561,14 @@ def _register_pages(app, objectives, projects_of, view_in, source_name, root_pat
     async def reset_keys_form(project: str, project_id: str, request: Request):
         """"Reset keys to defaults": every key choice of the assessment is removed, once the page has
         asked, and every objective follows the ratings again."""
-        projects = projects_of(request)
-        view = view_in(request, project_id)
-        if (why := _read_only(projects, view)) is not None:
+        projects, view, why = editable(request, project_id)
+        if why is not None:
             return PlainTextResponse(why, status_code=409)
         form = await request.form()
         if not form.get("confirmed"):
             return RedirectResponse(
                 url=_assessment_url(root_path, project, project_id) + "?reset=ask#matrix", status_code=303)
-        projects.reset_keys(project_id, record=lambda s, c: ledger.emit(
-            s, "objective.key.set", item_type="assessment", item_id=project_id, before=c["before"],
-            after=c["after"], details=ledger_events.keys(c)))
+        projects.reset_keys(project_id, record=ledger_events.on_keys_set(project_id))
         return RedirectResponse(
             url=_assessment_url(root_path, project, project_id) + "#matrix", status_code=303
         )
@@ -620,7 +609,7 @@ def _register_objective_api(app, objectives, config):
         return objectives.macro_requirements()
 
 
-def _register_project_api(app, projects_of, view_in):
+def _register_project_api(app, projects_of, view_in, editable):
     """One assessed system: its graph, its ratings, its mapping, its priorities.
 
     Under the project, as the pages are: the gate has decided on
@@ -655,9 +644,12 @@ def _register_project_api(app, projects_of, view_in):
             "carried": record.carried,
         }
 
-    def _latest_or_409(projects, view) -> None:
-        if (why := _read_only(projects, view)) is not None:
+    def latest_or_409(request: Request, project_id: str):
+        """The service and the assessment, or the 409 a write to an assessment that may no longer change gets."""
+        projects, view, why = editable(request, project_id)
+        if why is not None:
             raise HTTPException(status_code=409, detail=why)
+        return projects, view
 
     @app.get("/p/{project}/api/projects")
     def list_projects(project: str, request: Request) -> list[dict]:
@@ -670,12 +662,11 @@ def _register_project_api(app, projects_of, view_in):
     @app.post("/p/{project}/api/projects/{project_id}/map")
     def map_risks(project: str, project_id: str, request: Request, replace: bool = Query(False)) -> dict:
         """Map the risks no person has mapped; `replace` maps those too."""
-        projects = projects_of(request)
-        _latest_or_409(projects, view_in(request, project_id))
+        projects, _view = latest_or_409(request, project_id)
         try:
-            return payload(projects.map_risks_of(project_id, replace=replace, on_start=lambda s, run_id: ledger.emit(
-                s, "ai.mapping.requested", item_type="assessment", item_id=project_id, run_id=run_id),
-                on_save=lambda s, o: ledger_events.mapping_outcome(s, project_id, o)))
+            return payload(projects.map_risks_of(project_id, replace=replace,
+                                                 on_start=ledger_events.on_mapping_requested(project_id),
+                                                 on_save=ledger_events.on_mapping_run(project_id)))
         except ModelUnavailable as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
         except AssessmentChanged as exc:
@@ -685,9 +676,7 @@ def _register_project_api(app, projects_of, view_in):
     def update_card(project: str, project_id: str, request: Request) -> dict:
         """Put the assessment on its version's card as qualification serves it now; the work on the risks
         that stayed the same comes along. Nothing changes when the card is the one it holds."""
-        projects = projects_of(request)
-        view = view_in(request, project_id)
-        _latest_or_409(projects, view)
+        projects, view = latest_or_409(request, project_id)
         try:
             return payload(_update_card(projects, project_id, view, _pid(request, project), _caller(request)))
         except _Refused as refused:
@@ -701,13 +690,10 @@ def _register_project_api(app, projects_of, view_in):
         objective_ids: list[str] = Body(..., embed=True),
     ) -> dict:
         """A person maps one risk to its objectives (replaces that risk's mapping)."""
-        projects = projects_of(request)
-        _latest_or_409(projects, view_in(request, project_id))
+        projects, _view = latest_or_409(request, project_id)
         try:
-            return payload(projects.map_by_hand(project_id, risk_id, objective_ids, on_save=lambda s, c: ledger.emit(
-                s, "mapping.risk.edited", item_type="risk_mapping",
-                item_id=ledger_events.risk_item(project_id, risk_id), before=c["before"], after=c["after"],
-                details=ledger_events.mapping_edit(c))))
+            return payload(projects.map_by_hand(project_id, risk_id, objective_ids,
+                                                on_save=ledger_events.on_mapping_edited(project_id, risk_id)))
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         except AssessmentChanged as exc:
@@ -718,14 +704,11 @@ def _register_project_api(app, projects_of, view_in):
         project: str, project_id: str, request: Request, ratings: dict[str, dict[str, int | None]] = Body(...)
     ) -> dict:
         """{risk id: {"impact": 1-5, "likelihood": 1-5}}; a part left out keeps what it had, null clears it."""
-        projects = projects_of(request)
-        _latest_or_409(projects, view_in(request, project_id))
+        projects, _view = latest_or_409(request, project_id)
         impact = {rid: r["impact"] for rid, r in ratings.items() if "impact" in r}
         likelihood = {rid: r["likelihood"] for rid, r in ratings.items() if "likelihood" in r}
         try:
-            return payload(projects.rate(project_id, impact, likelihood, record=lambda s, changed: (
-                [ledger.emit(s, "risk.rated", **e) for e in ledger_events.ratings(changed)],
-                [ledger.emit(s, "risk.rating_comment.set", **e) for e in ledger_events.comments(changed)])))
+            return payload(projects.rate(project_id, impact, likelihood, record=ledger_events.on_rated()))
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -734,35 +717,27 @@ def _register_project_api(app, projects_of, view_in):
         project: str, project_id: str, request: Request, keys: dict[str, bool] = Body(...)
     ) -> dict:
         """{objective id: key}: the assessor's choice wins over the default."""
-        projects = projects_of(request)
-        _latest_or_409(projects, view_in(request, project_id))
+        projects, _view = latest_or_409(request, project_id)
         try:
-            return payload(projects.set_keys(project_id, keys, record=lambda s, c: ledger.emit(
-                s, "objective.key.set", item_type="assessment", item_id=project_id, before=c["before"],
-                after=c["after"], details=ledger_events.keys(c))))
+            return payload(projects.set_keys(project_id, keys, record=ledger_events.on_keys_set(project_id)))
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @app.post("/p/{project}/api/projects/{project_id}/keys/reset")
     def reset_keys(project: str, project_id: str, request: Request) -> dict:
         """Remove every key choice: each objective follows the ratings again."""
-        projects = projects_of(request)
-        _latest_or_409(projects, view_in(request, project_id))
-        return payload(projects.reset_keys(project_id, record=lambda s, c: ledger.emit(
-            s, "objective.key.set", item_type="assessment", item_id=project_id, before=c["before"],
-            after=c["after"], details=ledger_events.keys(c))))
+        projects, _view = latest_or_409(request, project_id)
+        return payload(projects.reset_keys(project_id, record=ledger_events.on_keys_set(project_id)))
 
     @app.post("/p/{project}/api/projects/{project_id}/profile")
     def use_profile(
         project: str, project_id: str, request: Request, profile_id: str = Body(..., embed=True),
     ) -> dict:
         """Run the assessment on a profile's current version; what falls outside is dropped."""
-        projects = projects_of(request)
-        _latest_or_409(projects, view_in(request, project_id))
+        projects, _view = latest_or_409(request, project_id)
         try:
-            return payload(projects.use_profile(project_id, profile_id, record=lambda s, c: ledger.emit(
-                s, "assessment.profile.switched", item_type="assessment", item_id=project_id,
-                details={"version_before": c["before"], "version_after": c["after"], "dropped": c["dropped"]})))
+            return payload(projects.use_profile(project_id, profile_id,
+                                                record=ledger_events.on_profile_switched(project_id)))
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -771,18 +746,15 @@ def _register_project_api(app, projects_of, view_in):
         project: str, project_id: str, request: Request, comments: dict[str, str] = Body(...)
     ) -> dict:
         """Why each risk is rated as it is: {risk id: comment}; a blank comment clears it."""
-        projects = projects_of(request)
-        _latest_or_409(projects, view_in(request, project_id))
+        projects, _view = latest_or_409(request, project_id)
         try:
-            return payload(projects.rate(project_id, {}, {}, comments, record=lambda s, changed: (
-                [ledger.emit(s, "risk.rated", **e) for e in ledger_events.ratings(changed)],
-                [ledger.emit(s, "risk.rating_comment.set", **e) for e in ledger_events.comments(changed)])))
+            return payload(projects.rate(project_id, {}, {}, comments, record=ledger_events.on_rated()))
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @app.delete("/p/{project}/api/projects/{project_id}", status_code=204)
     def delete_project(project: str, project_id: str, request: Request) -> None:
         # an older version's assessment is kept as it was, like every other write to it
-        _latest_or_409(projects_of(request), view_in(request, project_id))
-        projects_of(request).delete(project_id, record=lambda s, held: ledger.emit(
+        projects, _view = latest_or_409(request, project_id)
+        projects.delete(project_id, record=lambda s, held: ledger.emit(
             s, "assessment.deleted", item_type="assessment", item_id=project_id, content=held))

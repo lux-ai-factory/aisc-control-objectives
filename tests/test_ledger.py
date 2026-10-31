@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import text
 
+from aisc_control_objectives.library import FAIRNESS_OVERSIGHT
 from step2_support import _api
 
 TEMPLATE = Path(__file__).resolve().parents[3] / "platform" / "project-template" / "0020_ledger_outbox.sql"
@@ -733,3 +734,51 @@ def test_any_error_getting_the_model_records_the_request_and_its_failure_and_ans
     rows = outbox(repository)
     assert [x["action"] for x in rows] == ["ai.mapping.requested", "ai.mapping.failed"]
     assert rows[1]["details"]["error"] == "model_unreachable"
+
+
+# The page's forms and the JSON API record each action with one recorder
+
+ROUTE_PAIRS = {
+    "on_mapping_requested": ("/map", {}, "/map", None),
+    "on_mapping_run": ("/map", {}, "/map", None),
+    "on_mapping_edited": ("/risks/risk0/mapping", {"objective": "O5"}, "/risks/risk0/mapping",
+                          {"objective_ids": ["O5"]}),
+    "on_rated": ("/severity", {"impact:risk0": "4"}, "/ratings", {"risk0": {"impact": 4}}),
+    "on_keys_set": ("/key", {"key": "O5"}, "/key", {"O5": True}),
+    "on_profile_switched": ("/profile", {"profile": FAIRNESS_OVERSIGHT}, "/profile",
+                            {"profile_id": FAIRNESS_OVERSIGHT}),
+}
+
+
+@pytest.mark.parametrize("recorder", sorted(ROUTE_PAIRS))
+def test_a_form_and_its_api_route_record_with_the_same_recorder(recorder, client, start, platform_project,
+                                                                repository, monkeypatch):
+    from aisc_control_objectives.api import ledger_events
+
+    made = []
+    real = getattr(ledger_events, recorder)
+
+    def spy(*args):
+        made.append(args)
+        return real(*args)
+    monkeypatch.setattr(ledger_events, recorder, spy)
+    http, _ = client
+    a = start()
+    form_path, form, api_path, body = ROUTE_PAIRS[recorder]
+    assert http.post(f"/p/{platform_project}/projects/{a}{form_path}", data=form).status_code == 303
+    assert http.post(_api(platform_project, a, api_path), json=body).status_code == 200
+    assert len(made) == 2 and made[0] == made[1]
+
+
+def test_resetting_the_keys_on_the_page_and_through_the_api_records_with_the_same_recorder(
+        client, start, platform_project, repository, monkeypatch):
+    from aisc_control_objectives.api import ledger_events
+
+    made = []
+    real = ledger_events.on_keys_set
+    monkeypatch.setattr(ledger_events, "on_keys_set", lambda *args: made.append(args) or real(*args))
+    http, _ = client
+    a = start()
+    assert http.post(f"/p/{platform_project}/projects/{a}/keys/reset", data={"confirmed": "1"}).status_code == 303
+    assert http.post(_api(platform_project, a, "/keys/reset")).status_code == 200
+    assert made == [(a,), (a,)]
