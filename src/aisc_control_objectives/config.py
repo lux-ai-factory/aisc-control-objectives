@@ -1,8 +1,10 @@
 """Run configuration.
 
-Every operator-owned knob lives here. Precedence: environment > TOML file >
+The model the service maps with. Precedence: environment > TOML file >
 defaults, resolved once at startup by `RunConfig.load`. The model is named the
-way BAF names it, because BAF is what reaches the model.
+way BAF names it, because BAF is what reaches the model. The other variables
+(databases, port, root path, CORS, service URLs) are read where they are used;
+server.py's module docstring points to the full list.
 """
 
 from __future__ import annotations
