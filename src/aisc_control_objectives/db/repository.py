@@ -1,4 +1,5 @@
-"""Projects, read and written. The only place that touches a session.
+"""Projects, read and written. The only place that touches a session for
+assessments; library.py does the same for sets and profiles.
 
 Everything above this line works in pydantic models (`Ontology`, `MappingRun`);
 everything below is SQLAlchemy. The translation happens here, so `prioritising`,
