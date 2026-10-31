@@ -289,3 +289,12 @@ def test_a_long_provider_error_still_loses_its_key_and_is_cut_short():
     assert "AIza" not in out and "[redacted]" in out
     assert len(out) <= ERROR_CHARS and out.endswith("...")
     assert safe_error("short Bearer abc.def") == "short Bearer [redacted]"
+
+
+def test_a_stored_provider_error_is_the_shared_shown_error():
+    from aisc_control_objectives.errors import shown_error
+    from aisc_control_objectives.risk_mapping import ERROR_CHARS, safe_error
+
+    text = 'provider said {"api_key": "lb-judge-0123456789abcdef"} via AKIA' + 'ABCDEFGHIJKLMNOP'
+    assert safe_error(text) == shown_error(text, ERROR_CHARS)
+    assert "AKIA" not in safe_error(text)

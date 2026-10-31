@@ -25,6 +25,7 @@ from typing import Literal, Protocol
 from pydantic import BaseModel, Field
 
 from aisc_control_objectives.control_objectives import ControlObjectiveCatalogue
+from aisc_control_objectives.errors import shown_error
 from aisc_control_objectives.llm import Completer, parse_into
 from aisc_control_objectives.models.ontology import OntologyRisk
 from aisc_control_objectives.rounds import MAX_ATTEMPTS, Stop, review, worse
@@ -74,37 +75,11 @@ class MappingRun(BaseModel):
 #: cut short and anything that looks like a credential is taken out first: an SDK's
 #: message can quote the request URL with its `?key=`, or an Authorization header.
 ERROR_CHARS = 300
-_REDACTED = "[redacted]"
-_KEY_LIKE = (
-    # `Bearer <token>`, `Basic <credentials>`
-    (re.compile(r"(?i)\b(bearer|basic)\s+[^\s,;]+"), r"\1 " + _REDACTED),
-    # `key=...`, `api_key: ...`, `token=...`, `password=...` and the like
-    (re.compile(r"(?i)\b([a-z_-]*(?:key|token|secret|password|passwd|pwd|signature|sig|auth|authorization"
-                r"|credentials?))(\s*[=:]\s*)(?!\[redacted\])[^\s&,;]+"),
-     r"\1\2" + _REDACTED),
-    # `scheme://user:password@host`
-    (re.compile(r"://[^/\s:@]+:[^/\s@]+@"), "://" + _REDACTED + "@"),
-    # the providers' own key shapes: sk-..., xai-..., gsk_..., hf_..., AIza...
-    (re.compile(r"\b(?:sk|pk|rk|xai|gsk|hf|ghp|glpat)[-_][A-Za-z0-9_-]{8,}"), _REDACTED),
-    (re.compile(r"\bAIza[0-9A-Za-z_-]{10,}"), _REDACTED),
-    # any other long run of letters and digits together
-    (re.compile(r"\b(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Za-z])[A-Za-z0-9_-]{32,}"), _REDACTED),
-)
 
 
 def safe_error(text: str) -> str:
-    """A provider's error as it may be stored: key-like parts taken out, then cut short.
-
-    The text is cut to 4 x ERROR_CHARS before it is scrubbed, since the patterns are super-quadratic
-    on long input and nothing past the final cut is stored. A word the first cut
-    splits is dropped whole, so no half of a key escapes its pattern."""
-    first, text = 4 * ERROR_CHARS, text or ""
-    out = re.sub(r"\s+", " ", text[:first]).strip()
-    if len(text) > first and " " in out:
-        out = out.rsplit(" ", 1)[0]
-    for pattern, replacement in _KEY_LIKE:
-        out = pattern.sub(replacement, out)
-    return out if len(out) <= ERROR_CHARS else out[: ERROR_CHARS - 3].rstrip() + "..."
+    """A provider's error as it may be stored: errors.shown_error, cut to ERROR_CHARS."""
+    return shown_error(text, ERROR_CHARS)
 
 
 def _normalise(text: str) -> str:
