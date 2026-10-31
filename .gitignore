@@ -7,16 +7,5 @@ __pycache__/
 # local secrets (the model provider's key)
 .env
 
-# state file of an earlier demo version
-.control objectives_state.json
-
-# frontend build artifacts
-frontend/node_modules/
-frontend/build/
-frontend/.env
-
-# transient pasted screenshots
-Pasted image.png
-
 # BAF writes its log next to the process
 application.log
