@@ -11,6 +11,8 @@ that calls `create_engine(`:
 - one engine on `platform` (pool 2), for membership;
 - one engine per project database (pool 2, no overflow), at most
   `MAX_OPEN_PROJECTS` of them held open, the least recently used closed first.
+  One a request is still using is closed once its last connection comes back:
+  disposed under that request, it would open a new pool nothing ever closes.
 
 `ProjectDatabases.open(project, caller, write)` is the door. It asks
 aisc_identity.access.admit, which resolves the reference to exactly one pid and
@@ -160,6 +162,8 @@ class ProjectDatabases:
         self._migrate = migrate
         self._platform: Engine | None = None
         self._engines: OrderedDict[str, Engine] = OrderedDict()
+        #: evicted engines a request was still using, disposed once they have no connection out
+        self._retired: list[Engine] = []
         self._lock = threading.Lock()
         self._opening: dict[str, threading.Lock] = {}
 
@@ -210,9 +214,18 @@ class ProjectDatabases:
                 self._engines.move_to_end(name)
                 while len(self._engines) > self._capacity:
                     _oldest, old = self._engines.popitem(last=False)
-                    old.dispose()
+                    self._retired.append(old)
                 self._opening.pop(name, None)
+            self._dispose_idle()
             return engine
+
+    def _dispose_idle(self) -> None:
+        """Close the evicted engines whose connections have all come back."""
+        with self._lock:
+            idle = [e for e in self._retired if e.pool.checkedout() == 0]
+            self._retired = [e for e in self._retired if e not in idle]
+        for engine in idle:
+            engine.dispose()
 
     def evict(self, pid_or_database: str) -> None:
         """Forget one project's engine (its database was dropped) and close it."""
@@ -225,8 +238,9 @@ class ProjectDatabases:
     def dispose(self) -> None:
         """Close every engine (shutdown)."""
         with self._lock:
-            engines = list(self._engines.values())
+            engines = list(self._engines.values()) + self._retired
             self._engines.clear()
+            self._retired = []
             platform, self._platform = self._platform, None
         for engine in engines:
             engine.dispose()
