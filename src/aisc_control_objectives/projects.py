@@ -384,7 +384,8 @@ class Projects:
 
         An objective the risk already had keeps its row as it was (the AI's quote and source);
         one added is the person's. The selection follows the change, as after an AI mapping.
-        What it replaces is kept in mapping_archive; `on_save` gets the objectives before and after."""
+        What it replaces is kept in mapping_archive; `on_save` gets the objectives before and after,
+        and whether a person had mapped the risk before. Saved again as a person left it, nothing changes."""
         record = self._repository.get(project_id)
         if risk_id not in {risk.id for risk in record.ontology.risks}:
             raise ValueError(f"no risk {risk_id} on this card")

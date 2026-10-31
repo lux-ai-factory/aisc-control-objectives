@@ -478,8 +478,7 @@ def _register_pages(app, objectives, projects_of, view_in, source_name, root_pat
                                      s, "mapping.risk.edited", item_type="risk_mapping",
                 item_id=ledger_events.risk_item(project_id, risk_id),
                                      before=c["before"], after=c["after"],
-                                     details={"added": sorted(set(c["after"]) - set(c["before"])),
-                                              "removed": sorted(set(c["before"]) - set(c["after"]))}))
+                                     details=ledger_events.mapping_edit(c)))
         except ValueError as exc:
             return PlainTextResponse(f"Invalid links: {exc}", status_code=400)
         except AssessmentChanged as exc:
@@ -708,8 +707,7 @@ def _register_project_api(app, projects_of, view_in):
             return payload(projects.map_by_hand(project_id, risk_id, objective_ids, on_save=lambda s, c: ledger.emit(
                 s, "mapping.risk.edited", item_type="risk_mapping",
                 item_id=ledger_events.risk_item(project_id, risk_id), before=c["before"], after=c["after"],
-                details={"added": sorted(set(c["after"]) - set(c["before"])),
-                         "removed": sorted(set(c["before"]) - set(c["after"]))})))
+                details=ledger_events.mapping_edit(c))))
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         except AssessmentChanged as exc:

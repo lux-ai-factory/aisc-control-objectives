@@ -674,3 +674,37 @@ def test_a_renamed_profile_is_recorded_as_edited_and_a_new_version_as_saved(clie
     assert (edited["item_id"], edited["before"]["name"], edited["after"]["name"]) == (pid, "Bank", "Bank, high risk")
     assert rows[2]["details"] == {"version": 2, "dropped": []}
     assert chain_breaks(rows) == []
+
+
+def test_a_key_choice_deleted_outright_is_recorded_as_removed():
+    """A card update deletes the key choices of a risk that went: the event says which stopped being key."""
+    from aisc_control_objectives.api import ledger_events
+
+    assert ledger_events.keys({"before": {"O5": True, "O7": False}, "after": {}}) == {"added": [],
+                                                                                       "removed": ["O5"]}
+
+
+def test_saving_a_persons_mapping_again_unchanged_changes_and_records_nothing(client, start, platform_project,
+                                                                             repository):
+    http, _ = client
+    a = start()
+    http.post(_api(platform_project, a, "/risks/risk0/mapping"), json={"objective_ids": ["O5"]})
+    archived = len(archive(repository))
+    http.post(_api(platform_project, a, "/risks/risk0/mapping"), json={"objective_ids": ["O5"]})
+    assert len(archive(repository)) == archived
+    assert len(outbox(repository, "mapping.risk.edited")) == 1
+
+
+def test_keeping_the_ais_mapping_by_hand_records_that_a_person_now_owns_it(client, start, platform_project,
+                                                                           repository):
+    """Saved unchanged, the AI's mapping of a risk becomes the person's: the next run skips it, and the
+    ledger says why."""
+    http, projects = client
+    a = start()
+    http.post(_api(platform_project, a, "/map"))
+    mapped = [o.objective_id for o in projects.view(a).record.mapping_run.mappings["risk0"].objectives]
+    http.post(_api(platform_project, a, "/risks/risk0/mapping"), json={"objective_ids": mapped})
+    assert "risk0" in projects.view(a).record.by_hand
+    [edited] = outbox(repository, "mapping.risk.edited")
+    assert edited["before"] == edited["after"] == sorted(mapped)
+    assert edited["details"] == {"added": [], "removed": [], "by_hand": True}

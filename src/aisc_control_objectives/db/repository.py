@@ -550,13 +550,23 @@ class ProjectRepository:
         `profile_version_id`, when given (None is the built-in profile), is the profile the objectives
         were checked against: if the locked row is on another one now, AssessmentChanged is raised and
         nothing is written, so a profile switch in between cannot leave an objective
-        outside the profile mapped and selected."""
+        outside the profile mapped and selected.
+
+        A risk a person mapped, saved again with the same objectives, is left as it is. Any other save
+        is recorded, also one that keeps the AI's objectives: the risk becomes the person's, and later
+        runs skip it. `record` gets the objectives before and after, and whether a person had mapped
+        the risk before (`was_by_hand`)."""
         with self._sessions.begin() as session:
             project = session.get(tables.Project, project_id, with_for_update=True)
             if profile_version_id != "" and project.profile_version_id != profile_version_id:
                 raise AssessmentChanged("The assessment's objective profile changed meanwhile: suggest again.")
             row = next(r for r in project.risks if r.risk_id == risk_id)
             before = sorted(m.objective_id for m in row.mapped)
+            after = sorted(item.objective_id for item in objectives)
+            # a person's mapping saved again as it was: nothing to archive, flag or record
+            was_by_hand = row.mapped_by_hand
+            if was_by_hand and before == after:
+                return
             self._archive(session, project, "by_hand", risks=[row])
             row.mapped.clear()
             row.mapped_by_hand = True
@@ -574,12 +584,11 @@ class ProjectRepository:
                     tables.Risk, tables.Risk.id == tables.MappedObjectiveRow.risk_row_id)
                 .where(tables.Risk.project_id == project_id)))
             self._set_selection(session, project, order(mapped))
-            after = sorted(item.objective_id for item in objectives)
             if before != after:
                 project.updated_at = tables._now()
             self._store_priority(session, project_id)
-            if record is not None and before != after:
-                record(session, {"before": before, "after": after})
+            if record is not None:
+                record(session, {"before": before, "after": after, "was_by_hand": was_by_hand})
 
     def set_profile(self, project_id: str, profile_version_id: str | None, keep: set[str],
                     record=None) -> list[str]:

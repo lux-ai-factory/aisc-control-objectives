@@ -57,10 +57,22 @@ def keys(change: dict) -> dict:
     """objective.key.set: which objectives became key, which stopped being key. Compared with what was
     key before the save (`was_key`: the assessor's choice, else the default), not with the explicit
     choices only, which would miss an objective key by default and unticked. A reset, which leaves no
-    choice, compares with what is key after it (`is_key`: the defaults)."""
+    choice, compares with what is key after it (`is_key`: the defaults). A choice gone from `after`
+    altogether (a card update drops its risk's objective) is not key any more."""
     before, after = change.get("was_key", change["before"]), change.get("is_key", change["after"])
-    return {"added": sorted(o for o, k in after.items() if k and not before.get(o)),
-            "removed": sorted(o for o, k in after.items() if not k and before.get(o))}
+    every = before.keys() | after.keys()
+    return {"added": sorted(o for o in every if after.get(o) and not before.get(o)),
+            "removed": sorted(o for o in every if not after.get(o) and before.get(o))}
+
+
+def mapping_edit(change: dict) -> dict:
+    """mapping.risk.edited: the objectives a person added and removed, and `by_hand` when the save made
+    the risk theirs (the AI's mapping kept as it was is still taken over: later runs skip it)."""
+    details = {"added": sorted(set(change["after"]) - set(change["before"])),
+               "removed": sorted(set(change["before"]) - set(change["after"]))}
+    if not change.get("was_by_hand", True):
+        details["by_hand"] = True
+    return details
 
 
 def card_update(change: dict) -> dict:
