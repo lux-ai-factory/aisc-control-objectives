@@ -80,7 +80,7 @@ def test_the_assessment_speaks_of_priority_risk_level_and_links(client, start, p
     menu = re.search(r'<aside class="co-sidemenu">(.*?)</aside>', page, re.S).group(1)
     assert re.search(r"1</span> Rate the risks", menu) and re.search(r"2</span> Link objectives to risks", menu)
     assert re.search(r'<span class="n">\d+ priority objectives</span>', menu)
-    assert shown.count("Risk level (impact × likelihood)") == 2
+    assert page.count("<th>Risk level</th>") == 2 and "impact × likelihood)" not in shown
     assert "<dt>Priority score</dt>" in page and "<dt>Linked by</dt><dd>AI suggestion" in page
     assert "Priority objective" in shown and "Save priority choices" in shown
     assert "Also replace objectives I linked by hand" in shown

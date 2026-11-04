@@ -116,7 +116,7 @@
        rated; saving one as Not rated clears it.</p>
     {%- if not read_only %}<form id="ratings" method="post" action="{{ project_base }}/projects/{{ record.id }}/severity">{% endif %}
     <table class="co-register">
-      <thead><tr><th>Risk</th><th>Impact</th><th>Likelihood</th><th>Risk level <span>(impact × likelihood)</span></th><th>Rationale <span>(optional)</span></th></tr></thead>
+      <thead><tr><th>Risk</th><th>Impact</th><th>Likelihood</th><th>Risk level</th><th>Rationale <span>(optional)</span></th></tr></thead>
       <tbody>
       {%- for risk in risks %}
       <tr id="risk-{{ risk.risk.id }}">
@@ -136,7 +136,7 @@
         <td><span class="co-rating co-rating--{{ risk.band | lower | replace(' ', '-') }}">{{ risk.rating or "Not rated" }}</span>
           {%- if risk.rating %}
           <span class="co-band">{{ risk.band }}</span>{% endif %}</td>
-        <td>
+        <td class="co-reg-comment">
           {%- if read_only %}{% if risk.comment %}<p class="co-sev-comment">{{ risk.comment }}</p>{% endif %}
           {%- else %}
           <textarea name="comment:{{ risk.risk.id }}" maxlength="1000" rows="2" aria-label="Rationale"
@@ -230,7 +230,7 @@
       <li><span class="co-chip co-chip--plain co-chip--ai">O2</span> Suggested by AI</li>
     </ul>
     <table class="co-matrix">
-      <thead><tr><th>Risk</th><th>Risk level <span>(impact × likelihood)</span></th><th>Control objectives</th><th></th></tr></thead>
+      <thead><tr><th>Risk</th><th>Risk level</th><th>Control objectives</th><th></th></tr></thead>
       <tbody>
       {%- for risk in risks %}
       <tr class="co-mrow" data-risk="{{ risk.risk.id }}" id="map-{{ risk.risk.id }}">
@@ -238,7 +238,7 @@
           {%- for finding in risk.findings %}<p class="co-note co-note--flag">
             {%- if finding.flag == "risk-unmapped" %}The AI suggested no objective for this risk.
             {%- else %}<b>{{ finding_names.get(finding.flag, "Not accepted") }}:</b> {{ finding.detail }}{% endif %}</p>{% endfor %}</td>
-        <td><span class="co-rating co-rating--{{ risk.band | lower | replace(' ', '-') }}">{{ risk.rating or "Not rated" }}</span></td>
+        <td class="co-m-level"><span class="co-rating co-rating--{{ risk.band | lower | replace(' ', '-') }}">{{ risk.rating or "Not rated" }}</span></td>
         <td class="co-chips">
           {%- for chip in chips[risk.risk.id] %}
           {%- set o = chip.objective %}
