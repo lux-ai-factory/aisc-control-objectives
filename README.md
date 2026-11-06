@@ -10,7 +10,7 @@
 
 This is step 2, **Set control objectives**, of AISC (AI Assessment Sandbox Configurator), the
 compose service `control-objectives`. AISC assesses an AI system in four steps: 1 Qualify the AI
-system, 2 Set control objectives, 3 Choose tests and checklists, 4 Collect evidence.
+system, 2 Set control objectives, 3 Choose tests and checklists, 4 AI Assessment Sandbox.
 
 This service takes the AI card that step 1 produced for one AI card version and turns the risks
 on the card into a **risk register** that the assessor rates (impact x likelihood). It then builds
