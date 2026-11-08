@@ -167,8 +167,6 @@ class Risk(Base):
     consequence: Mapped[str] = mapped_column(Text, default="")
     impact: Mapped[str] = mapped_column(Text, default="")
     stakeholder: Mapped[str] = mapped_column(Text, default="")
-    control: Mapped[str] = mapped_column(Text, default="")
-    follow_up_control: Mapped[str] = mapped_column(Text, default="")
     areas: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
     vair_terms: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
     provenance: Mapped[str] = mapped_column(Text, default="form")

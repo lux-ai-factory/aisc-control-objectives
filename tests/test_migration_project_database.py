@@ -46,7 +46,9 @@ PROFILE_NAME = "20261018300000_profile_name"
 #: The stored card no longer keeps a count of its risks, which nothing read.
 GRAPH_RISK_COUNT = "20261029000000_graph_risk_count"
 #: The selection stores which of its objectives are priority, for the report.
-HEAD = "20261030000000_priority_ids"
+PRIORITY = "20261030000000_priority_ids"
+#: The provider's measures leave step 2: the risk's two columns, and the stored cards' RiskControl nodes.
+HEAD = "20261108000000_no_risk_measures"
 TABLES = ("project", "graph", "risk", "mapped_objective", "mapping_run", "objective_selection",
           "objective_set", "objective_draft", "objective_set_version", "objective_set_version_item",
           "objective_profile", "objective_profile_version", "objective_profile_version_item", "objective_key",
@@ -148,7 +150,8 @@ def test_the_chain_is_baseline_selection_rename_source():
     config.set_main_option("script_location", str(projectdb.ALEMBIC_DIR))
     script = ScriptDirectory.from_config(config)
     assert script.get_heads() == [HEAD]
-    assert script.get_revision(HEAD).down_revision == GRAPH_RISK_COUNT
+    assert script.get_revision(HEAD).down_revision == PRIORITY
+    assert script.get_revision(PRIORITY).down_revision == GRAPH_RISK_COUNT
     assert script.get_revision(GRAPH_RISK_COUNT).down_revision == PROFILE_NAME
     assert script.get_revision(PROFILE_NAME).down_revision == CARD
     assert script.get_revision(CARD).down_revision == CARRIED
@@ -205,9 +208,9 @@ def test_deleting_a_version_deletes_its_assessment(migrated):
             " VALUES ('a1', 'MCAS', '', now(), now(), :s)"), {"s": version})
         connection.execute(text(
             "INSERT INTO control_objectives.risk (project_id, risk_id, position, text, short_label,"
-            " source, vulnerability, consequence, impact, stakeholder, control, follow_up_control,"
+            " source, vulnerability, consequence, impact, stakeholder,"
             " areas, vair_terms, provenance) VALUES ('a1', 'risk0', 0, 't', '', '', '', '', '', '',"
-            " '', '', '{}', '{}', 'form')"))
+            " '{}', '{}', 'form')"))
     with migrated.begin() as connection:
         connection.execute(text("DELETE FROM project.system WHERE pid = :p"), {"p": version})
     with migrated.connect() as connection:
@@ -585,5 +588,74 @@ def test_an_existing_assessment_gets_its_priority_objectives_stored(database_url
         with engine.begin() as connection:
             connection.execute(text("ALTER TABLE control_objectives.objective_selection DROP COLUMN priority_ids"))
         assert priority_after_migrating() == expected                 # a database from before it
+    finally:
+        drop()
+
+
+def test_the_providers_measures_leave_the_stored_assessments(database_url, fixtures_dir):
+    """The risk loses its two copies of the provider's measure, and each stored card loses its
+    RiskControl nodes and gets the digest of what is left, so the card qualification now serves, which
+    has none, is the same card. A card that names no measure is left as it was, byte for byte; the
+    migration runs again on a database that is already there."""
+    import hashlib
+    import json
+
+    from alembic import command
+    from alembic.config import Config
+
+    from aisc_control_objectives import projectdb
+    from aisc_control_objectives.db import tables
+    from aisc_control_objectives.models.ontology import Ontology, same_card
+
+    assert not {"control", "follow_up_control"} & set(tables.Risk.__table__.columns.keys())
+    old_card = (fixtures_dir / "mcas.ontology.jsonld").read_text()
+    plain_card = json.dumps([n for n in json.loads(old_card)
+                             if "https://w3id.org/airo#RiskControl" not in (n.get("@type") or [])])
+    engine, drop = _scratch(database_url, "alembic_measures")
+    try:
+        config = Config(str(projectdb.ALEMBIC_INI))
+        config.set_main_option("script_location", str(projectdb.ALEMBIC_DIR))
+        with engine.begin() as connection:
+            config.attributes["connection"] = connection
+            command.upgrade(config, PRIORITY)
+        v1, v2 = str(uuid.uuid4()), str(uuid.uuid4())
+        with engine.begin() as connection:
+            connection.execute(text("INSERT INTO project.system (pid, number, name) VALUES (:a, 1, 'S'), (:b, 2, 'S')"),
+                               {"a": v1, "b": v2})
+            connection.execute(text(
+                "INSERT INTO control_objectives.project (id, name, objectives_digest, created_at, updated_at, system_id)"
+                " VALUES ('old', 'S', '', now(), now(), :a), ('plain', 'S', '', now(), now(), :b)"),
+                {"a": v1, "b": v2})
+            for assessment, card in (("old", old_card), ("plain", plain_card)):
+                connection.execute(text(
+                    "INSERT INTO control_objectives.graph (project_id, jsonld, digest, uploaded_at)"
+                    " VALUES (:p, :j, :d, now())"),
+                    {"p": assessment, "j": card, "d": hashlib.sha256(card.encode()).hexdigest()})
+            connection.execute(text(
+                "INSERT INTO control_objectives.risk (project_id, risk_id, position, text, short_label, source,"
+                " vulnerability, consequence, impact, stakeholder, control, follow_up_control, areas, vair_terms,"
+                " provenance) VALUES ('old', 'risk2', 2, 't', '', '', '', '', '', '', 'Officer override rates',"
+                " 'Withdraw approval rights', '{}', '{}', 'form')"))
+        projectdb.migrate(engine)
+        with engine.connect() as connection:
+            columns = [c[:2] for c in _columns(connection)]
+            stored = {p: (j, d) for p, j, d in connection.execute(text(
+                "SELECT project_id, jsonld, digest FROM control_objectives.graph")).all()}
+            assert connection.execute(text("SELECT count(*) FROM control_objectives.risk")).scalar() == 1
+        assert ("risk", "control") not in columns and ("risk", "follow_up_control") not in columns
+        jsonld, digest = stored["old"]
+        assert "RiskControl" not in jsonld and "Officer override rates" not in jsonld
+        assert digest == hashlib.sha256(jsonld.encode()).hexdigest()
+        assert same_card(jsonld, plain_card) and same_card(jsonld, old_card)
+        assert Ontology.from_jsonld(json.loads(jsonld)) == Ontology.from_jsonld(json.loads(old_card))
+        assert stored["plain"] == (plain_card, hashlib.sha256(plain_card.encode()).hexdigest())
+        with engine.begin() as connection:
+            connection.execute(text("UPDATE control_objectives.alembic_version SET version_num = :v"),
+                               {"v": PRIORITY})
+        projectdb.migrate(engine)
+        with engine.connect() as connection:
+            again = dict(connection.execute(text(
+                "SELECT project_id, digest FROM control_objectives.graph")).all())
+        assert again == {p: d for p, (_j, d) in stored.items()}
     finally:
         drop()

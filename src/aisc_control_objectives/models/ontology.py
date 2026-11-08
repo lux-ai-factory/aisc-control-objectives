@@ -78,6 +78,28 @@ def without_measures(nodes: list) -> list:
     return [unlinked(node) if isinstance(node, dict) else node for node in nodes if not _is_measure(node)]
 
 
+def card_without_measures(text: str) -> str | None:
+    """A stored card's text without the provider's measures, in the same shape (bare graph, `@graph`
+    or `ai-card.json`), or None when it names none or is not a card: then it stays as it is."""
+    try:
+        raw = json.loads(text)
+    except ValueError:
+        return None
+    nodes = Ontology.graph_in(raw)
+    if nodes is None or not any(_is_measure(node) for node in nodes):
+        return None
+
+    def rebuilt(shape: Any) -> Any:
+        if isinstance(shape, dict):
+            for key in ("ontology_graph", "@graph"):
+                if shape.get(key) is not None:
+                    return {**shape, key: rebuilt(shape[key])}
+            return shape
+        return without_measures(shape)
+
+    return json.dumps(rebuilt(raw), indent=2, ensure_ascii=False)
+
+
 def _canonical(nodes: list) -> list[str]:
     """The graph as a sorted list of its nodes, each with its values sorted: order and layout aside."""
     def node_key(node: Any) -> str:
