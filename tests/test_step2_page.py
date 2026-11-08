@@ -110,3 +110,16 @@ def test_the_ai_button_has_a_question_mark_pop_up_and_no_sentence(client, start,
     assert re.search(r'<button type="button" class="co-help" popovertarget="ai-help"[^>]*>\?</button>', page)
     popup = re.search(r'<div id="ai-help" class="co-help-pop" popover>(.*?)</div>', page, re.S).group(1)
     assert "keeps them and is not sent" in " ".join(popup.split()) and "quote" in popup
+
+
+# The provider's own measures are not part of step 2
+
+def test_the_risk_details_name_no_measure_of_the_providers(client, start, platform_project):
+    """The card the assessment starts from is an older one that still names a measure per risk; the
+    risk details show the chain without it."""
+    http, _ = client
+    assessment = start()
+    page = _page(http, platform_project, assessment)
+    assert "Risk details (from the AI card)" in page
+    assert "Declared control" not in page and "Follow-up control" not in page
+    assert "Officer override rates are tracked" not in page

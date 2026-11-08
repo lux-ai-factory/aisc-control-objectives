@@ -87,21 +87,29 @@ class TestTheRisks:
         assert risk.areas == ["Fundamental rights", "Freedom"]
 
     def test_the_chain_is_followed_through_reverse_edges(self, mcas):
-        """`isRiskSourceFor` and `modifiesRiskConcept` point AT the risk, so a
-        forward-only walk finds neither the source nor the control."""
+        """`isRiskSourceFor` points AT the risk, so a forward-only walk would not find the source."""
         risk = mcas.by_id("risk2")
         assert "Automation bias" in risk.source
-        assert "Officer override rates are tracked" in risk.control
 
     def test_the_fairness_risk_reads_the_same_way(self, mcas):
         risk = mcas.by_id("risk1")
         assert risk.text == "Approval rates diverge across protected groups"
         assert "act as proxies for ethnicity" in risk.source
-        assert "Quarterly fairness audit" in risk.control
 
-    def test_a_follow_up_control_is_found_through_the_control(self, mcas):
-        risk = mcas.by_id("risk2")
-        assert "Withdraw the officer's approval rights" in risk.follow_up_control
+    def test_an_old_card_with_the_providers_measures_parses_without_them(self, mcas):
+        """Older cards still carry a RiskControl node per risk (the provider's measure and its
+        follow-up). They parse as before, and nothing of those nodes reaches a risk: not a field,
+        not the mapper's passage, not the VAIR typing."""
+        assert len(mcas.risks) == 5
+        for risk in mcas.risks:
+            assert "control" not in risk.model_dump()
+            assert "follow_up_control" not in risk.model_dump()
+        text = mcas.by_id("risk2").as_text()
+        assert "Officer override rates are tracked" not in text
+        assert "Withdraw the officer's approval rights" not in text
+        assert "control" not in text.lower()
+        # risk2's measure is typed MonitoringMeasure, its follow-up OrganisationalMeasure
+        assert not {"MonitoringMeasure", "OrganisationalMeasure"} & set(mcas.by_id("risk2").vair_terms)
 
     def test_a_missing_link_is_empty_rather_than_an_error(self, mcas):
         """Not every risk names a vulnerability or a follow-up."""
@@ -121,7 +129,7 @@ class TestTheRisks:
 class TestRiskText:
     def test_the_chain_reads_as_one_passage_for_the_mapper(self, mcas):
         text = mcas.by_id("risk4").as_text()
-        for part in ("poisoned", "provenance signing", "Egress allow-list"):
+        for part in ("poisoned", "provenance signing", "bureau feed"):
             assert part in text
 
     def test_the_impact_line_is_dropped_when_it_only_repeats_the_risk(self, mcas):

@@ -28,7 +28,6 @@ RUBBER_STAMP = OntologyRisk(
     consequence="The mandatory human review becomes a formality",
     stakeholder="Loan applicants and officers",
     areas=["Fundamental rights", "Freedom"],
-    control="Officer override rates are tracked against the branch median",
     vair_terms=["Overreliance"],
 )
 

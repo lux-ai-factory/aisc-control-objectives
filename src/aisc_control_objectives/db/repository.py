@@ -714,8 +714,6 @@ class ProjectRepository:
                     consequence=risk.consequence,
                     impact=risk.impact,
                     stakeholder=risk.stakeholder,
-                    control=risk.control,
-                    follow_up_control=risk.follow_up_control,
                     areas=list(risk.areas),
                     vair_terms=list(risk.vair_terms),
                     provenance=risk.provenance,
@@ -754,8 +752,6 @@ class ProjectRepository:
                 impact=row.impact,
                 stakeholder=row.stakeholder,
                 areas=list(row.areas or []),
-                control=row.control,
-                follow_up_control=row.follow_up_control,
                 vair_terms=list(row.vair_terms or []),
                 provenance=row.provenance,
             )

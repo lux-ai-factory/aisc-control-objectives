@@ -153,7 +153,6 @@
               {%- if risk.risk.source %}<dt>Source</dt><dd>{{ risk.risk.source }}</dd>{% endif %}
               {%- if risk.risk.vulnerability %}<dt>Vulnerability</dt><dd>{{ risk.risk.vulnerability }}</dd>{% endif %}
               {%- if risk.risk.consequence %}<dt>Consequence</dt><dd>{{ risk.risk.consequence }}</dd>{% endif %}
-              {%- if risk.risk.control %}<dt>Declared control</dt><dd>{{ risk.risk.control }}</dd>{% endif %}
               {%- if risk.risk.areas %}<dt>Impact on</dt><dd>{{ risk.risk.areas | join(', ') }}</dd>{% endif %}
               {%- if risk.risk.stakeholder %}<dt>Affected stakeholder</dt><dd>{{ risk.risk.stakeholder }}</dd>{% endif %}
               {%- if risk.risk.vair_terms %}<dt>VAIR terms</dt><dd>{{ risk.risk.vair_terms | join(', ') }}</dd>{% endif %}

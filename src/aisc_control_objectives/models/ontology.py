@@ -12,9 +12,13 @@ risks live.
 
 Parsed by hand rather than with rdflib: expanded JSON-LD is plain JSON with
 predictable edges, and a graph library would be a large dependency for one
-traversal. Two of the edges point AT the risk rather than away from it
-(`isRiskSourceFor`, `modifiesRiskConcept`), so a forward-only walk finds
-neither the source nor the control.
+traversal. The source's edge points AT the risk rather than away from it
+(`isRiskSourceFor`), so a forward-only walk would not find it.
+
+Older cards also attach a provider's measure to each risk (an `airo:RiskControl`
+node through `modifiesRiskConcept`, and its follow-up through
+`isFollowedByControl`). Step 2 does not use them: the parser never walks to
+those nodes, so an old card reads as a new one does.
 """
 
 from __future__ import annotations
@@ -83,8 +87,7 @@ class _Graph:
 
     def source_of(self, node: dict, predicate: str) -> dict | None:
         """The node whose `predicate` points AT this one. AIRO attaches a risk's
-        source and its control that way round, so a forward-only walk misses
-        both."""
+        source that way round, so a forward-only walk misses it."""
         return next(
             (other for other in self.by_id.values() if node["@id"] in _refs(other, predicate)),
             None,
@@ -105,8 +108,6 @@ class OntologyRisk(BaseModel):
     impact: str = ""
     stakeholder: str = ""
     areas: list[str] = Field(default_factory=list)
-    control: str = ""
-    follow_up_control: str = ""
     #: VAIR terms on any node of the chain: the graph's own typing of this risk.
     vair_terms: list[str] = Field(default_factory=list)
     provenance: str = "form"
@@ -129,8 +130,6 @@ class OntologyRisk(BaseModel):
             ("Vulnerability", self.vulnerability),
             ("Consequence", self.consequence),
             ("Impact", impact),
-            ("Declared control", self.control),
-            ("Follow-up control", self.follow_up_control),
         ):
             if value.strip():
                 parts.append(f"{label}: {value}")
@@ -204,9 +203,7 @@ class Ontology(BaseModel):
         consequence = graph.target(node, AIRO + "hasConsequence")
         impact = graph.target(consequence, AIRO + "hasImpact")
         stakeholder = graph.target(impact, AIRO + "hasImpactOnStakeholder")
-        control = graph.source_of(node, AIRO + "modifiesRiskConcept")
-        follow_up = graph.target(control, AIRO + "isFollowedByControl")
-        chain = (node, source, vulnerability, consequence, impact, control, follow_up)
+        chain = (node, source, vulnerability, consequence, impact)
 
         return OntologyRisk(
             id=_local(node["@id"]),
@@ -226,8 +223,6 @@ class Ontology(BaseModel):
                 for ref in _refs(impact or {}, AIRO + "hasImpactOnArea")
                 if (area := graph.text(graph.by_id.get(ref)))
             ],
-            control=graph.text(control),
-            follow_up_control=graph.text(follow_up),
             vair_terms=sorted({term for member in chain for term in graph.vair(member)}),
             provenance=_literal(node, QUAL + "provenance") or "form",
         )
