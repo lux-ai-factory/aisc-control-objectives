@@ -23,6 +23,7 @@ those nodes, so an old card reads as a new one does.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -50,6 +51,61 @@ def _literal(node: dict, predicate: str) -> str:
 
 def _refs(node: dict, predicate: str) -> list[str]:
     return [entry["@id"] for entry in _values(node, predicate) if "@id" in entry]
+
+
+#: The provider's measure on a risk, and its follow-up, in older cards. Step 2 does not use them.
+_MEASURE = AIRO + "RiskControl"
+
+
+def _is_measure(node: Any) -> bool:
+    return isinstance(node, dict) and _MEASURE in (node.get("@type") or [])
+
+
+def without_measures(nodes: list) -> list:
+    """The graph's nodes without the provider's measures: no RiskControl node, and no edge to one."""
+    gone = {node["@id"] for node in nodes if _is_measure(node) and "@id" in node}
+
+    def unlinked(node: dict) -> dict:
+        kept = {}
+        for key, values in node.items():
+            if isinstance(values, list) and values:
+                values = [v for v in values if not (isinstance(v, dict) and v.get("@id") in gone)]
+                if not values:
+                    continue  # every value was an edge to a measure
+            kept[key] = values
+        return kept
+
+    return [unlinked(node) if isinstance(node, dict) else node for node in nodes if not _is_measure(node)]
+
+
+def _canonical(nodes: list) -> list[str]:
+    """The graph as a sorted list of its nodes, each with its values sorted: order and layout aside."""
+    def node_key(node: Any) -> str:
+        if isinstance(node, dict):
+            node = {
+                key: sorted(values, key=lambda v: json.dumps(v, sort_keys=True))
+                if isinstance(values, list) else values
+                for key, values in node.items()
+            }
+        return json.dumps(node, sort_keys=True)
+
+    return sorted(node_key(node) for node in nodes)
+
+
+def same_card(stored: str, served: str) -> bool:
+    """Whether two cards' graphs hold the same nodes once the provider's measures are set aside.
+
+    An assessment keeps the card it started from; an older one names a measure per risk, which
+    qualification no longer writes. Step 2 never read them, so a card that only lost them has not
+    changed for the assessor. Anything else that differs, however small, is a change. Text that is not
+    a card is never the same as anything."""
+    try:
+        before, after = Ontology.graph_in(json.loads(stored)), Ontology.graph_in(json.loads(served))
+    except ValueError:
+        return False
+    if before is None or after is None:
+        return False
+    return _canonical(without_measures(before)) == _canonical(without_measures(after))
 
 
 class _Graph:

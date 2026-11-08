@@ -164,3 +164,39 @@ def test_a_graph_with_no_risks_parses(fixtures_dir):
     raw = json.loads((fixtures_dir / "mcas.ontology.jsonld").read_text())
     without = [n for n in raw if "https://w3id.org/airo#Risk" not in (n.get("@type") or [])]
     assert Ontology.from_jsonld(without).risks == []
+
+
+class TestTheSameCard:
+    """Whether two cards are the same once the provider's measures (RiskControl nodes, which step 2
+    does not use) are set aside: the same nodes, whatever their order or the file's layout."""
+
+    @staticmethod
+    def _graph(fixtures_dir):
+        return json.loads((fixtures_dir / "mcas.ontology.jsonld").read_text())
+
+    @staticmethod
+    def _measures_dropped(graph):
+        return [n for n in graph if "https://w3id.org/airo#RiskControl" not in (n.get("@type") or [])]
+
+    def test_a_card_and_itself_without_its_measures_are_the_same(self, fixtures_dir):
+        from aisc_control_objectives.models.ontology import same_card
+
+        graph = self._graph(fixtures_dir)
+        assert same_card(json.dumps(graph), json.dumps(list(reversed(self._measures_dropped(graph))), indent=2))
+
+    def test_any_other_difference_is_a_change(self, fixtures_dir):
+        from aisc_control_objectives.models.ontology import same_card
+
+        graph = self._graph(fixtures_dir)
+        changed = self._measures_dropped(json.loads(json.dumps(graph)))
+        risk2 = next(n for n in changed if n["@id"].endswith("#risk2"))
+        risk2["@type"].append("https://w3id.org/vair#Discrimination")
+        assert not same_card(json.dumps(graph), json.dumps(changed))
+        fewer = [n for n in self._measures_dropped(graph) if not n["@id"].endswith("#risk4_source")]
+        assert not same_card(json.dumps(graph), json.dumps(fewer))
+
+    def test_text_that_is_not_a_graph_is_never_the_same(self, fixtures_dir):
+        from aisc_control_objectives.models.ontology import same_card
+
+        assert not same_card("not json", "not json")
+        assert not same_card(json.dumps(self._graph(fixtures_dir)), "{}")

@@ -49,6 +49,21 @@ def card_v2(card_v1) -> str:
     return json.dumps(graph, indent=1)
 
 
+def _without_measures(card: str) -> str:
+    """The card as qualification serves it once it no longer writes the provider's measures: the same
+    graph without its RiskControl nodes, serialised afresh (so its bytes and digest differ)."""
+    import json
+
+    graph = [node for node in json.loads(card)
+             if "https://w3id.org/airo#RiskControl" not in (node.get("@type") or [])]
+    return json.dumps(list(reversed(graph)), indent=4)
+
+
+@pytest.fixture()
+def card_v1_without_measures(card_v1) -> str:
+    return _without_measures(card_v1)
+
+
 @pytest.fixture()
 def client(repository, objectives, upstream):
     from test_assessment_of_a_version import _Mapper
@@ -165,3 +180,23 @@ def test_an_update_records_what_changed_and_keeps_the_chains(client, repository,
     # what the update replaced is kept, as for any mapping change
     assert ("card", "risk1", "O21") in {(k["reason"], r["risk"], r["objective"]) for k in archive(repository)
                                          for r in k["rows"]}
+
+
+def test_a_card_that_only_lost_the_providers_measures_has_not_changed(client, repository, platform_project,
+                                                                       system_version, upstream, card_v1,
+                                                                       card_v1_without_measures):
+    """The assessment started from a card that still named a measure per risk; qualification now serves
+    the same card without them. Step 2 never used those nodes, so the assessor is not told it changed."""
+    v1, a = _worked_v1(client, repository, platform_project, system_version, upstream, card_v1)
+    assert "airo#RiskControl" in card_v1 and "airo#RiskControl" not in card_v1_without_measures
+    upstream.cards[v1] = card_v1_without_measures
+    assert BANNER not in _page(client, platform_project, a)
+
+
+def test_a_real_change_still_shows_once_the_measures_are_gone(client, repository, platform_project,
+                                                             system_version, upstream, card_v1, card_v2):
+    """Losing the measures hides nothing else: the corrected card (risk0 reworded, risk4 gone) without
+    its measures is still a changed card."""
+    v1, a = _worked_v1(client, repository, platform_project, system_version, upstream, card_v1)
+    upstream.cards[v1] = _without_measures(card_v2)
+    assert BANNER in _page(client, platform_project, a)

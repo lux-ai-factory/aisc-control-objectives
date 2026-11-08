@@ -45,7 +45,7 @@ from aisc_control_objectives.config import RunConfig
 from aisc_control_objectives.control_objectives import ControlObjectiveCatalogue
 from aisc_control_objectives.db.repository import ProjectRepository, digest_of
 from aisc_control_objectives.models.control_objective import ControlObjective, MacroRequirement
-from aisc_control_objectives.models.ontology import Ontology
+from aisc_control_objectives.models.ontology import Ontology, same_card
 from aisc_control_objectives.projects import AssessmentChanged, ModelUnavailable, Projects
 from aisc_control_objectives.rendering import (
     DEFAULT_LAUNCHER_URL,
@@ -120,14 +120,17 @@ def _latest_version(project: str, auth: str | None) -> dict:
 
 def _card_changed(pid: str, record, auth: str | None) -> bool:
     """Whether qualification now serves another card for the assessment's version than the one it
-    started from. A qualification that does not answer, or a version with no card, says nothing."""
+    started from. A qualification that does not answer, or a version with no card, says nothing. A card
+    that differs only by the provider's measures an older card carried (see same_card) has not changed."""
     if not record.system_id or not record.digest:
         return False
     try:
         card = upstream.card_jsonld(pid, record.system_id, auth, timeout=CARD_CHECK_TIMEOUT)
     except upstream.UpstreamDown:
         return False
-    return card is not None and digest_of(card) != record.digest
+    if card is None or digest_of(card) == record.digest:
+        return False
+    return not same_card(record.jsonld, card)
 
 
 def _caller(request: Request) -> str | None:
