@@ -590,33 +590,76 @@ class ProjectRepository:
             if record is not None:
                 record(session, {"before": before, "after": after, "was_by_hand": was_by_hand})
 
+    @staticmethod
+    def _dropped_by(project: tables.Project, keep: set[str]) -> set[str]:
+        """The mapped and selected objectives a switch to a profile of `keep` would drop."""
+        dropped = {m.objective_id for r in project.risks for m in r.mapped if m.objective_id not in keep}
+        if project.selection is not None:
+            dropped |= {oid for oid in project.selection.objective_ids if oid not in keep}
+        return dropped
+
+    def profile_drops(self, project_id: str, keep: set[str]) -> list[str]:
+        """What `set_profile` with `keep` would drop now, without changing anything."""
+        with self._sessions() as session:
+            return sorted(self._dropped_by(session.get(tables.Project, project_id), keep))
+
+    @staticmethod
+    def _last_profile_archive(session: Session, project_id: str) -> list:
+        """The rows the last profile switch dropped, while no later change of the mappings followed it;
+        otherwise none."""
+        last = session.scalar(select(tables.MappingArchive).where(tables.MappingArchive.project_id == project_id)
+                              .order_by(tables.MappingArchive.id.desc()).limit(1))
+        return list(last.rows) if last is not None and last.reason == "profile" else []
+
     def set_profile(self, project_id: str, profile_version_id: str | None, keep: set[str],
-                    record=None) -> list[str]:
+                    record=None, order: Callable[[set[str]], list[str]] | None = None) -> list[str]:
         """Put the assessment on a profile version, and drop every mapping and selected objective
         not in `keep` (the new profile's objectives). Returns the objectives dropped; the mappings
-        dropped are kept in mapping_archive."""
+        dropped are kept in mapping_archive. The links the last switch dropped come back when they are
+        in `keep` and nothing changed the mappings since, so switching back undoes a switch; `order`
+        puts the selection they rejoin in catalogue order."""
         with self._sessions.begin() as session:
             # locked, so a person's mapping saved meanwhile is either before this or sees the new profile
             project = session.get(tables.Project, project_id, with_for_update=True)
             version_before = project.profile_version_id
+            restorable = self._last_profile_archive(session, project_id)
             losing = [r for r in project.risks if any(m.objective_id not in keep for m in r.mapped)]
             if losing:
                 self._archive(session, project, "profile", risks=losing)
             project.profile_version_id = profile_version_id
-            dropped: set[str] = set()
+            dropped = self._dropped_by(project, keep)
             for risk in project.risks:
                 for row in list(risk.mapped):
                     if row.objective_id not in keep:
-                        dropped.add(row.objective_id)
                         risk.mapped.remove(row)
             if project.selection is not None:
-                ids = list(project.selection.objective_ids)
-                dropped |= {oid for oid in ids if oid not in keep}
-                project.selection.objective_ids = [oid for oid in ids if oid in keep]
+                project.selection.objective_ids = [oid for oid in project.selection.objective_ids if oid in keep]
+            restored = self._restore_links(session, project, restorable, keep)
+            if restored and project.selection is not None:
+                ids = set(project.selection.objective_ids) | restored
+                self._set_selection(session, project, order(ids) if order else sorted(ids))
             self._store_priority(session, project_id)
             if record is not None and version_before != profile_version_id:
                 record(session, {"before": version_before, "after": profile_version_id, "dropped": sorted(dropped)})
             return sorted(dropped)
+
+    @staticmethod
+    def _restore_links(session: Session, project: tables.Project, rows: list, keep: set[str]) -> set[str]:
+        """Map again the archived `rows` that are in `keep` on risks that still have no such link; the
+        objectives brought back."""
+        restored: set[str] = set()
+        for risk in project.risks:
+            mapped = {m.objective_id for m in risk.mapped}
+            for row in rows:
+                oid = row.get("objective")
+                if row.get("risk") != risk.risk_id or oid not in keep or oid in mapped:
+                    continue
+                session.add(tables.MappedObjectiveRow(
+                    risk_row_id=risk.id, objective_id=oid, quote=row.get("quote") or "",
+                    rationale=row.get("rationale") or "", source=row.get("source") or "ai"))
+                mapped.add(oid)
+                restored.add(oid)
+        return restored
 
     def recording(self, record) -> None:
         """A transaction for ledger events alone: what happened changed nothing here (a failed AI run)."""

@@ -84,6 +84,19 @@
     </details>
     {%- endif %}
   </div>
+  {%- if switching %}
+  <div class="notice co-confirm" id="profile-switch">
+    <form method="post" action="{{ project_base }}/projects/{{ record.id }}/profile">
+      <input type="hidden" name="profile" value="{{ switching.to }}">
+      <input type="hidden" name="confirmed" value="on">
+      <p>Switching to {{ switching.name }} drops {{ switching.drops | length }} objective{{ 's' if switching.drops | length != 1 }}
+         linked or selected here and outside that profile: {{ switching.drops | join(", ") }}.
+         Switching back to {{ profile['label'] }} brings their links back, unless the links are changed in between.</p>
+      <button class="btn btn--small" type="submit">Switch and drop them</button>
+      <a href="{{ project_base }}/projects/{{ record.id }}">Cancel</a>
+    </form>
+  </div>
+  {%- endif %}
   {%- if dropped %}
   <div class="notice">Outside the new profile, so dropped: {{ dropped | join(", ") }}.</div>
   {%- endif %}

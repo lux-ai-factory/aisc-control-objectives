@@ -107,7 +107,7 @@ def test_switching_drops_what_is_outside_the_new_profile(client, start, platform
     assert kept <= {"O1", "O7", "BNK1"}
     assert set(r["selected"]) <= {"O1", "O7", "BNK1"}
     assert set(r["dropped"]) == (set(before["selected"]) - {"O1", "O7", "BNK1"})
-    # and back: nothing comes back by itself
+    # and back: nothing more is dropped
     back = _use(http, platform_project, assessment, FULL_AI_ACT).json()
     assert back["profile"]["id"] == FULL_AI_ACT and back["dropped"] == []
     assert len(back["priorities"]) == 50
@@ -268,7 +268,8 @@ def test_after_a_switch_the_page_says_what_was_dropped(client, start, platform_p
     http, _ = client
     assessment = start()
     http.post(_api(platform_project, assessment, "/risks/risk0/mapping"), json={"objective_ids": ["O1", "O5"]})
-    r = http.post(f"/p/{platform_project}/projects/{assessment}/profile", data={"profile": bank["profile"].id})
+    r = http.post(f"/p/{platform_project}/projects/{assessment}/profile",
+                  data={"profile": bank["profile"].id, "confirmed": "on"})
     assert r.status_code == 303
     assert r.headers["location"].endswith(f"/projects/{assessment}?dropped=O5")
     page = http.get(r.headers["location"]).text

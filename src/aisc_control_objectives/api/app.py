@@ -417,9 +417,18 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
         response_class=HTMLResponse,
     )
     def project_page(project: str, project_id: str, request: Request, dropped: str = "",
-                     replace: str = "", reset: str = "") -> HTMLResponse:
+                     replace: str = "", reset: str = "", profile: str = "", to: str = "") -> HTMLResponse:
         projects, view, read_only = editable(request, project_id)
         library = projects.library
+        profiles = library.profiles()
+        switching = None
+        if profile == "ask" and read_only is None:
+            # what the switch would drop is worked out here again, not read from the address
+            target = next((p for p in profiles if p.id == to), None)
+            drops = projects.profile_drops(project_id, to) if target is not None else []
+            if drops:
+                switching = {"to": target.id, "drops": drops, "name": target.name
+                             + (f" (version {target.number})" if target.number else "")}
         # `dropped` comes back from a profile switch in the address, where anyone can write
         # anything: only ids of real objectives are shown
         named = [oid for oid in dict.fromkeys(dropped.split(",")) if oid]
@@ -428,8 +437,9 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
             render_project_page(
                 view, objectives, root_path=root_path, project=project,
                 read_only=read_only,
-                profiles=library.profiles(),
+                profiles=profiles,
                 show_error=may_read_errors(request),
+                switching=switching,
                 dropped=[oid for oid in named if oid in known],
                 confirm_replace=replace == "ask" and read_only is None and bool(view.record.by_hand),
                 confirm_reset=reset == "ask" and read_only is None and bool(view.record.keys),
@@ -498,8 +508,14 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
         projects, view, why = editable(request, project_id)
         if why is not None:
             return PlainTextResponse(why, status_code=409)
+        profile_id = str(form.get("profile") or "")
         try:
-            switched = projects.use_profile(project_id, str(form.get("profile") or ""),
+            # a switch that would drop links or selected objectives asks first, saying which
+            if not form.get("confirmed") and projects.profile_drops(project_id, profile_id):
+                return RedirectResponse(
+                    url=_assessment_url(root_path, project, project_id) + "?"
+                    + urlencode({"profile": "ask", "to": profile_id}), status_code=303)
+            switched = projects.use_profile(project_id, profile_id,
                                             record=ledger_events.on_profile_switched(project_id))
         except ValueError as exc:
             return PlainTextResponse(f"Invalid profile: {exc}", status_code=400)
