@@ -20,18 +20,21 @@ Where a configuration comes from:
 
 `build_llm(config)` then builds the BAF wrapper on a fresh BAF agent, so a key set
 for one project is never visible to a build for another, and never touches
-os.environ.
+os.environ. A configuration from the platform carries the project's network rule,
+and its base URL is checked against it first (`check_base_url`); one from the
+environment is the operator's choice and is not checked.
 """
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
 import socket
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
-from urllib.parse import quote
+from dataclasses import dataclass, field
+from urllib.parse import quote, urlsplit
 
 from baf import nlp
 from baf.core.agent import Agent
@@ -103,6 +106,9 @@ class LlmConfig:
     model: str
     api_key: str | None = None
     base_url: str | None = None
+    #: the project's network rule from the platform (allowed_hosts, denied_addresses, floor_hosts);
+    #: None for a configuration from the environment
+    rule: Mapping | None = field(default=None, compare=False)
 
     def __repr__(self) -> str:
         key = "<set>" if self.api_key else "None"
@@ -207,7 +213,12 @@ def _config_from_answer(raw: bytes, prefix: str) -> LlmConfig | None:
         raise not_a_choice
     if not all(v is None or isinstance(v, str) for v in (api_key, base_url)):
         raise not_a_choice
-    return LlmConfig(provider, model, api_key=api_key, base_url=base_url)
+    rule = {name: body.get(name) for name in RULE_KEYS}
+    if not all(v is None or (isinstance(v, list) and all(isinstance(h, str) for h in v)) for v in rule.values()):
+        raise not_a_choice
+    # a platform that sends no rule at all leaves the address unchecked, as before it sent one
+    return LlmConfig(provider, model, api_key=api_key, base_url=base_url,
+                     rule=rule if any(name in body for name in RULE_KEYS) else None)
 
 
 def config_for(project, system: str, env: Mapping[str, str] | None = None,
@@ -217,11 +228,75 @@ def config_for(project, system: str, env: Mapping[str, str] | None = None,
     return resolve(project, system, env=env) or fallback or config_from_env(env)
 
 
+# ── the project's network rule ──────────────────────────────────────────────
+
+#: the keys of the rule the platform sends with a project's choice
+RULE_KEYS = ("allowed_hosts", "denied_addresses", "floor_hosts")
+
+
+def _as_ipv4(ip):
+    """The IPv4 address an IPv6 one carries (IPv4-mapped, 6to4, NAT64), else the address itself."""
+    if isinstance(ip, ipaddress.IPv6Address):
+        if ip.ipv4_mapped is not None:
+            return ip.ipv4_mapped
+        if ip.sixtofour is not None:
+            return ip.sixtofour
+        if ip in ipaddress.IPv6Network("64:ff9b::/96"):
+            return ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF)
+    return ip
+
+
+def check_base_url(config: LlmConfig) -> None:
+    """ResolveError unless the configuration's base URL may be reached under its rule, the plugin guard's
+    (aisc_plugin_interface.connections.guard_url) in the standard library: an http(s) URL; no address of the
+    stack's services or cloud metadata; no internal address unless the host is allowed; loopback or the
+    unspecified address only for a host of the floor. Nothing to check without a rule or a base URL."""
+    rule = config.rule
+    if rule is None or not config.base_url:
+        return
+    parts = urlsplit(config.base_url)
+    if parts.scheme not in ("http", "https"):
+        raise ResolveError(f"the model address: scheme {parts.scheme or '(none)'} is not allowed")
+    host = (parts.hostname or "").lower()
+    if not host:
+        raise ResolveError("the model address has no host")
+    try:
+        port = parts.port or (443 if parts.scheme == "https" else 80)
+    except ValueError:
+        raise ResolveError("the model address has a port that is not a number") from None
+    allowed = [h.lower() for h in rule.get("allowed_hosts") or []]
+    floor = rule.get("floor_hosts")
+    floor = None if floor is None else [h.lower() for h in floor]
+    denied = {_as_ipv4(ipaddress.ip_address(a)) for a in rule.get("denied_addresses") or []}
+    is_allowed = host in allowed or f"{host}:{port}" in allowed
+    in_floor = floor is None or host in floor or f"{host}:{port}" in floor
+    try:
+        addresses = [ipaddress.ip_address(host)]
+    except ValueError:
+        try:
+            addresses = [ipaddress.ip_address(info[4][0])
+                         for info in socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)]
+        except (socket.gaierror, UnicodeError):
+            raise ResolveError(f"the model address: {host} does not resolve") from None
+    for ip in (_as_ipv4(a) for a in addresses):
+        if ip in denied:
+            raise ResolveError(f"the model address: {host} is a service of this deployment or a metadata address,"
+                               " never allowed")
+        if not is_allowed and (not ip.is_global or ip.is_multicast):
+            raise ResolveError(f"the model address: {host} is an internal address; allow it under Manage,"
+                               " Connections, Allowed internal hosts")
+        if not in_floor and (ip.is_loopback or ip.is_unspecified):
+            raise ResolveError(f"the model address: {host} is loopback or unspecified: only the deployment's"
+                               " CONNECTIONS_ALLOWED_HOSTS may reach it")
+
+
 # ── building the model ──────────────────────────────────────────────────────
 
 
 def build_llm(config: LlmConfig, agent: Agent | None = None, agent_name: str = "llm"):
-    """A BAF LLM for this configuration, through BAF's property store."""
+    """A BAF LLM for this configuration, through BAF's property store. A configuration with a rule has its
+    base URL checked first (check_base_url)."""
+    check_base_url(config)
     provider = (config.provider or "").lower()
     if provider not in PROVIDERS:
         raise ValueError(
