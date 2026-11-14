@@ -94,6 +94,12 @@ def may_read_errors(request: Request) -> bool:
     return access.may_write
 
 
+def _unix_newlines(value) -> str:
+    """A posted value with the browser's CRLF line ends of a textarea read as LF, to compare it with a
+    hidden field that kept the page's text as it was."""
+    return str(value).replace("\r\n", "\n")
+
+
 def _assessment_url(root_path: str, project: str, assessment_id: str) -> str:
     return f"{root_path}/p/{project}/projects/{assessment_id}"
 
@@ -511,14 +517,19 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
         try:
             # per risk: `impact:<risk id>`, `likelihood:<risk id>` (1-5, blank clears it; a risk the
             # form does not name keeps what it had) and an optional `comment:<risk id>` (a blank one
-            # clears it)
+            # clears it). `shown:<field>` says what the page showed: a field left as shown is not saved,
+            # so a second assessor's save keeps what another one saved since the page was loaded.
+            shown = {key.split(":", 1)[1]: _unix_newlines(value)
+                     for key, value in form.items() if key.startswith("shown:")}
+
+            def changed(prefix):
+                return {key.split(":", 1)[1]: value for key, value in form.items()
+                        if key.startswith(prefix) and shown.get(key) != _unix_newlines(value)}
+
             def part(prefix):
-                return {key.split(":", 1)[1]: int(value) if str(value).strip() else None
-                        for key, value in form.items() if key.startswith(prefix)}
-            comments = {
-                key.split(":", 1)[1]: str(value)
-                for key, value in form.items() if key.startswith("comment:")
-            }
+                return {risk_id: int(value) if str(value).strip() else None
+                        for risk_id, value in changed(prefix).items()}
+            comments = {risk_id: str(value) for risk_id, value in changed("comment:").items()}
             projects.rate(project_id, part("impact:"), part("likelihood:"), comments,
                           record=ledger_events.on_rated())
         except ValueError as exc:

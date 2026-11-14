@@ -126,6 +126,7 @@
           {%- if read_only %}{{ value or "Not rated" }}
           {%- else %}
           {#- an unrated part starts empty; saving an empty one clears it -#}
+          <input type="hidden" name="shown:{{ part }}:{{ risk.risk.id }}" value="{{ value if value is not none else '' }}">
           <select class="co-select" name="{{ part }}:{{ risk.risk.id }}" aria-label="{{ part | capitalize }} of {{ risk.risk.short_label or risk.risk.id }}">
             <option value=""{% if value is none %} selected{% endif %}>Not rated</option>
             {%- for n in [5, 4, 3, 2, 1] %}<option value="{{ n }}"{% if value == n %} selected{% endif %}>{{ n }}</option>{% endfor %}
@@ -139,6 +140,7 @@
         <td class="co-reg-comment">
           {%- if read_only %}{% if risk.comment %}<p class="co-sev-comment">{{ risk.comment }}</p>{% endif %}
           {%- else %}
+          <input type="hidden" name="shown:comment:{{ risk.risk.id }}" value="{{ risk.comment or '' }}">
           <textarea name="comment:{{ risk.risk.id }}" maxlength="1000" rows="2" aria-label="Rationale"
                     placeholder="Why this rating">{{ risk.comment }}</textarea>
           {%- endif %}
