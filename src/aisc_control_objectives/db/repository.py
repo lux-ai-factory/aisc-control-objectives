@@ -95,6 +95,16 @@ class AssessmentChanged(RuntimeError):
     """The assessment changed while the model was mapping it; the run was not saved."""
 
 
+class RatingsChangedMeanwhile(RuntimeError):
+    """A ratings save was refused whole: someone else changed fields it writes since its page was
+    loaded. `fields` are (risk id, "impact" | "likelihood" | "comment") pairs, in card order."""
+
+    def __init__(self, fields: list[tuple[str, str]]):
+        super().__init__("changed by someone else since the page was loaded: "
+                         + ", ".join(f"{part} of {risk}" for risk, part in fields))
+        self.fields = fields
+
+
 #: (the connection of a write's transaction, the assessment as that write leaves it) -> the selected
 #: objectives that are priority. The service gives it: it knows the profiles' objectives.
 PriorityOf = Callable[[Connection, "ProjectRecord"], list[str]]
@@ -376,12 +386,23 @@ class ProjectRepository:
             return True, session.get(tables.Project, previous).profile_version_id
 
     def rate(self, project_id: str, impact: dict[str, int | None], likelihood: dict[str, int | None],
-             comments: dict[str, str] | None = None, record=None) -> None:
+             comments: dict[str, str] | None = None, record=None, shown: dict | None = None) -> None:
         """Set the given impacts, likelihoods (None clears one) and, when given, comments ("" clears
         one), in one transaction. A risk not named keeps what it had. `record` gets each risk that changed, with
-        its rating and comment before and after."""
+        its rating and comment before and after. `shown` ({"impact" | "likelihood" | "comment": {risk id:
+        value}}) is what the saving page showed for the fields it writes: when any of them is stored
+        otherwise now, nothing is written and RatingsChangedMeanwhile names them."""
         with self._sessions.begin() as session:
-            project = session.get(tables.Project, project_id)
+            project = session.get(tables.Project, project_id, with_for_update=True)
+            if shown:
+                stored = {"impact": lambda row: row.rating_impact,
+                          "likelihood": lambda row: row.rating_likelihood,
+                          "comment": lambda row: (row.severity_comment or "").replace("\r\n", "\n")}
+                conflicts = [(row.risk_id, part) for row in project.risks for part in stored
+                             if row.risk_id in shown.get(part, {})
+                             and stored[part](row) != shown[part][row.risk_id]]
+                if conflicts:
+                    raise RatingsChangedMeanwhile(conflicts)
             changed = []
             for row in project.risks:
                 before = {"impact": row.rating_impact, "likelihood": row.rating_likelihood,

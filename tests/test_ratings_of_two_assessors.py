@@ -80,3 +80,42 @@ def test_a_second_assessors_save_keeps_the_first_ones_ratings(client, start, pla
     assert "Wrong referral harms a minor" in str(now), f"the first assessor's rationale is gone: {now}"
     if saved.status_code == 303:
         assert now["impact"].get("risk4") == 3 and now["likelihood"].get("risk4") == 3, now
+
+
+def test_a_save_over_a_field_another_assessor_changed_is_refused_and_keeps_the_typing(
+        client, start, platform_project):
+    """Both change risk0's impact. The later save is refused whole: the page names the risk and field
+    someone else changed, shows what this person typed, and saves nothing, not even risk4's likelihood."""
+    http, _ = client
+    a = start()
+    severity = f"/p/{platform_project}/projects/{a}/severity"
+    first_page = ratings_form_of(http, platform_project, a)
+    second_page = ratings_form_of(http, platform_project, a)
+
+    first = {**first_page, "impact:risk0": "5", "comment:risk0": "Wrong referral harms a minor"}
+    assert http.post(severity, data=first).status_code == 303
+
+    second = {**second_page, "impact:risk0": "2", "likelihood:risk4": "3",
+              "comment:risk0": "Rare in practice"}
+    refused = http.post(severity, data=second)
+
+    assert refused.status_code == 409, refused.status_code
+    now = severity_of(http, platform_project, a)
+    assert now["impact"].get("risk0") == 5, f"the refused save wrote over the first assessor's impact: {now}"
+    assert now["likelihood"].get("risk4") is None, f"a refused save is all or nothing: {now}"
+    assert "Wrong referral harms a minor" in str(now), now
+
+    page = refused.text
+    assert "changed by someone else" in page, page
+    assert "impact" in page.lower() and "rationale" in page.lower()
+    kept = RatingsForm()
+    kept.feed(page)
+    assert kept.fields["impact:risk0"] == "2", kept.fields
+    assert kept.fields["likelihood:risk4"] == "3", kept.fields
+    assert kept.fields["comment:risk0"] == "Rare in practice", kept.fields
+    # what the page now shows as stored is the other assessor's save, so saving again goes through
+    assert kept.fields["shown:impact:risk0"] == "5", kept.fields
+    again = http.post(severity, data=kept.fields)
+    assert again.status_code == 303, again.text
+    now = severity_of(http, platform_project, a)
+    assert now["impact"].get("risk0") == 2 and now["likelihood"].get("risk4") == 3, now

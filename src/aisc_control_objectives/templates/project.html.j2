@@ -127,6 +127,11 @@
     <p class="qf-help">Rate each risk's impact and likelihood, 1 to 5. The risk level is their product:
        Low 1-4, Medium 5-9, High 10-16, Critical 17-25. A risk counts in the priority scores once both are
        rated; saving one as Not rated clears it.</p>
+    {%- if changed_meanwhile %}
+    <div class="error" role="alert">Not saved: these ratings were changed by someone else since you loaded the page.
+      <ul>{% for label, parts in changed_meanwhile.items() %}<li>{{ label }}: {{ parts | join(", ") }}</li>{% endfor %}</ul>
+      The page now shows their values, except where you typed: your entries are kept below. Check them and save again.</div>
+    {%- endif %}
     {%- if not read_only %}<form id="ratings" method="post" action="{{ project_base }}/projects/{{ record.id }}/severity">{% endif %}
     <table class="co-register">
       <thead><tr><th>Risk</th><th>Impact</th><th>Likelihood</th><th>Risk level</th><th>Rationale <span>(optional)</span></th></tr></thead>
@@ -140,9 +145,12 @@
           {%- else %}
           {#- an unrated part starts empty; saving an empty one clears it -#}
           <input type="hidden" name="shown:{{ part }}:{{ risk.risk.id }}" value="{{ value if value is not none else '' }}">
-          <select class="co-select" name="{{ part }}:{{ risk.risk.id }}" aria-label="{{ part | capitalize }} of {{ risk.risk.short_label or risk.risk.id }}">
-            <option value=""{% if value is none %} selected{% endif %}>Not rated</option>
-            {%- for n in [5, 4, 3, 2, 1] %}<option value="{{ n }}"{% if value == n %} selected{% endif %}>{{ n }}</option>{% endfor %}
+          {#- after a refused save, the value this person typed, not the stored one -#}
+          {%- set field = part ~ ":" ~ risk.risk.id %}
+          {%- set picked = typed[field] if field in typed else ("" if value is none else value | string) %}
+          <select class="co-select" name="{{ field }}" aria-label="{{ part | capitalize }} of {{ risk.risk.short_label or risk.risk.id }}">
+            <option value=""{% if picked == "" %} selected{% endif %}>Not rated</option>
+            {%- for n in [5, 4, 3, 2, 1] %}<option value="{{ n }}"{% if picked == n | string %} selected{% endif %}>{{ n }}</option>{% endfor %}
           </select>
           {%- endif %}
         </td>
@@ -155,7 +163,7 @@
           {%- else %}
           <input type="hidden" name="shown:comment:{{ risk.risk.id }}" value="{{ risk.comment or '' }}">
           <textarea name="comment:{{ risk.risk.id }}" maxlength="1000" rows="2" aria-label="Rationale"
-                    placeholder="Why this rating">{{ risk.comment }}</textarea>
+                    placeholder="Why this rating">{{ typed["comment:" ~ risk.risk.id] if ("comment:" ~ risk.risk.id) in typed else risk.comment }}</textarea>
           {%- endif %}
         </td>
       </tr>

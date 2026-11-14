@@ -43,7 +43,7 @@ from aisc_control_objectives.api import ledger_events
 from aisc_control_objectives.api.library_routes import posted_form, register_library
 from aisc_control_objectives.config import RunConfig
 from aisc_control_objectives.control_objectives import ControlObjectiveCatalogue
-from aisc_control_objectives.db.repository import ProjectRepository, digest_of
+from aisc_control_objectives.db.repository import ProjectRepository, RatingsChangedMeanwhile, digest_of
 from aisc_control_objectives.models.control_objective import ControlObjective, MacroRequirement
 from aisc_control_objectives.models.ontology import Ontology, same_card
 from aisc_control_objectives.projects import AssessmentChanged, ModelUnavailable, Projects
@@ -534,7 +534,8 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
             # per risk: `impact:<risk id>`, `likelihood:<risk id>` (1-5, blank clears it; a risk the
             # form does not name keeps what it had) and an optional `comment:<risk id>` (a blank one
             # clears it). `shown:<field>` says what the page showed: a field left as shown is not saved,
-            # so a second assessor's save keeps what another one saved since the page was loaded.
+            # and a changed field that someone else saved since the page was loaded refuses the whole
+            # save, so nobody writes over another assessor's rating without seeing it first.
             shown = {key.split(":", 1)[1]: _unix_newlines(value)
                      for key, value in form.items() if key.startswith("shown:")}
 
@@ -542,14 +543,33 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
                 return {key.split(":", 1)[1]: value for key, value in form.items()
                         if key.startswith(prefix) and shown.get(key) != _unix_newlines(value)}
 
+            def rating(value):
+                return int(value) if str(value).strip() else None
+
             def part(prefix):
-                return {risk_id: int(value) if str(value).strip() else None
-                        for risk_id, value in changed(prefix).items()}
+                return {risk_id: rating(value) for risk_id, value in changed(prefix).items()}
+
+            def shown_of(prefix, read):
+                return {risk_id: read(shown[prefix + risk_id])
+                        for risk_id in changed(prefix) if prefix + risk_id in shown}
             comments = {risk_id: str(value) for risk_id, value in changed("comment:").items()}
+            expected = {"impact": shown_of("impact:", rating), "likelihood": shown_of("likelihood:", rating),
+                        "comment": shown_of("comment:", str.strip)}
             projects.rate(project_id, part("impact:"), part("likelihood:"), comments,
-                          record=ledger_events.on_rated())
+                          record=ledger_events.on_rated(), shown=expected if shown else None)
         except ValueError as exc:
             return PlainTextResponse(f"Invalid rating: {exc}", status_code=400)
+        except RatingsChangedMeanwhile as exc:
+            # the page again, as stored now, with what this person changed kept in the fields
+            typed = {key: _unix_newlines(value) for prefix in ("impact:", "likelihood:", "comment:")
+                     for key, value in form.items()
+                     if key.startswith(prefix) and shown.get(key) != _unix_newlines(value)}
+            projects, view, read_only = editable(request, project_id)
+            return HTMLResponse(render_project_page(
+                view, objectives, root_path=root_path, project=project, read_only=read_only,
+                profiles=projects.library.profiles(), show_error=may_read_errors(request),
+                card_changed=_card_changed(_pid(request, project), view.record, _caller(request)),
+                typed=typed, changed_meanwhile=exc.fields), status_code=409)
         # back on the part of the page's menu the ratings were saved from
         return RedirectResponse(
             url=_assessment_url(root_path, project, project_id) + "#register", status_code=303

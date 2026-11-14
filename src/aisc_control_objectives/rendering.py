@@ -175,6 +175,7 @@ def render_project_page(
     read_only: str | None = None, profiles: list | None = None, show_error: bool = True,
     dropped: list | None = None, confirm_replace: bool = False, card_changed: bool = False,
     confirm_reset: bool = False, switching: dict | None = None,
+    typed: dict | None = None, changed_meanwhile: list | None = None,
 ) -> str:
     """One assessment as a risk and control matrix: the profile line, the risk register and the
     matrix. `read_only` says why an older version's assessment can no longer be changed. The
@@ -184,7 +185,10 @@ def render_project_page(
     `confirm_replace` asks before an AI run replaces what a person mapped, saying how much.
     `confirm_reset` asks before the key choices are removed, saying how many. `switching` asks before a
     profile switch drops objectives: the profile (`to`, `name`) and the objectives it drops (`drops`).
-    `card_changed`: qualification now serves another card for this version than the one it started from."""
+    `card_changed`: qualification now serves another card for this version than the one it started from.
+    `typed` (field name -> value) is what a refused ratings save posted for the fields its person changed,
+    shown in those fields again; `changed_meanwhile` ((risk id, part) pairs) says which fields someone
+    else saved since that page was loaded."""
     catalogue = view.catalogue or catalogue
     record = view.record
     priorities = {p.objective_id: p for p in view.priorities}
@@ -197,8 +201,16 @@ def render_project_page(
     chips = _chips(record, risks, catalogue, priorities)
     # what the key ticks show, once per objective: a save compares the ticks with it
     shown = {chip.objective.id: chip.priority.key for row in chips.values() for chip in row}
+    # a refused ratings save: per risk, in card order, the fields someone else changed meanwhile
+    meanwhile = {}
+    names = {"impact": "impact", "likelihood": "likelihood", "comment": "rationale"}
+    labels = {risk.id: risk.short_label or risk.text for risk in record.ontology.risks}
+    for risk_id, part in changed_meanwhile or []:
+        meanwhile.setdefault(labels.get(risk_id, risk_id), []).append(names[part])
     template = _environment().get_template("project.html.j2")
     return template.render(
+        typed=typed or {},
+        changed_meanwhile=meanwhile,
         view=view,
         record=record,
         # an assessment is not the Assessments page, so no link in the menu is marked as the one open

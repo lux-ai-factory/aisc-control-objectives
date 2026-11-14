@@ -260,9 +260,10 @@ class Projects:
         return self._repository.is_latest(view.record)
 
     def rate(self, project_id: str, impact: dict[str, int | None], likelihood: dict[str, int | None] | None = None,
-             comments: dict[str, str] | None = None, record=None) -> ProjectView:
+             comments: dict[str, str] | None = None, record=None, shown: dict | None = None) -> ProjectView:
         """Impacts, likelihoods and, optionally, comments on the rating. None clears a part, "" or blank
-        a comment. Everything is checked before anything is written."""
+        a comment. Everything is checked before anything is written. `shown` is what the saving page
+        showed for those fields (see the repository's rate): a field stored otherwise now refuses it all."""
         likelihood = likelihood or {}
         known = {risk.id for risk in self._repository.get(project_id).ontology.risks}
         unknown = sorted((set(impact) | set(likelihood) | set(comments or {})) - known)
@@ -273,7 +274,7 @@ class Projects:
         Severity(impact={rid: v for rid, v in impact.items() if v is not None},
                  likelihood={rid: v for rid, v in likelihood.items() if v is not None},
                  comments={rid: t for rid, t in (cleaned or {}).items() if t})
-        self._repository.rate(project_id, impact, likelihood, cleaned, record=record)
+        self._repository.rate(project_id, impact, likelihood, cleaned, record=record, shown=shown)
         return self.view(project_id)
 
     def set_keys(self, project_id: str, keys: dict[str, bool], record=None) -> ProjectView:
