@@ -185,7 +185,7 @@ Precedence for the model: built-in defaults, then `control-objectives.toml`, the
 | `CONTROL_OBJECTIVES_PORT` | `8090` | Port to serve on. |
 | `CONTROL_OBJECTIVES_ROOT_PATH` | *(empty)* | Sub-path behind a reverse proxy (`/control-objectives` in the stack). |
 | `CONTROL_OBJECTIVES_CORS_ORIGINS` | *(none: same-origin only)* | Comma-separated CORS allowlist. |
-| `LEDGER_MODE` | `off` (the stack sets `record`) | `record` or `enforce` writes a ledger event with every change. |
+| `LEDGER_MODE` | absent means `record` (the stack sets `record`) | `record` or `enforce` writes a ledger event with every change, `off` writes none. Any other value, empty included, stops the service at start, as does an `AUTH_ENABLED` that is not an on or off word. |
 | `AISC_GATEWAY_CLIENT_ID` | `aisc-gateway` | The `azp` of the gateway's token; only a request carrying such a token may name the request id ledger events cite. |
 
 In the stack, compose sets every value the service needs: the database URLs from
