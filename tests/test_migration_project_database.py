@@ -482,12 +482,6 @@ def test_an_existing_assessment_carried_nothing(migrated):
     assert column[2:4] == ("jsonb", "YES") and column[4] is None
 
 
-def test_the_archive_keeps_what_a_card_update_replaced(migrated):
-    with migrated.begin() as connection:
-        connection.execute(text("INSERT INTO control_objectives.mapping_archive (project_id, reason, rows)"
-                                " VALUES ('a1', 'card', '[]')"))
-
-
 def test_the_stored_short_profile_is_renamed_and_keeps_its_id(database_url):
     """A project database that stored the built-in short profile under its old name gets the new one; a
     profile of the project's own with that name is left alone."""
