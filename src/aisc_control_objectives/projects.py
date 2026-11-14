@@ -230,11 +230,23 @@ class Projects:
             version_id = library.pinned_version(profile_id)
         except LookupError as exc:
             raise ValueError(f"no profile {profile_id}") from exc
-        keep = {o.id for o in library.catalogue_of(version_id)}
-        dropped = self._repository.set_profile(project_id, version_id, keep, record=record)
+        catalogue = library.catalogue_of(version_id)
+        keep = {o.id for o in catalogue}
+        dropped = self._repository.set_profile(project_id, version_id, keep, record=record,
+                                               order=lambda ids: self._in_order(catalogue, ids))
         view = self.view(project_id)
         view.dropped = dropped
         return view
+
+    def profile_drops(self, project_id: str, profile_id: str) -> list[str]:
+        """The linked and selected objectives a switch to that profile's current version would drop,
+        so the page can ask first. Nothing is changed."""
+        try:
+            version_id = self.library.pinned_version(profile_id)
+        except LookupError as exc:
+            raise ValueError(f"no profile {profile_id}") from exc
+        keep = {o.id for o in self.library.catalogue_of(version_id)}
+        return self._repository.profile_drops(project_id, keep)
 
     def has_version(self, system_id: str) -> bool:
         """Whether this project's database has that card version."""

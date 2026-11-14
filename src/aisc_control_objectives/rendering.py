@@ -174,7 +174,7 @@ def render_project_page(
     view, catalogue: ControlObjectiveCatalogue, root_path: str = "", project: str = "",
     read_only: str | None = None, profiles: list | None = None, show_error: bool = True,
     dropped: list | None = None, confirm_replace: bool = False, card_changed: bool = False,
-    confirm_reset: bool = False,
+    confirm_reset: bool = False, switching: dict | None = None,
 ) -> str:
     """One assessment as a risk and control matrix: the profile line, the risk register and the
     matrix. `read_only` says why an older version's assessment can no longer be changed. The
@@ -182,7 +182,8 @@ def render_project_page(
     switch to. `show_error` is whether this reader sees a model run's error text (editors and
     owners only). `dropped` are the objectives the last profile switch dropped, to say so.
     `confirm_replace` asks before an AI run replaces what a person mapped, saying how much.
-    `confirm_reset` asks before the key choices are removed, saying how many.
+    `confirm_reset` asks before the key choices are removed, saying how many. `switching` asks before a
+    profile switch drops objectives: the profile (`to`, `name`) and the objectives it drops (`drops`).
     `card_changed`: qualification now serves another card for this version than the one it started from."""
     catalogue = view.catalogue or catalogue
     record = view.record
@@ -212,6 +213,7 @@ def render_project_page(
         profile=view.profile or {},
         profiles=profiles or [],
         dropped=dropped or [],
+        switching=switching,
         replacing=replacing,
         resetting=len(record.keys) if confirm_reset else None,
         card_changed=card_changed,

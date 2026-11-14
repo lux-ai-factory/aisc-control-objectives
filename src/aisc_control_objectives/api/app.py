@@ -94,6 +94,12 @@ def may_read_errors(request: Request) -> bool:
     return access.may_write
 
 
+def _unix_newlines(value) -> str:
+    """A posted value with the browser's CRLF line ends of a textarea read as LF, to compare it with a
+    hidden field that kept the page's text as it was."""
+    return str(value).replace("\r\n", "\n")
+
+
 def _assessment_url(root_path: str, project: str, assessment_id: str) -> str:
     return f"{root_path}/p/{project}/projects/{assessment_id}"
 
@@ -411,9 +417,18 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
         response_class=HTMLResponse,
     )
     def project_page(project: str, project_id: str, request: Request, dropped: str = "",
-                     replace: str = "", reset: str = "") -> HTMLResponse:
+                     replace: str = "", reset: str = "", profile: str = "", to: str = "") -> HTMLResponse:
         projects, view, read_only = editable(request, project_id)
         library = projects.library
+        profiles = library.profiles()
+        switching = None
+        if profile == "ask" and read_only is None:
+            # what the switch would drop is worked out here again, not read from the address
+            target = next((p for p in profiles if p.id == to), None)
+            drops = projects.profile_drops(project_id, to) if target is not None else []
+            if drops:
+                switching = {"to": target.id, "drops": drops, "name": target.name
+                             + (f" (version {target.number})" if target.number else "")}
         # `dropped` comes back from a profile switch in the address, where anyone can write
         # anything: only ids of real objectives are shown
         named = [oid for oid in dict.fromkeys(dropped.split(",")) if oid]
@@ -422,8 +437,9 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
             render_project_page(
                 view, objectives, root_path=root_path, project=project,
                 read_only=read_only,
-                profiles=library.profiles(),
+                profiles=profiles,
                 show_error=may_read_errors(request),
+                switching=switching,
                 dropped=[oid for oid in named if oid in known],
                 confirm_replace=replace == "ask" and read_only is None and bool(view.record.by_hand),
                 confirm_reset=reset == "ask" and read_only is None and bool(view.record.keys),
@@ -492,8 +508,14 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
         projects, view, why = editable(request, project_id)
         if why is not None:
             return PlainTextResponse(why, status_code=409)
+        profile_id = str(form.get("profile") or "")
         try:
-            switched = projects.use_profile(project_id, str(form.get("profile") or ""),
+            # a switch that would drop links or selected objectives asks first, saying which
+            if not form.get("confirmed") and projects.profile_drops(project_id, profile_id):
+                return RedirectResponse(
+                    url=_assessment_url(root_path, project, project_id) + "?"
+                    + urlencode({"profile": "ask", "to": profile_id}), status_code=303)
+            switched = projects.use_profile(project_id, profile_id,
                                             record=ledger_events.on_profile_switched(project_id))
         except ValueError as exc:
             return PlainTextResponse(f"Invalid profile: {exc}", status_code=400)
@@ -511,14 +533,19 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
         try:
             # per risk: `impact:<risk id>`, `likelihood:<risk id>` (1-5, blank clears it; a risk the
             # form does not name keeps what it had) and an optional `comment:<risk id>` (a blank one
-            # clears it)
+            # clears it). `shown:<field>` says what the page showed: a field left as shown is not saved,
+            # so a second assessor's save keeps what another one saved since the page was loaded.
+            shown = {key.split(":", 1)[1]: _unix_newlines(value)
+                     for key, value in form.items() if key.startswith("shown:")}
+
+            def changed(prefix):
+                return {key.split(":", 1)[1]: value for key, value in form.items()
+                        if key.startswith(prefix) and shown.get(key) != _unix_newlines(value)}
+
             def part(prefix):
-                return {key.split(":", 1)[1]: int(value) if str(value).strip() else None
-                        for key, value in form.items() if key.startswith(prefix)}
-            comments = {
-                key.split(":", 1)[1]: str(value)
-                for key, value in form.items() if key.startswith("comment:")
-            }
+                return {risk_id: int(value) if str(value).strip() else None
+                        for risk_id, value in changed(prefix).items()}
+            comments = {risk_id: str(value) for risk_id, value in changed("comment:").items()}
             projects.rate(project_id, part("impact:"), part("likelihood:"), comments,
                           record=ledger_events.on_rated())
         except ValueError as exc:
