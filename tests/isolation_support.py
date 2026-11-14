@@ -113,11 +113,11 @@ def cluster_or_skip() -> Cluster:
     except psycopg.Error as exc:  # pragma: no cover - environment
         pytest.skip(f"the throwaway cluster has no platform database with core: {exc}")
     # core.project_member and the rest come from the platform's own migrations,
-    # run as platform_rw exactly as the platform service does at its first query
+    # run as platform_migrator exactly as the platform service does at its first query
     platform_projectdb()
     from platform_service.migrate import migrate
 
-    with psycopg.connect(cluster.dsn("platform", "platform_rw")) as conn:
+    with psycopg.connect(cluster.dsn("platform", "platform_migrator")) as conn:
         migrate(conn)
     return cluster
 
@@ -182,7 +182,7 @@ class Projects:
                     (pid, subject, role),
                 )
         self.made.append(pid)
-        name = platform_projectdb().provision(self.cluster.dsn("platform"), pid)
+        name = platform_projectdb().provision(self.cluster.dsn("platform", "platform_migrator"), pid)
         stand_in_for_missing_template(self.cluster, name)
         return pid
 
