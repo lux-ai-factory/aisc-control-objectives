@@ -1,5 +1,6 @@
 """Shared fixtures: the frozen AI Card, the catalogue, and a test database."""
 
+import os
 from pathlib import Path
 
 import pytest
@@ -7,6 +8,14 @@ import pytest
 from aisc_control_objectives.control_objectives import load_control_objectives
 
 FIXTURES = Path(__file__).parent / "fixtures"
+
+
+@pytest.fixture(autouse=True)
+def _ledger_off_unless_a_test_says_otherwise(monkeypatch):
+    """An absent LEDGER_MODE means record, so every test starts with the ledger off unless the environment
+    already names a mode; a test that wants events sets it."""
+    if "LEDGER_MODE" not in os.environ:
+        monkeypatch.setenv("LEDGER_MODE", "off")
 
 
 @pytest.fixture(scope="session")

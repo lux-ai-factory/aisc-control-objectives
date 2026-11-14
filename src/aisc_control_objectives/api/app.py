@@ -26,6 +26,7 @@ from typing import Literal
 from urllib.parse import urlencode
 
 from aisc_identity.headers import token_from_headers
+from aisc_identity.switches import check_environment
 from fastapi import Body, Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import (
@@ -210,7 +211,10 @@ def create_app(
     """The app. `engine` reads membership (the gate); `databases`, as deployed,
     is the door to each project's own database. Without `databases` every
     assessment is in `projects`' one repository (the single-database domain
-    tests); without `engine` there is no gate at all."""
+    tests); without `engine` there is no gate at all. A bad AUTH_ENABLED or
+    LEDGER_MODE raises SwitchInvalid before anything else, so the service does
+    not start."""
+    check_environment()
     if databases is not None and engine is None:
         raise ValueError("databases needs the platform engine for its gate")
     config = base_config or RunConfig()
