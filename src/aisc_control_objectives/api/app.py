@@ -114,12 +114,26 @@ class _Refused(Exception):
         self.status_code = status_code
 
 
+#: What a refusal of the platform or qualification is told: they answered, and did not let this caller read.
+SIGN_IN_AGAIN = ("{service} refused to give the AI card to you: your session may have expired, or you may not "
+                 "read this project's AI card. Sign in again, then try once more.")
+
+
+def _upstream_refused(service: str, exc: upstream.UpstreamDown) -> _Refused:
+    """What the person is told when the platform or qualification did not give what was asked: a refusal
+    is said as a refusal, and no answer as no answer, once."""
+    if exc.refused:
+        return _Refused(SIGN_IN_AGAIN.format(service=service), 502)
+    text = str(exc)
+    return _Refused(text[:1].upper() + text[1:] + ".", 502)
+
+
 def _latest_version(project: str, auth: str | None) -> dict:
     """The project's latest card version, as the platform reports it."""
     try:
         latest = upstream.latest_version(project, auth)
     except upstream.UpstreamDown as exc:
-        raise _Refused(f"The platform did not answer: {exc}", 502) from exc
+        raise _upstream_refused("The platform", exc) from exc
     if latest is None:
         raise _Refused(NO_CARD, 409)
     return latest
@@ -175,7 +189,7 @@ def _card_of(latest: dict, auth: str | None) -> tuple[str, object]:
     try:
         jsonld = upstream.card_jsonld(latest["project_id"], latest["pid"], auth)
     except upstream.UpstreamDown as exc:
-        raise _Refused(f"Qualification did not answer: {exc}", 502) from exc
+        raise _upstream_refused("Qualification", exc) from exc
     if jsonld is None:
         raise _Refused(NO_CARD, 409)
     try:
