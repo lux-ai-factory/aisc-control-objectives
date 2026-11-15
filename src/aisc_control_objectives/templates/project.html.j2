@@ -212,6 +212,8 @@
       {%- if stop == "cap" %}The AI's suggestions still failed the checks after its last allowed attempt.
       {%- elif stop == "fixpoint" %}The AI repeated the same mistakes, so it was stopped.
       {%- else %}The AI could not be reached, or its answer could not be read.{% endif %}
+      {%- set unreached = risks | selectattr("unreached") | list | length %}
+      {%- if unreached %} {{ unreached }} of {{ risks | length }} risk{{ 's' if risks | length != 1 }} {{ 'were' if unreached != 1 else 'was' }} not suggested: {{ 'they keep' if unreached != 1 else 'it keeps' }} the objectives {{ 'they' if unreached != 1 else 'it' }} had.{% endif %}
       {%- if show_error and record.mapping_run.error %} The error was: {{ record.mapping_run.error }}.{% endif %}
        What passed the checks is below; what did not is listed with each risk.</div>
     {%- endif %}
@@ -261,6 +263,7 @@
       {%- for risk in risks %}
       <tr class="co-mrow" data-risk="{{ risk.risk.id }}" id="map-{{ risk.risk.id }}">
         <td class="co-m-risk">{{ risk.risk.text }}
+          {%- if risk.unreached %}<p class="co-note co-note--flag">The AI could not be reached for this risk: it keeps the objectives it had.</p>{% endif %}
           {%- for finding in risk.findings %}<p class="co-note co-note--flag">
             {%- if finding.flag == "risk-unmapped" %}The AI suggested no objective for this risk.
             {%- else %}<b>{{ finding_names.get(finding.flag, "Not accepted") }}:</b> {{ finding.detail }}{% endif %}</p>{% endfor %}</td>

@@ -101,6 +101,8 @@ class _RiskView:
     findings: list = field(default_factory=list)
     #: Why the assessor rated it so; "" when they said nothing.
     comment: str = ""
+    #: The last AI run could not reach the model for it, so it kept the objectives it had.
+    unreached: bool = False
 
     @property
     def band(self) -> str:
@@ -127,6 +129,8 @@ def _risk_views(record) -> list:
                         for item in (mapping.objectives if mapping else [])],
                 findings=[f for f in (run.findings if run else []) if f.risk_id == risk.id],
                 comment=severity.comments.get(risk.id, ""),
+                # a person who linked it since has answered for it
+                unreached=bool(mapping and mapping.stop == "failed" and risk.id not in record.by_hand),
             )
         )
     return sorted(views, key=lambda view: (-view.rating, view.risk.position))
