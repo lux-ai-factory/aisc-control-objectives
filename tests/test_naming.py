@@ -84,7 +84,7 @@ def test_the_assessment_speaks_of_priority_risk_level_and_links(client, start, p
     assert "<dt>Priority score</dt>" in page and "<dt>Linked by</dt><dd>AI suggestion" in page
     assert "Priority objective" in shown and "Save priority choices" in shown
     assert "Also replace objectives I linked by hand" in shown
-    assert "Manage › AI assistants › AI assistant models and keys" in shown
+    assert "Manage › Connectivity › Configurator agents" in shown
     assert '<option value="" selected>Not rated</option>' in page
     assert "step 4, <b>AI Assessment Sandbox</b>" in page
     for gone in ("Collect evidence", "Key objective", "key by default", "Risk register", "Risk and control matrix", "Full information",

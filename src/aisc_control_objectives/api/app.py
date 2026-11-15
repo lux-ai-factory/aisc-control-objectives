@@ -53,6 +53,7 @@ from aisc_control_objectives.db.repository import (
     RatingsChangedMeanwhile,
     digest_of,
 )
+from aisc_control_objectives.errors import shown_error
 from aisc_control_objectives.models.control_objective import ControlObjective, MacroRequirement
 from aisc_control_objectives.models.ontology import Ontology, same_card
 from aisc_control_objectives.projects import AssessmentChanged, MappingInProgress, ModelUnavailable, Projects
@@ -79,6 +80,8 @@ CARD_CHECK_TIMEOUT = 3.0
 NOTICES = {
     "profile-changed": PROFILE_CHANGED_MEANWHILE,
     "run-not-applied": RUN_NOT_APPLIED,
+    "no-model": ("The AI could not suggest links: the project's model could not be used. The project's owners choose "
+                 "the model and its key in Manage › Connectivity › Configurator agents."),
 }
 
 #: A start whose version the project's own database does not have.
@@ -517,7 +520,10 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
                                   on_start=ledger_events.on_mapping_requested(project_id),
                                   on_save=ledger_events.on_mapping_run(project_id))
         except ModelUnavailable as exc:
-            return refused_page(project, project_id, str(exc), 502, "#matrix")
+            # back on the matrix, sent to the page where the model is chosen; the reason is in the log
+            logger.warning("the AI run of assessment %s had no model: %s", project_id, shown_error(str(exc), 500))
+            return RedirectResponse(url=_assessment_url(root_path, project, project_id)
+                                    + "?notice=no-model#matrix", status_code=303)
         except MappingInProgress as exc:
             return refused_page(project, project_id, str(exc), 409, "#matrix")
         except AssessmentChanged:
