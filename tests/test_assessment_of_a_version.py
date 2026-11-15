@@ -361,17 +361,21 @@ def test_the_graph_is_the_served_bytes_and_its_digest_is_their_sha256(
 # The version takes its assessment with it
 
 
-def test_deleting_the_version_deletes_its_assessment(
+def test_a_version_with_an_assessment_cannot_be_deleted(
     client, repository, platform_project, system_version, upstream, card_v1
 ):
+    """Card versions are kept: the assessment's key into project.system restricts their deletion."""
+    from sqlalchemy.exc import IntegrityError
+
     v1 = system_version(platform_project, 1)
     upstream.version(platform_project, v1, 1, card_v1)
     a1 = _assessment_id(_start(client, platform_project))
 
-    with repository.engine.begin() as connection:
-        connection.execute(text("DELETE FROM project.system WHERE pid = :p"), {"p": v1})
+    with pytest.raises(IntegrityError):
+        with repository.engine.begin() as connection:
+            connection.execute(text("DELETE FROM project.system WHERE pid = :p"), {"p": v1})
 
-    assert repository.get(a1) is None
+    assert repository.get(a1) is not None
     assert repository.orphan_rows() == 0
 
 

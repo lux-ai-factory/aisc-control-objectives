@@ -41,3 +41,20 @@ def test_a_project_template_without_a_database_slot_is_refused():
     env = {"PROJECT_DATABASE_URL": "postgresql://user:pw@db:5432/project_fixed"}
     with pytest.raises(ValueError, match=r"\{database\}"):
         project_database_url(env)
+
+
+def test_the_migrations_have_a_template_of_their_own():
+    from aisc_control_objectives.settings import project_migrate_database_url
+
+    env = {"PROJECT_MIGRATE_DATABASE_URL": "postgresql://control_objectives_migrator:pw@db:5432/{database}?x=1"}
+    assert project_migrate_database_url(env) == (
+        "postgresql+psycopg://control_objectives_migrator:pw@db:5432/{database}")
+
+
+@pytest.mark.parametrize("env", [{}, {"PROJECT_MIGRATE_DATABASE_URL": "postgresql://m:pw@db:5432/platform"}])
+def test_the_migration_template_is_required_and_names_the_database(env):
+    from aisc_control_objectives.settings import project_migrate_database_url
+
+    with pytest.raises(ValueError, match="PROJECT_MIGRATE_DATABASE_URL"):
+        project_migrate_database_url(env)
+

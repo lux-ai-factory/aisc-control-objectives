@@ -113,11 +113,11 @@ def cluster_or_skip() -> Cluster:
     except psycopg.Error as exc:  # pragma: no cover - environment
         pytest.skip(f"the throwaway cluster has no platform database with core: {exc}")
     # core.project_member and the rest come from the platform's own migrations,
-    # run as platform_rw exactly as the platform service does at its first query
+    # run as platform_migrator exactly as the platform service does at its first query
     platform_projectdb()
     from platform_service.migrate import migrate
 
-    with psycopg.connect(cluster.dsn("platform", "platform_rw")) as conn:
+    with psycopg.connect(cluster.dsn("platform", "platform_migrator")) as conn:
         migrate(conn)
     return cluster
 
@@ -182,7 +182,7 @@ class Projects:
                     (pid, subject, role),
                 )
         self.made.append(pid)
-        name = platform_projectdb().provision(self.cluster.dsn("platform"), pid)
+        name = platform_projectdb().provision(self.cluster.dsn("platform", "platform_migrator"), pid)
         stand_in_for_missing_template(self.cluster, name)
         return pid
 
@@ -257,7 +257,8 @@ def deployed_app(monkeypatch, cluster: Cluster, *, root_path: str = "",
 
     Env: `DATABASE_URL` is the `platform` database (membership only);
     `PROJECT_DATABASE_URL` is the
-    template for a project database, `{database}` replaced by `project_<hex>`.
+    template for a project database, `{database}` replaced by `project_<hex>`, and
+    `PROJECT_MIGRATE_DATABASE_URL` the same as control_objectives_migrator.
     No model is ever reached: the mapper is a fake and the ollama URL is a
     closed port.
     """
@@ -267,6 +268,11 @@ def deployed_app(monkeypatch, cluster: Cluster, *, root_path: str = "",
     monkeypatch.setenv(
         "PROJECT_DATABASE_URL",
         cluster.sa_url("{database}", "control_objectives_rw"),
+    )
+    # the migrations, as control_objectives_migrator (acting as control_objectives_owner), as in the stack
+    monkeypatch.setenv(
+        "PROJECT_MIGRATE_DATABASE_URL",
+        cluster.sa_url("{database}", "control_objectives_migrator"),
     )
     monkeypatch.setenv("BAF_LLM_PROVIDER", "ollama")
     monkeypatch.setenv("BAF_LLM_MODEL", "mistral:latest")

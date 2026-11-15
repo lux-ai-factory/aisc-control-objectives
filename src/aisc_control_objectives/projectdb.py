@@ -38,6 +38,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
+from sqlalchemy.pool import NullPool
 
 if TYPE_CHECKING:  # the migrate one-shot runs without aisc_identity on its path
     from aisc_identity.access import Admitted
@@ -81,6 +82,33 @@ def project_url(template: str, database: str) -> str:
 
 class SchemaMissing(RuntimeError):
     """The project database has no `control_objectives` schema (template 0008 not applied)."""
+
+
+#: The role that owns the control_objectives schema of a project database and every table in it; the
+#: migrator's sessions act as it.
+SCHEMA_OWNER = "control_objectives_owner"
+#: Who holds the schema before the platform hands it to its owner: the platform, which makes it.
+_NOT_HANDED_OVER_YET = ("platform_rw", "platform_owner")
+
+
+class SchemaNotOwned(RuntimeError):
+    """The project database's control_objectives schema is not control_objectives_owner's. `wait` is True
+    while it is still the platform's (postgres-setup made the role, the platform has not handed the schema
+    over yet: trying again later helps); False for anyone else's."""
+
+    def __init__(self, owner: str | None):
+        self.owner = owner
+        self.wait = owner in _NOT_HANDED_OVER_YET
+        super().__init__(
+            f"schema control_objectives belongs to {owner or 'nobody'}, not {SCHEMA_OWNER}: run postgres-setup"
+            " (init/owner-roles.sql) and start the platform, which hands it over")
+
+
+def check_schema_owner(owner: str | None, database: str) -> None:
+    """In a project database the schema must be its owner role's before anything is migrated there; a
+    scratch database outside the stack is not checked."""
+    if re.fullmatch(r"project_[0-9a-f]{32}", database or "") and owner != SCHEMA_OWNER:
+        raise SchemaNotOwned(owner)
 
 
 def migrate(engine: Engine) -> None:
@@ -153,11 +181,17 @@ class ProjectDatabases:
         *,
         capacity: int = MAX_OPEN_PROJECTS,
         migrate: Callable[[Engine], None] = migrate,
+        migrate_url_template: str | None = None,
     ):
         if "{database}" not in project_url_template:
             raise ValueError("the project database URL has no {database}")
+        if migrate_url_template is not None and "{database}" not in migrate_url_template:
+            raise ValueError("the migration database URL has no {database}")
         self._platform_url = platform_url
         self._template = project_url_template
+        #: the migrator's template: a database is migrated through it, on a connection of its own, and
+        #: queried through the project template; None migrates on the project engine (tests, scratch)
+        self._migrate_template = migrate_url_template
         self._capacity = capacity
         self._migrate = migrate
         self._platform: Engine | None = None
@@ -203,7 +237,14 @@ class ProjectDatabases:
             engine = pooled_engine(project_url(self._template, name))
             try:
                 with _MIGRATING:
-                    self._migrate(engine)
+                    if self._migrate_template is None:
+                        self._migrate(engine)
+                    else:
+                        migrator = make_engine(project_url(self._migrate_template, name), poolclass=NullPool)
+                        try:
+                            self._migrate(migrator)
+                        finally:
+                            migrator.dispose()
             except Exception as exc:
                 engine.dispose()
                 if is_missing_database(exc):

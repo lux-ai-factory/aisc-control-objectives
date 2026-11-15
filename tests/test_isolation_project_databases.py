@@ -137,8 +137,8 @@ def test_the_assessment_table_in_a_project_database(cluster, projects, two):
         "SELECT confrelid::regclass::text, confdeltype FROM pg_constraint"
         " WHERE conrelid = 'control_objectives.project'::regclass AND contype = 'f'",
     )
-    # its card version (cascading) and the profile version it runs on (restricted)
-    assert sorted(keys) == [("control_objectives.objective_profile_version", "r"), ("project.system", "c")], keys
+    # its card version and the profile version it runs on, both restricted
+    assert sorted(keys) == [("control_objectives.objective_profile_version", "r"), ("project.system", "r")], keys
     unique = _rows(
         cluster, database,
         "SELECT count(*) FROM pg_index i JOIN pg_attribute a"
@@ -521,6 +521,18 @@ def test_membership_unknown_is_503_and_opens_nothing(monkeypatch, cluster, proje
     assert cluster.sessions("control_objectives_rw").get(projects.database(a), 0) == 0
 
 
+def test_the_first_open_migrates_as_the_owner_role(cluster, projects, client, token):
+    """The service migrates a project at its first open through PROJECT_MIGRATE_DATABASE_URL: the tables it
+    makes are control_objectives_owner's, and the role it queries as may only read and write their rows."""
+    a = projects.make(members={EDITOR: "editor"})
+    assert client.get(_api(a), headers=token(EDITOR)).status_code == 200
+    database = projects.database(a)
+    assert _rows(cluster, database, "SELECT DISTINCT tableowner FROM pg_tables"
+                                    " WHERE schemaname = 'control_objectives'") == [("control_objectives_owner",)]
+    assert _rows(cluster, database, "SELECT has_schema_privilege('control_objectives_rw', 'control_objectives',"
+                                    " 'CREATE')") == [(False,)]
+
+
 def test_concurrent_first_requests_share_one_migration(cluster, projects, client, token):
     a = projects.make(members={EDITOR: "editor"})
     statuses: list[int] = []
@@ -617,6 +629,7 @@ def test_migrate_projects_upgrades_what_it_may_enter_and_skips_the_rest(cluster,
     env = dict(os.environ)
     env["DATABASE_URL"] = cluster.sa_url("platform", "control_objectives_rw")
     env["PROJECT_DATABASE_URL"] = cluster.sa_url("{database}", "control_objectives_rw")
+    env["PROJECT_MIGRATE_DATABASE_URL"] = cluster.sa_url("{database}", "control_objectives_migrator")
     run = subprocess.run(
         [sys.executable, "-m", "aisc_control_objectives.migrate_projects"],
         env=env, capture_output=True, text=True, timeout=300,
@@ -634,6 +647,7 @@ def test_migrate_projects_upgrades_what_it_may_enter_and_skips_the_rest(cluster,
     assert again.returncode == 0, again.stdout + again.stderr
     # it prints no credential
     assert "control_objectives_rw:control_objectives_rw" not in run.stdout + run.stderr
+    assert "control_objectives_migrator:control_objectives_migrator" not in run.stdout + run.stderr
 
 
 def test_migrate_projects_exits_2_on_a_permanent_error(cluster, projects):
@@ -643,10 +657,12 @@ def test_migrate_projects_exits_2_on_a_permanent_error(cluster, projects):
 
     broken = projects.make()
     with cluster.connect(projects.database(broken)) as conn:
-        conn.execute("REVOKE CREATE ON SCHEMA control_objectives FROM control_objectives_rw")
+        # a schema someone other than its owner role or the platform holds: waiting would not help
+        conn.execute(f'ALTER SCHEMA control_objectives OWNER TO "{cluster.user}"')
     env = dict(os.environ)
     env["DATABASE_URL"] = cluster.sa_url("platform", "control_objectives_rw")
     env["PROJECT_DATABASE_URL"] = cluster.sa_url("{database}", "control_objectives_rw")
+    env["PROJECT_MIGRATE_DATABASE_URL"] = cluster.sa_url("{database}", "control_objectives_migrator")
     run = subprocess.run(
         [sys.executable, "-m", "aisc_control_objectives.migrate_projects"],
         env=env, capture_output=True, text=True, timeout=300,

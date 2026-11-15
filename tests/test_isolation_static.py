@@ -112,6 +112,7 @@ def _composed(monkeypatch):
 
     monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://x:y@127.0.0.1:1/platform")
     monkeypatch.setenv("PROJECT_DATABASE_URL", "postgresql+psycopg://x:y@127.0.0.1:1/{database}")
+    monkeypatch.setenv("PROJECT_MIGRATE_DATABASE_URL", "postgresql+psycopg://m:y@127.0.0.1:1/{database}")
     monkeypatch.setenv("BAF_LLM_PROVIDER", "ollama")
     monkeypatch.setenv("BAF_LLM_MODEL", "mistral:latest")
     monkeypatch.setenv("BAF_LLM_BASE_URL", "http://127.0.0.1:1")

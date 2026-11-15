@@ -121,6 +121,9 @@ CREATE TABLE IF NOT EXISTS project.system (
     updated_at  timestamptz NOT NULL DEFAULT now(),
     created_by  text
 );
+-- The saved versions (template 0036 leaves out one withdrawn because its card was never saved; this stand-in
+-- has none withdrawn).
+CREATE OR REPLACE VIEW project.saved_system AS SELECT * FROM project.system;
 """
 
 
