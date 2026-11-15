@@ -219,8 +219,9 @@
        name, its priority score (the sum of the risk levels of its risks) and whether it is a priority
        objective. What is linked here goes forward to step 4, <b>AI Assessment Sandbox</b>.</p>
     {%- if not read_only %}
-    <form class="co-ai" method="post" action="{{ project_base }}/projects/{{ record.id }}/map">
+    <form class="co-ai" method="post" action="{{ project_base }}/projects/{{ record.id }}/map" data-busy>
       <button class="btn" type="submit">Suggest with AI</button>
+      <span class="qf-help">One model call per risk: this can take minutes.</span>
       <label class="co-ai-replace"><input type="checkbox" name="replace"> Also replace objectives I linked by hand</label>
       <button type="button" class="co-help" popovertarget="ai-help" aria-label="What suggesting with AI does">?</button>
       <div id="ai-help" class="co-help-pop" popover>
@@ -234,7 +235,7 @@
     </form>
     {%- if replacing %}
     <div class="notice co-confirm">
-      <form method="post" action="{{ project_base }}/projects/{{ record.id }}/map">
+      <form method="post" action="{{ project_base }}/projects/{{ record.id }}/map" data-busy>
         <input type="hidden" name="replace" value="on">
         <input type="hidden" name="confirmed" value="on">
         <p>This replaces {{ replacing.objectives }} objective{{ 's' if replacing.objectives != 1 }} you linked by hand on
@@ -354,4 +355,5 @@
 {% block scripts %}
 <script src="{{ root_path }}/static/sidemenu.js" defer></script>
 <script src="{{ root_path }}/static/unsaved.js" defer></script>
+<script src="{{ root_path }}/static/busy.js" defer></script>
 {% endblock %}

@@ -49,6 +49,7 @@ from aisc_control_objectives.control_objectives import ControlObjectiveCatalogue
 from aisc_control_objectives.db.repository import (
     PROFILE_CHANGED_MEANWHILE,
     ProjectRepository,
+    RUN_NOT_APPLIED,
     RatingsChangedMeanwhile,
     digest_of,
 )
@@ -77,6 +78,7 @@ CARD_CHECK_TIMEOUT = 3.0
 #: What a form that sent the person back to the assessment page says there, by the `notice` of the address.
 NOTICES = {
     "profile-changed": PROFILE_CHANGED_MEANWHILE,
+    "run-not-applied": RUN_NOT_APPLIED,
 }
 
 #: A start whose version the project's own database does not have.
@@ -516,8 +518,12 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
                                   on_save=ledger_events.on_mapping_run(project_id))
         except ModelUnavailable as exc:
             return refused_page(project, project_id, str(exc), 502, "#matrix")
-        except (AssessmentChanged, MappingInProgress) as exc:
+        except MappingInProgress as exc:
             return refused_page(project, project_id, str(exc), 409, "#matrix")
+        except AssessmentChanged:
+            # something was saved while the model was asked: back on the matrix, saying this run was not applied
+            return RedirectResponse(url=_assessment_url(root_path, project, project_id)
+                                    + "?notice=run-not-applied#matrix", status_code=303)
         # back on the part of the page's menu that shows what the AI suggested
         return RedirectResponse(
             url=_assessment_url(root_path, project, project_id) + "#matrix", status_code=303
