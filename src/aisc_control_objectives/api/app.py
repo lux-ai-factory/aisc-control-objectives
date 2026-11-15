@@ -47,7 +47,7 @@ from aisc_control_objectives.control_objectives import ControlObjectiveCatalogue
 from aisc_control_objectives.db.repository import ProjectRepository, RatingsChangedMeanwhile, digest_of
 from aisc_control_objectives.models.control_objective import ControlObjective, MacroRequirement
 from aisc_control_objectives.models.ontology import Ontology, same_card
-from aisc_control_objectives.projects import AssessmentChanged, ModelUnavailable, Projects
+from aisc_control_objectives.projects import AssessmentChanged, MappingInProgress, ModelUnavailable, Projects
 from aisc_control_objectives.rendering import (
     DEFAULT_LAUNCHER_URL,
     STATIC,
@@ -468,7 +468,7 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
                                   on_save=ledger_events.on_mapping_run(project_id))
         except ModelUnavailable as exc:
             return PlainTextResponse(str(exc), status_code=502)
-        except AssessmentChanged as exc:
+        except (AssessmentChanged, MappingInProgress) as exc:
             return PlainTextResponse(str(exc), status_code=409)
         # back on the part of the page's menu that shows what the AI suggested
         return RedirectResponse(
@@ -716,7 +716,7 @@ def _register_project_api(app, projects_of, view_in, editable):
                                                  on_save=ledger_events.on_mapping_run(project_id)))
         except ModelUnavailable as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
-        except AssessmentChanged as exc:
+        except (AssessmentChanged, MappingInProgress) as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     @app.post("/p/{project}/api/projects/{project_id}/card")

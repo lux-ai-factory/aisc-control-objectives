@@ -13,7 +13,8 @@ import copy
 import hashlib
 import json
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -682,6 +683,32 @@ class ProjectRepository:
                 mapped.add(oid)
                 restored.add(oid)
         return restored
+
+    @contextmanager
+    def mapping_lock(self, project_id: str) -> Iterator[bool]:
+        """Whether this caller holds the assessment's AI mapping lock, held until the block ends. A Postgres
+        advisory lock on a connection kept for the block: a second caller, in this process or another, gets
+        False at once instead of waiting, and a process that dies frees it with its connection."""
+        if not isinstance(self._engine, Engine):
+            # a repository on one caller's connection (a migration's) has no other caller to keep out
+            yield True
+            return
+        key = {"key": "control_objectives.mapping:" + project_id}
+        with self._engine.connect() as connection:
+            got = bool(connection.execute(
+                text("SELECT pg_try_advisory_lock(hashtextextended(:key, 0))"), key).scalar())
+            connection.commit()
+            try:
+                yield got
+            finally:
+                if got:
+                    try:
+                        connection.execute(text("SELECT pg_advisory_unlock(hashtextextended(:key, 0))"), key)
+                        connection.commit()
+                    except Exception:
+                        # a pooled connection must never go back still holding the lock
+                        connection.invalidate()
+                        raise
 
     def recording(self, record) -> None:
         """A transaction for ledger events alone: what happened changed nothing here (a failed AI run)."""
