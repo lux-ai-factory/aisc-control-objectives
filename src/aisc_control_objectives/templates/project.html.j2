@@ -37,9 +37,13 @@
     <h1>{{ record.name }}</h1>
     <p>{% if record.version_number %}Assessment of v{{ record.version_number }} · {% endif %}{{ record.system_name }}</p>
   </div>
-  {%- if card_changed %}
+  {%- if card_changed or card_changed is none %}
   <div class="notice co-card-changed">
+    {%- if card_changed %}
     The AI card of v{{ record.version_number }} changed since this assessment started.
+    {%- else %}
+    Could not check whether the AI card changed since this assessment started: qualification did not answer in time, or refused.
+    {%- endif %}
     {%- if not read_only %}
     <form method="post" action="{{ project_base }}/projects/{{ record.id }}/card">
       <button class="btn btn--small" type="submit">Reload the AI card</button>

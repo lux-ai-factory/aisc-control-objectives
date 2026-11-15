@@ -177,7 +177,7 @@ def render_projects_page(views: list, latest=None, root_path: str = "", project:
 def render_project_page(
     view, catalogue: ControlObjectiveCatalogue, root_path: str = "", project: str = "",
     read_only: str | None = None, profiles: list | None = None, show_error: bool = True,
-    dropped: list | None = None, confirm_replace: bool = False, card_changed: bool = False,
+    dropped: list | None = None, confirm_replace: bool = False, card_changed: bool | None = False,
     confirm_reset: bool = False, switching: dict | None = None,
     typed: dict | None = None, changed_meanwhile: list | None = None, notice: str | None = None,
     refused: str | None = None,
@@ -190,7 +190,8 @@ def render_project_page(
     `confirm_replace` asks before an AI run replaces what a person mapped, saying how much.
     `confirm_reset` asks before the key choices are removed, saying how many. `switching` asks before a
     profile switch drops objectives: the profile (`to`, `name`) and the objectives it drops (`drops`).
-    `card_changed`: qualification now serves another card for this version than the one it started from.
+    `card_changed`: qualification now serves another card for this version than the one it started from;
+    None when that could not be checked.
     `typed` (field name -> value) is what a refused ratings save posted for the fields its person changed,
     shown in those fields again; `changed_meanwhile` ((risk id, part) pairs) says which fields someone
     else saved since that page was loaded. `notice` is what a form that sent the person back here says.

@@ -157,16 +157,17 @@ def _latest_version(project: str, auth: str | None) -> dict:
     return latest
 
 
-def _card_changed(pid: str, record, auth: str | None) -> bool:
+def _card_changed(pid: str, record, auth: str | None) -> bool | None:
     """Whether qualification now serves another card for the assessment's version than the one it
-    started from. A qualification that does not answer, or a version with no card, says nothing. A card
+    started from; None when that could not be checked (qualification slow, refusing or not answering),
+    which the page says rather than reading as unchanged. A version with no card says nothing. A card
     that differs only by the provider's measures an older card carried (see same_card) has not changed."""
     if not record.system_id or not record.digest:
         return False
     try:
         card = upstream.card_jsonld(pid, record.system_id, auth, timeout=CARD_CHECK_TIMEOUT)
     except upstream.UpstreamDown:
-        return False
+        return None
     if card is None or digest_of(card) == record.digest:
         return False
     return not same_card(record.jsonld, card)
