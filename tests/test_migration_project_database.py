@@ -48,7 +48,9 @@ GRAPH_RISK_COUNT = "20261029000000_graph_risk_count"
 #: The selection stores which of its objectives are priority, for the report.
 PRIORITY = "20261030000000_priority_ids"
 #: The provider's measures leave step 2: the risk's two columns, and the stored cards' RiskControl nodes.
-HEAD = "20261108000000_no_risk_measures"
+NO_RISK_MEASURES = "20261108000000_no_risk_measures"
+#: The tables belong to control_objectives_owner, and an assessment's card version restricts its deletion.
+HEAD = "20261115000000_owner_role"
 TABLES = ("project", "graph", "risk", "mapped_objective", "mapping_run", "objective_selection",
           "objective_set", "objective_draft", "objective_set_version", "objective_set_version_item",
           "objective_profile", "objective_profile_version", "objective_profile_version_item", "objective_key",
@@ -150,7 +152,8 @@ def test_the_chain_is_baseline_selection_rename_source():
     config.set_main_option("script_location", str(projectdb.ALEMBIC_DIR))
     script = ScriptDirectory.from_config(config)
     assert script.get_heads() == [HEAD]
-    assert script.get_revision(HEAD).down_revision == PRIORITY
+    assert script.get_revision(HEAD).down_revision == NO_RISK_MEASURES
+    assert script.get_revision(NO_RISK_MEASURES).down_revision == PRIORITY
     assert script.get_revision(PRIORITY).down_revision == GRAPH_RISK_COUNT
     assert script.get_revision(GRAPH_RISK_COUNT).down_revision == PROFILE_NAME
     assert script.get_revision(PROFILE_NAME).down_revision == CARD
@@ -194,8 +197,10 @@ def test_upgrading_again_changes_nothing(migrated):
         ).scalar() == 1
 
 
-def test_deleting_a_version_deletes_its_assessment(migrated):
-    """The key into project.system cascades."""
+def test_a_version_an_assessment_names_cannot_be_deleted(migrated):
+    """The key into project.system restricts: a card version is kept, and so is its assessment."""
+    from sqlalchemy.exc import IntegrityError
+
     version = str(uuid.uuid4())
     with migrated.begin() as connection:
         connection.execute(
@@ -211,11 +216,12 @@ def test_deleting_a_version_deletes_its_assessment(migrated):
             " source, vulnerability, consequence, impact, stakeholder,"
             " areas, vair_terms, provenance) VALUES ('a1', 'risk0', 0, 't', '', '', '', '', '', '',"
             " '{}', '{}', 'form')"))
-    with migrated.begin() as connection:
-        connection.execute(text("DELETE FROM project.system WHERE pid = :p"), {"p": version})
+    with pytest.raises(IntegrityError, match="fk_project_system_id_project_system"):
+        with migrated.begin() as connection:
+            connection.execute(text("DELETE FROM project.system WHERE pid = :p"), {"p": version})
     with migrated.connect() as connection:
-        assert connection.execute(text("SELECT count(*) FROM control_objectives.project")).scalar() == 0
-        assert connection.execute(text("SELECT count(*) FROM control_objectives.risk")).scalar() == 0
+        assert connection.execute(text("SELECT count(*) FROM control_objectives.project")).scalar() == 1
+        assert connection.execute(text("SELECT count(*) FROM control_objectives.risk")).scalar() == 1
 
 
 def test_the_assessment_has_one_key_into_project_system_and_no_project_id(migrated):
@@ -230,7 +236,7 @@ def test_the_assessment_has_one_key_into_project_system_and_no_project_id(migrat
         ("fk_project_profile_version_id",
          "FOREIGN KEY (profile_version_id) REFERENCES objective_profile_version(id) ON DELETE RESTRICT"),
         ("fk_project_system_id_project_system",
-         "FOREIGN KEY (system_id) REFERENCES project.system(pid) ON DELETE CASCADE"),
+         "FOREIGN KEY (system_id) REFERENCES project.system(pid) ON DELETE RESTRICT"),
     ]
     assert columns == ["id", "name", "objectives_digest", "created_at", "updated_at", "system_id",
                        "profile_version_id", "carried"]

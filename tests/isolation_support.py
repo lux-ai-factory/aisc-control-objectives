@@ -257,7 +257,8 @@ def deployed_app(monkeypatch, cluster: Cluster, *, root_path: str = "",
 
     Env: `DATABASE_URL` is the `platform` database (membership only);
     `PROJECT_DATABASE_URL` is the
-    template for a project database, `{database}` replaced by `project_<hex>`.
+    template for a project database, `{database}` replaced by `project_<hex>`, and
+    `PROJECT_MIGRATE_DATABASE_URL` the same as control_objectives_migrator.
     No model is ever reached: the mapper is a fake and the ollama URL is a
     closed port.
     """
@@ -267,6 +268,11 @@ def deployed_app(monkeypatch, cluster: Cluster, *, root_path: str = "",
     monkeypatch.setenv(
         "PROJECT_DATABASE_URL",
         cluster.sa_url("{database}", "control_objectives_rw"),
+    )
+    # the migrations, as control_objectives_migrator (acting as control_objectives_owner), as in the stack
+    monkeypatch.setenv(
+        "PROJECT_MIGRATE_DATABASE_URL",
+        cluster.sa_url("{database}", "control_objectives_migrator"),
     )
     monkeypatch.setenv("BAF_LLM_PROVIDER", "ollama")
     monkeypatch.setenv("BAF_LLM_MODEL", "mistral:latest")

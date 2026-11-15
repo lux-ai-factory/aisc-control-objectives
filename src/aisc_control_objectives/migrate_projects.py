@@ -2,17 +2,20 @@
 
 `python -m aisc_control_objectives.migrate_projects` (the
 control-objectives-migrate one-shot): reads the projects from `platform`
-(`DATABASE_URL`), and for each one opens `project_<hex>` (`PROJECT_DATABASE_URL`)
-and brings it to the head revision.
+(`DATABASE_URL`), and for each one opens `project_<hex>` as
+control_objectives_migrator (`PROJECT_MIGRATE_DATABASE_URL`), whose sessions act
+as control_objectives_owner, and brings it to the head revision.
 
 - A database that does not exist, that this role may not connect to, or whose
   `control_objectives` schema the platform has not made yet is skipped; the
   app migrates it on first open once it can.
+- A database whose schema is still the platform's waits: the platform hands it to
+  control_objectives_owner at its first query after postgres-setup made the role.
 - Any other error is permanent: it is reported and the next project is tried.
 
 Exit status: 0 when every database it could enter is at head, 2 when any
-failed permanently, 1 when the platform could not be read (the compose loop
-retries 1 and stops on 2). It prints database names and error codes only,
+failed permanently, 1 when the platform could not be read or a schema waits for
+its owner (the compose loop retries 1 and stops on 2). It prints database names and error codes only,
 never a URL or a statement. It does not import the access module: the
 one-shot has no identity package on its path.
 """
@@ -72,6 +75,12 @@ def migrate_one(name: str, template: str) -> str:
         except projectdb.SchemaMissing:
             print(f"skip {name}: schema control_objectives is missing (platform template 0008 not applied)")
             return "skipped"
+        except projectdb.SchemaNotOwned as exc:
+            if exc.wait:
+                print(f"wait {name}: {exc}")
+                return "waiting"
+            print(f"FAILED {name}: {exc}")
+            return "failed"
         except Exception as exc:  # every other error is permanent for this database
             print(f"FAILED {name}: {_reason(exc)}")
             return "failed"
@@ -85,12 +94,22 @@ def main(argv: list[str] | None = None) -> int:
     pids = _projects()
     if pids is None:
         return 1
-    template = settings.project_database_url()
+    try:
+        template = settings.project_migrate_database_url()
+    except ValueError as exc:
+        print(f"[control-objectives] {exc}", file=sys.stderr)
+        return 2
     outcomes = [migrate_one(projectdb.database_name(pid), template) for pid in pids]
-    failed = outcomes.count("failed")
+    failed, waiting = outcomes.count("failed"), outcomes.count("waiting")
     print(f"[control-objectives] {outcomes.count('migrated')} migrated,"
-          f" {outcomes.count('skipped')} skipped, {failed} failed")
-    return 2 if failed else 0
+          f" {outcomes.count('skipped')} skipped, {waiting} waiting, {failed} failed")
+    if failed:
+        return 2
+    if waiting:
+        print(f"[control-objectives] {waiting} project database(s) wait for their schema to belong to"
+              f" {projectdb.SCHEMA_OWNER}: run postgres-setup, then let the platform start", file=sys.stderr)
+        return 1
+    return 0
 
 
 if __name__ == "__main__":

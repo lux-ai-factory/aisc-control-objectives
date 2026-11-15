@@ -18,7 +18,9 @@ so an unqualified name never resolves anywhere else. A transaction-scoped
 advisory lock keeps the app and the one-shot from migrating one database at the
 same time. The schema is made here only when it is missing and the connected
 role may create in the database (a scratch database in a test); in a project
-database without it the template has not run, and that is said plainly.
+database without it the template has not run, and that is said plainly. In a
+project database the schema must be control_objectives_owner's, the role the
+migrator acts as (projectdb.SchemaNotOwned otherwise, naming postgres-setup).
 """
 
 from urllib.parse import urlsplit
@@ -28,7 +30,7 @@ from sqlalchemy import text
 from sqlalchemy.pool import NullPool
 
 from aisc_control_objectives.db.tables import SCHEMA, Base
-from aisc_control_objectives.projectdb import SchemaMissing, make_engine
+from aisc_control_objectives.projectdb import SchemaMissing, check_schema_owner, make_engine
 
 target_metadata = Base.metadata
 
@@ -57,6 +59,13 @@ def _migrate(connection) -> None:
                 f"schema {SCHEMA} is missing: platform template 0008 not applied"
             )
         connection.execute(text(f"CREATE SCHEMA {SCHEMA}"))
+    # In a project database the schema is its owner role's before anything is migrated: the migrator's
+    # sessions act as that role, and a schema still the platform's would fail half way.
+    owner, database = connection.execute(
+        text("SELECT pg_get_userbyid(nspowner)::text, current_database() FROM pg_namespace WHERE nspname = :s"),
+        {"s": SCHEMA},
+    ).one()
+    check_schema_owner(owner, database)
     connection.execute(text(f"SET search_path TO {SCHEMA}"))
     context.configure(
         connection=connection,

@@ -7,6 +7,10 @@ Two variables:
 - `PROJECT_DATABASE_URL` is the template of a project's own database, with
   `{database}` where `project_<hex>` goes. Unset, it is `DATABASE_URL` with its
   database replaced by `{database}` (same server, same role).
+- `PROJECT_MIGRATE_DATABASE_URL` is the same template for the migrations, as
+  control_objectives_migrator, whose sessions act as control_objectives_owner, the
+  owner of the schema's tables. Required by the service and the migrate one-shot:
+  the role the service queries as reads and writes rows, it never migrates.
 
 The driver is named explicitly (`postgresql+psycopg`) because SQLAlchemy still
 defaults `postgresql://` to psycopg2, which is not what is installed.
@@ -46,3 +50,13 @@ def project_database_url(env: dict | None = None) -> str:
     if "{database}" not in template:
         raise ValueError("PROJECT_DATABASE_URL must contain {database}")
     return template
+
+
+def project_migrate_database_url(env: dict | None = None) -> str:
+    """The template of a project database's URL for the migrations (control_objectives_migrator)."""
+    env = env if env is not None else os.environ
+    template = env.get("PROJECT_MIGRATE_DATABASE_URL") or ""
+    if "{database}" not in template:
+        raise ValueError("PROJECT_MIGRATE_DATABASE_URL must contain {database}: migrations run as"
+                         " control_objectives_migrator")
+    return _normalised(template)

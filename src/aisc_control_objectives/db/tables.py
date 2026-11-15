@@ -97,11 +97,11 @@ class Project(Base):
         nullable=True,
     )
     #: The AI card version this assessment is of, a row of this database's
-    #: project.system. One assessment per version; deleting the version takes
-    #: its assessment with it.
+    #: project.system. One assessment per version; the version cannot be
+    #: deleted from under it (versions are kept).
     system_id: Mapped[str] = mapped_column(
         UUID(as_uuid=False),
-        ForeignKey("project.system.pid", ondelete="CASCADE",
+        ForeignKey("project.system.pid", ondelete="RESTRICT",
                    name="fk_project_system_id_project_system"),
         nullable=False,
     )

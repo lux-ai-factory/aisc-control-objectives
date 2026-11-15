@@ -152,6 +152,7 @@ def built(monkeypatch, tmp_path, database_url, platform):
     monkeypatch.setattr(server, "_repo_root", lambda: tmp_path)
     monkeypatch.setenv("CONTROL_OBJECTIVES_CONFIG_FILE", str(tmp_path / "none.toml"))
     monkeypatch.setenv("DATABASE_URL", database_url)
+    monkeypatch.setenv("PROJECT_MIGRATE_DATABASE_URL", "postgresql+psycopg://x:y@127.0.0.1:1/{database}")
     monkeypatch.setenv("BAF_LLM_PROVIDER", "ollama")
     monkeypatch.setenv("BAF_LLM_MODEL", "startup-model")
     monkeypatch.setenv("BAF_LLM_BASE_URL", closed_port_url())

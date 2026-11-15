@@ -26,7 +26,7 @@ from aisc_control_objectives.control_objectives import load_control_objectives, 
 from aisc_control_objectives.projectdb import ProjectDatabases
 from aisc_control_objectives.projects import Projects
 from aisc_control_objectives.risk_mapping import RiskMapper
-from aisc_control_objectives.settings import database_url, project_database_url
+from aisc_control_objectives.settings import database_url, project_database_url, project_migrate_database_url
 
 
 def _repo_root() -> Path:
@@ -105,7 +105,8 @@ def build_app():
 
     # Each project's assessments are in its own database, opened per request
     # by the gate after membership is decided; nothing connects here.
-    databases = ProjectDatabases(database_url(), project_database_url())
+    databases = ProjectDatabases(database_url(), project_database_url(),
+                                 migrate_url_template=project_migrate_database_url())
     projects = Projects(
         repository=None,
         catalogue=objectives,

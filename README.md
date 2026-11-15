@@ -138,6 +138,7 @@ uv sync --extra dev
 export PYTHONPATH=../../shared/identity          # the aisc_identity package
 export DATABASE_URL=postgresql://<role>:<password>@<host>:<port>/platform
 export PROJECT_DATABASE_URL=postgresql://<role>:<password>@<host>:<port>/{database}
+export PROJECT_MIGRATE_DATABASE_URL=postgresql://control_objectives_migrator:<password>@<host>:<port>/{database}
 export AUTH_ENABLED=false AUTH_DEV_ROLES=admin    # no Keycloak: a fake "development" admin
 uv run python -m aisc_control_objectives.migrate_projects   # every project database, to head
 uv run python -m aisc_control_objectives.server             # http://localhost:8090
@@ -166,6 +167,7 @@ Precedence for the model: built-in defaults, then `control-objectives.toml`, the
 |---|---|---|
 | `DATABASE_URL` | `postgresql+psycopg://control_objectives_rw:...@localhost:5432/platform` | The `platform` database, read for membership only. `postgresql://` is accepted. |
 | `PROJECT_DATABASE_URL` | `DATABASE_URL` with its database replaced by `{database}` | Template of a project database's URL; `{database}` becomes `project_<hex>`. |
+| `PROJECT_MIGRATE_DATABASE_URL` | *(none: required)* | The same template for the migrations, as `control_objectives_migrator`, whose sessions act as `control_objectives_owner`, the owner of the schema's tables (the migrate one-shot, and the service at a project's first open). A project database is migrated only once its `control_objectives` schema is that role's. |
 | `AUTH_ENABLED` | `true` | Verify Keycloak tokens. `false` runs every request as a fake `development` caller. |
 | `AUTH_DEV_ROLES` | *(empty)* | Realm roles of the fake caller when auth is off, e.g. `admin`. |
 | `KEYCLOAK_ISSUER` | *(unset)* | Token issuer; required when auth is on. |
@@ -189,8 +191,9 @@ Precedence for the model: built-in defaults, then `control-objectives.toml`, the
 | `AISC_GATEWAY_CLIENT_ID` | `aisc-gateway` | The `azp` of the gateway's token; only a request carrying such a token may name the request id ledger events cite. |
 
 In the stack, compose sets every value the service needs: the database URLs from
-`CONTROL_OBJECTIVES_DATABASE_URL` and `CONTROL_OBJECTIVES_PROJECT_DATABASE_URL` (or the generated
-`control_objectives_rw` password), the model from `CONTROL_OBJECTIVES_LLM_PROVIDER`,
+`CONTROL_OBJECTIVES_DATABASE_URL`, `CONTROL_OBJECTIVES_PROJECT_DATABASE_URL` and
+`CONTROL_OBJECTIVES_PROJECT_MIGRATE_DATABASE_URL` (or the generated `control_objectives_rw` and
+`control_objectives_migrator` passwords), the model from `CONTROL_OBJECTIVES_LLM_PROVIDER`,
 `CONTROL_OBJECTIVES_LLM_MODEL` and `CONTROL_OBJECTIVES_LLM_BASE_URL`, `PLATFORM_INTERNAL_TOKEN`
 from `PLATFORM_RISK_MAPPER_TOKEN`, `LEDGER_MODE`, the root path, the Keycloak and service URLs.
 The port stays at its default, 8090. `env.development` in this repo is the service's compose env
