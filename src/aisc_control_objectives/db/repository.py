@@ -93,6 +93,12 @@ _PREVIOUS_ASSESSMENT = text(
 )
 
 
+#: A person's objectives for a risk, refused because the assessment moved to another profile after the page was
+#: loaded: they were checked against the profile it had.
+PROFILE_CHANGED_MEANWHILE = ("The objective profile changed meanwhile, so this risk's objectives were not saved: "
+                             "open the risk again and pick its objectives from the new profile.")
+
+
 class AssessmentChanged(RuntimeError):
     """The assessment changed while the model was mapping it; the run was not saved."""
 
@@ -582,7 +588,7 @@ class ProjectRepository:
         with self._sessions.begin() as session:
             project = session.get(tables.Project, project_id, with_for_update=True)
             if profile_version_id != "" and project.profile_version_id != profile_version_id:
-                raise AssessmentChanged("The assessment's objective profile changed meanwhile: suggest again.")
+                raise AssessmentChanged(PROFILE_CHANGED_MEANWHILE)
             row = next(r for r in project.risks if r.risk_id == risk_id)
             before = sorted(m.objective_id for m in row.mapped)
             after = sorted(item.objective_id for item in objectives)

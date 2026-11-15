@@ -46,7 +46,12 @@ from aisc_control_objectives.api import ledger_events
 from aisc_control_objectives.api.library_routes import posted_form, register_library
 from aisc_control_objectives.config import RunConfig
 from aisc_control_objectives.control_objectives import ControlObjectiveCatalogue
-from aisc_control_objectives.db.repository import ProjectRepository, RatingsChangedMeanwhile, digest_of
+from aisc_control_objectives.db.repository import (
+    PROFILE_CHANGED_MEANWHILE,
+    ProjectRepository,
+    RatingsChangedMeanwhile,
+    digest_of,
+)
 from aisc_control_objectives.models.control_objective import ControlObjective, MacroRequirement
 from aisc_control_objectives.models.ontology import Ontology, same_card
 from aisc_control_objectives.projects import AssessmentChanged, MappingInProgress, ModelUnavailable, Projects
@@ -68,6 +73,11 @@ NO_CARD = "No AI card for the latest version yet"
 #: How long the assessment page waits for qualification to say whether the card changed: past it, the
 #: page shows without saying.
 CARD_CHECK_TIMEOUT = 3.0
+
+#: What a form that sent the person back to the assessment page says there, by the `notice` of the address.
+NOTICES = {
+    "profile-changed": PROFILE_CHANGED_MEANWHILE,
+}
 
 #: A start whose version the project's own database does not have.
 NOT_IN_PROJECT = "The latest version is not in this project's database."
@@ -456,7 +466,8 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
         response_class=HTMLResponse,
     )
     def project_page(project: str, project_id: str, request: Request, dropped: str = "",
-                     replace: str = "", reset: str = "", profile: str = "", to: str = "") -> HTMLResponse:
+                     replace: str = "", reset: str = "", profile: str = "", to: str = "",
+                     notice: str = "") -> HTMLResponse:
         projects, view, read_only = editable(request, project_id)
         library = projects.library
         profiles = library.profiles()
@@ -483,6 +494,8 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
                 confirm_replace=replace == "ask" and read_only is None and bool(view.record.by_hand),
                 confirm_reset=reset == "ask" and read_only is None and bool(view.record.keys),
                 card_changed=_card_changed(_pid(request, project), view.record, _caller(request)),
+                # the address is anyone's to write: only a notice the page knows is said, in its own words
+                notice=NOTICES.get(notice),
             )
         )
 
@@ -535,8 +548,10 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
                                  on_save=ledger_events.on_mapping_edited(project_id, risk_id))
         except ValueError as exc:
             return refused_page(project, project_id, f"Invalid links: {exc}", 400, f"#map-{risk_id}")
-        except AssessmentChanged as exc:
-            return refused_page(project, project_id, str(exc), 409, f"#map-{risk_id}")
+        except AssessmentChanged:
+            # the profile changed after the page was loaded: back on that risk, saying so
+            return RedirectResponse(url=_assessment_url(root_path, project, project_id)
+                                    + f"?notice=profile-changed#map-{risk_id}", status_code=303)
         return RedirectResponse(
             url=_assessment_url(root_path, project, project_id) + f"#map-{risk_id}", status_code=303
         )

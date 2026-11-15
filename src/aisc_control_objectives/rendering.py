@@ -175,7 +175,7 @@ def render_project_page(
     read_only: str | None = None, profiles: list | None = None, show_error: bool = True,
     dropped: list | None = None, confirm_replace: bool = False, card_changed: bool = False,
     confirm_reset: bool = False, switching: dict | None = None,
-    typed: dict | None = None, changed_meanwhile: list | None = None,
+    typed: dict | None = None, changed_meanwhile: list | None = None, notice: str | None = None,
 ) -> str:
     """One assessment as a risk and control matrix: the profile line, the risk register and the
     matrix. `read_only` says why an older version's assessment can no longer be changed. The
@@ -188,7 +188,7 @@ def render_project_page(
     `card_changed`: qualification now serves another card for this version than the one it started from.
     `typed` (field name -> value) is what a refused ratings save posted for the fields its person changed,
     shown in those fields again; `changed_meanwhile` ((risk id, part) pairs) says which fields someone
-    else saved since that page was loaded."""
+    else saved since that page was loaded. `notice` is what a form that sent the person back here says."""
     catalogue = view.catalogue or catalogue
     record = view.record
     priorities = {p.objective_id: p for p in view.priorities}
@@ -211,6 +211,7 @@ def render_project_page(
     return template.render(
         typed=typed or {},
         changed_meanwhile=meanwhile,
+        notice=notice,
         view=view,
         record=record,
         # an assessment is not the Assessments page, so no link in the menu is marked as the one open

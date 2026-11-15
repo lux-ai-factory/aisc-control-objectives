@@ -48,6 +48,9 @@
     {%- endif %}
   </div>
   {%- endif %}
+  {%- if notice %}
+  <div class="notice" role="status">{{ notice }}</div>
+  {%- endif %}
   {%- if read_only %}
   <div class="error">{{ read_only }} This assessment is kept as it was: open the latest version's assessment from the Assessments page to make changes.</div>
   {%- endif %}
