@@ -126,6 +126,12 @@ class ProjectView:
         return len(set(severity.impact) | set(severity.likelihood))
 
     @property
+    def linked(self) -> int:
+        """How many of its risks have at least one objective linked, by the AI or by hand."""
+        run = self.record.mapping_run
+        return sum(1 for mapping in run.mappings.values() if mapping.objectives) if run else 0
+
+    @property
     def fully_rated(self) -> int:
         """How many of its risks have both impact and likelihood saved."""
         severity = self.record.severity

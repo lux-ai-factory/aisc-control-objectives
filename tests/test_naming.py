@@ -127,7 +127,7 @@ def test_the_assessments_list_speaks_of_links_and_priority(client, start, platfo
     http, _ = client
     a = start()
     http.post(_api(platform_project, a, "/ratings"), json={"risk2": {"impact": 5, "likelihood": 4}})
-    assert "Ready to link" in http.get(f"/p/{platform_project}/projects").text
+    assert "1 of 5 rated" in _shown(http.get(f"/p/{platform_project}/projects").text)
     http.post(_api(platform_project, a, "/map"))
     shown = _shown(http.get(f"/p/{platform_project}/projects").text)
     assert re.search(r"\d+ priority objectives? ", shown)
