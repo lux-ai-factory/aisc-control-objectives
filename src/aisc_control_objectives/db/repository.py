@@ -75,9 +75,10 @@ class ProjectRecord:
 
 #: A card version's number and the highest number of the project, read from
 #: `project.system` of the same database: the database is the project, so the
-#: highest number over the table is the project's latest.
+#: highest number of its saved versions (`project.saved_system`, which leaves out
+#: a version withdrawn because its card was never saved) is the project's latest.
 _VERSION_NUMBERS = text(
-    "SELECT s.number, (SELECT max(o.number) FROM project.system o)"
+    "SELECT s.number, (SELECT max(o.number) FROM project.saved_system o)"
     " FROM project.system s WHERE s.pid::text = :sid"
 )
 
