@@ -62,6 +62,13 @@ class ModelUnavailable(RuntimeError):
     """The project's model could not be had; nothing was saved."""
 
 
+MAPPING_IN_PROGRESS = "An AI mapping of this assessment is already running; wait for it to finish."
+
+
+class MappingInProgress(RuntimeError):
+    """Another AI mapping run of the assessment is going; this one did nothing."""
+
+
 def priorities_of(record: ProjectRecord, catalogue: ControlObjectiveCatalogue) -> list[Priority]:
     """Every objective's score, rank and priority, from what the assessment holds."""
     return prioritise(
@@ -310,6 +317,14 @@ class Projects:
         return self.view(project_id)
 
     def map_risks_of(self, project_id: str, on_start=None, on_save=None, replace: bool = False) -> ProjectView:
+        """The assessment's AI mapping (_map_risks_of), one run at a time: a run asked while another is going is
+        refused with MappingInProgress before it records anything or calls a model."""
+        with self._repository.mapping_lock(project_id) as got:
+            if not got:
+                raise MappingInProgress(MAPPING_IN_PROGRESS)
+            return self._map_risks_of(project_id, on_start, on_save, replace)
+
+    def _map_risks_of(self, project_id: str, on_start=None, on_save=None, replace: bool = False) -> ProjectView:
         """The one agentic step: which objectives mitigate each risk. A risk a person mapped keeps their
         mapping and costs no model call, unless `replace` says to map it too.
 

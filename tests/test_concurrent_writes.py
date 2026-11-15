@@ -140,30 +140,31 @@ def test_a_persons_mapping_saved_while_the_run_saves_is_not_overwritten(client, 
     assert _actions(repository) == [("ai.mapping.requested", None), ("ai.mapping.failed", "assessment_changed")]
 
 
-def test_two_ai_runs_meeting_at_the_save_one_saves_the_other_is_refused_and_recorded(client, start, repository,
-                                                                                    ledger_on, monkeypatch):
-    """Two runs on one assessment, both past their model calls, save at once: one saves, the other is
-    refused as changed (was a 500 on the run's key, with no failed event and its model calls unrecorded)."""
+def test_two_ai_runs_at_once_one_saves_the_other_is_refused_at_its_start(client, start, repository, ledger_on,
+                                                                         monkeypatch):
+    """A second run on one assessment, asked while the first is still going (here at its save), is refused
+    before it records anything or calls a model; the first saves (two runs used to meet at the save, where
+    one was refused as changed after both had paid for their model calls)."""
     from aisc_control_objectives.db.repository import ProjectRepository
-    from aisc_control_objectives.projects import AssessmentChanged
+    from aisc_control_objectives.projects import MappingInProgress
 
     _, projects = client
     a = start()
-    meet = meeting_point()
     save = ProjectRepository.save_mapping_run
+    second = []
 
-    def save_together(self, *args, **kwargs):
-        meet()
+    def save_with_a_second_run(self, *args, **kwargs):
+        try:
+            second.append(("ok", _map_recorded(projects, a)))
+        except Exception as exc:
+            second.append(("raised", exc))
         return save(self, *args, **kwargs)
-    monkeypatch.setattr(ProjectRepository, "save_mapping_run", save_together)
+    monkeypatch.setattr(ProjectRepository, "save_mapping_run", save_with_a_second_run)
 
-    results = both(lambda: _map_recorded(projects, a), lambda: _map_recorded(projects, a))
-    outcomes = sorted(r[0] for r in results)
-    assert outcomes == ["ok", "raised"], results
-    assert isinstance(next(r[1] for r in results if r[0] == "raised"), AssessmentChanged), results
-    assert sorted(_actions(repository), key=str) == sorted([
-        ("ai.mapping.requested", None), ("ai.mapping.requested", None),
-        ("ai.mapping.completed", None), ("ai.mapping.failed", "assessment_changed")], key=str)
+    _map_recorded(projects, a)
+    [(outcome, refusal)] = second
+    assert outcome == "raised" and isinstance(refusal, MappingInProgress), second
+    assert _actions(repository) == [("ai.mapping.requested", None), ("ai.mapping.completed", None)]
 
 
 def test_a_save_that_fails_is_recorded(client, start, repository, ledger_on, monkeypatch):
