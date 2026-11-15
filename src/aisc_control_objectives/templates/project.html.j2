@@ -130,6 +130,9 @@
     <p class="qf-help">Rate each risk's impact and likelihood, 1 to 5. The risk level is their product:
        Low 1-4, Medium 5-9, High 10-16, Critical 17-25. A risk counts in the priority scores once both are
        rated; saving one as Not rated clears it.</p>
+    {%- if refused %}
+    <div class="error" role="alert">Not saved: {{ refused }} Your entries are kept below: correct them and save again.</div>
+    {%- endif %}
     {%- if changed_meanwhile %}
     <div class="error" role="alert">Not saved: these ratings were changed by someone else since you loaded the page.
       <ul>{% for label, parts in changed_meanwhile.items() %}<li>{{ label }}: {{ parts | join(", ") }}</li>{% endfor %}</ul>

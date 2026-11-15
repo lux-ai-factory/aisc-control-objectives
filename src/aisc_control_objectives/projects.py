@@ -29,6 +29,8 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+from pydantic import ValidationError
+
 from aisc_control_objectives.baf_llm import ResolveError
 from aisc_control_objectives.control_objectives import (
     ControlObjectiveCatalogue,
@@ -272,15 +274,22 @@ class Projects:
         a comment. Everything is checked before anything is written. `shown` is what the saving page
         showed for those fields (see the repository's rate): a field stored otherwise now refuses it all."""
         likelihood = likelihood or {}
-        known = {risk.id for risk in self._repository.get(project_id).ontology.risks}
+        risks = self._repository.get(project_id).ontology.risks
+        known = {risk.id for risk in risks}
         unknown = sorted((set(impact) | set(likelihood) | set(comments or {})) - known)
         if unknown:
             raise ValueError(f"risk(s) not on this card: {', '.join(unknown)}")
-        cleaned = None if comments is None else {rid: (text or "").strip() for rid, text in comments.items()}
-        # the checks: each part given 1-5, each comment short enough
-        Severity(impact={rid: v for rid, v in impact.items() if v is not None},
-                 likelihood={rid: v for rid, v in likelihood.items() if v is not None},
-                 comments={rid: t for rid, t in (cleaned or {}).items() if t})
+        # a textarea's line break comes as CRLF and counts as one character against its maxlength: it is
+        # stored as one
+        cleaned = None if comments is None else {rid: (text or "").replace("\r\n", "\n").strip()
+                                                 for rid, text in comments.items()}
+        # the checks: each part given 1-5, each comment short enough, refused in a sentence per risk
+        try:
+            Severity(impact={rid: v for rid, v in impact.items() if v is not None},
+                     likelihood={rid: v for rid, v in likelihood.items() if v is not None},
+                     comments={rid: t for rid, t in (cleaned or {}).items() if t})
+        except ValidationError as exc:
+            raise ValueError(_said(exc, {risk.id: risk.short_label or risk.text for risk in risks})) from None
         self._repository.rate(project_id, impact, likelihood, cleaned, record=record, shown=shown)
         return self.view(project_id)
 
@@ -464,6 +473,17 @@ class Projects:
         catalogue = self._catalogue_for(record)
         return ProjectView(record=record, priorities=priorities_of(record, catalogue), catalogue=catalogue,
                            profile=self.library.version_info(record.profile_version_id))
+
+
+def _said(exc: ValidationError, labels: dict[str, str]) -> str:
+    """A refused rating in sentences: each check's own message, the risk named by its label, without the
+    validator's dump around it."""
+    said = []
+    for error in exc.errors():
+        message = str(error.get("msg", "")).removeprefix("Value error, ")
+        risk_id, colon, rest = message.partition(": ")
+        said.append(f"{labels[risk_id]}: {rest}" if colon and risk_id in labels else message)
+    return "; ".join(said) + "."
 
 
 def _mapped_ids(run: MappingRun | None) -> set[str]:
