@@ -112,14 +112,14 @@ def test_the_api_answers_502_with_the_reason_and_saves_nothing(failing_client, b
     assert client.get(f"/p/{platform_project}/api/projects/{pid}").json()["mapping_run"] is None
 
 
-def test_the_form_route_answers_502_plain_text_and_saves_nothing(failing_client, baf_llm, assessment,
+def test_the_form_route_answers_502_on_a_page_and_saves_nothing(failing_client, baf_llm, assessment,
                                                                  platform_project):
     message = "the platform did not answer"
     projects, client = failing_client(baf_llm.ResolveError(message))
     pid = assessment(projects)
     r = client.post(f"/p/{platform_project}/projects/{pid}/map", follow_redirects=False)
     assert r.status_code == 502
-    assert r.headers["content-type"].startswith("text/plain")
+    assert r.headers["content-type"].startswith("text/html")
     assert message in r.text
     assert client.get(f"/p/{platform_project}/api/projects/{pid}").json()["mapping_run"] is None
 

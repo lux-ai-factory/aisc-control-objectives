@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import asdict
 
 from fastapi import Body, Depends, HTTPException, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from aisc_control_objectives import ledger
 from aisc_control_objectives.api import ledger_events
@@ -18,6 +18,7 @@ from aisc_control_objectives.library import BUILTIN_CODE, FIELDS
 from aisc_control_objectives.rendering import (
     render_profile_page,
     render_profiles_page,
+    render_refusal_page,
     render_set_page,
     render_sets_page,
 )
@@ -73,6 +74,11 @@ def register_library(app, projects_of, root_path: str) -> None:
     def page(project: str, path: str) -> RedirectResponse:
         return RedirectResponse(url=f"{root_path}/p/{project}{path}", status_code=303)
 
+    def refused_page(project: str, message: str, path: str, back_label: str) -> HTMLResponse:
+        """A refused form as a page of the site: its reason, and the way back to the page it came from."""
+        return HTMLResponse(render_refusal_page(message, f"{root_path}/p/{project}{path}", back_label,
+                                                root_path=root_path, project=project), status_code=400)
+
     def form_fields(form) -> dict:
         return {name: str(form.get(name) or "") for name in FIELDS}
 
@@ -90,7 +96,7 @@ def register_library(app, projects_of, root_path: str) -> None:
                 s, "objective_set.created", item_type="objective_set", item_id=c["id"], details={"code": c["code"]},
                 content=c))
         except ValueError as exc:
-            return PlainTextResponse(f"Invalid set: {exc}", status_code=400)
+            return refused_page(project, f"Invalid set: {exc}", "/sets", "Back to the custom objective sets")
         return page(project, f"/sets/{made.id}")
 
     @app.get("/p/{project}/sets/{set_id}", include_in_schema=False, response_class=HTMLResponse)
@@ -110,7 +116,7 @@ def register_library(app, projects_of, root_path: str) -> None:
                 item_id=ledger_events.objective_item(set_id, c["id"]), details={"set": set_id},
                 content=c["after"]))
         except ValueError as exc:
-            return PlainTextResponse(f"Invalid objective: {exc}", status_code=400)
+            return refused_page(project, f"Invalid objective: {exc}", f"/sets/{set_id}", "Back to the set")
         except LookupError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return page(project, f"/sets/{set_id}#obj-{made}")
@@ -124,7 +130,7 @@ def register_library(app, projects_of, root_path: str) -> None:
                 item_id=ledger_events.objective_item(set_id, objective_id), details={"set": set_id},
                 content=c["after"], before=c["before"], after=c["after"]))
         except ValueError as exc:
-            return PlainTextResponse(f"Invalid objective: {exc}", status_code=400)
+            return refused_page(project, f"Invalid objective: {exc}", f"/sets/{set_id}", "Back to the set")
         except LookupError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return page(project, f"/sets/{set_id}#obj-{objective_id}")
@@ -148,7 +154,7 @@ def register_library(app, projects_of, root_path: str) -> None:
                 s, "objective_set.published", item_type="objective_set", item_id=set_id,
                 item_version=str(c["number"]), details={"version": c["number"]}, content=c["items"]))
         except ValueError as exc:
-            return PlainTextResponse(f"Cannot publish: {exc}", status_code=400)
+            return refused_page(project, f"Cannot publish: {exc}", f"/sets/{set_id}", "Back to the set")
         except LookupError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return page(project, f"/sets/{set_id}")
@@ -159,7 +165,7 @@ def register_library(app, projects_of, root_path: str) -> None:
             library(request).delete_set(set_id, record=lambda s, held: ledger.emit(
                 s, "objective_set.deleted", item_type="objective_set", item_id=set_id, content=held))
         except ValueError as exc:
-            return PlainTextResponse(f"Cannot delete: {exc}", status_code=400)
+            return refused_page(project, f"Cannot delete: {exc}", f"/sets/{set_id}", "Back to the set")
         except LookupError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return page(project, "/sets")
@@ -180,7 +186,7 @@ def register_library(app, projects_of, root_path: str) -> None:
                 [str(v) for v in form.getlist("objective")], who=_who(request), who_sub=_who_sub(request), record=lambda s, c: ledger.emit(
                 s, "objective_profile.created", item_type="objective_profile", item_id=c["id"], content=c))
         except ValueError as exc:
-            return PlainTextResponse(f"Invalid profile: {exc}", status_code=400)
+            return refused_page(project, f"Invalid profile: {exc}", "/profiles/new", "Back to the new profile")
         return page(project, f"/profiles/{made.id}")
 
     @app.get("/p/{project}/profiles/{profile_id}", include_in_schema=False, response_class=HTMLResponse)
@@ -198,7 +204,7 @@ def register_library(app, projects_of, root_path: str) -> None:
                 name=str(form.get("name") or ""), description=str(form.get("description") or ""), who_sub=_who_sub(request),
                 record=lambda s, c: _profile_saved(s, profile_id, c))
         except ValueError as exc:
-            return PlainTextResponse(f"Invalid profile: {exc}", status_code=400)
+            return refused_page(project, f"Invalid profile: {exc}", f"/profiles/{profile_id}", "Back to the profile")
         except LookupError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return page(project, f"/profiles/{profile_id}")
@@ -210,7 +216,8 @@ def register_library(app, projects_of, root_path: str) -> None:
             library(request).take_newer(profile_id, who=_who(request), who_sub=_who_sub(request),
                                         record=lambda s, c: _profile_saved(s, profile_id, c))
         except ValueError as exc:
-            return PlainTextResponse(f"Cannot take the newer wording: {exc}", status_code=400)
+            return refused_page(project, f"Cannot take the newer wording: {exc}", f"/profiles/{profile_id}",
+                                    "Back to the profile")
         except LookupError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return page(project, f"/profiles/{profile_id}")

@@ -1,0 +1,13 @@
+{% extends "_base.html.j2" %}
+
+{#- A form or an address that could not be answered: what was refused and why, and the way back to the
+    page it came from. -#}
+{% block title %}{{ heading }} · AI Act Control Objectives{% endblock %}
+
+{% block content %}
+  <div class="co-header">
+    <h1>{{ heading }}</h1>
+  </div>
+  <div class="error" role="alert">{{ message }}</div>
+  <div class="qf-actions"><a class="btn" href="{{ back }}">{{ back_label }}</a></div>
+{% endblock %}

@@ -277,3 +277,15 @@ def render_profile_page(library, profile_id: str | None, root_path: str = "", pr
         view=view, groups=groups, builtin=[o for o in available if o.set_code == "O"],
         newer_drops=library.newer_drops(profile_id) if editable and view.updates else [],
         here="profiles", **_navigation(root_path, project))
+
+
+# Refusals
+
+
+def render_refusal_page(message: str, back: str, back_label: str, heading: str = "Not done",
+                        root_path: str = "", project: str = "") -> str:
+    """A refused form or an unknown address, as a page of the site: the reason, and a link back to the
+    page the person came from (`back`, worded as `back_label`)."""
+    return _environment().get_template("refused.html.j2").render(
+        message=message, back=back, back_label=back_label, heading=heading, here="",
+        **_navigation(root_path, project))
