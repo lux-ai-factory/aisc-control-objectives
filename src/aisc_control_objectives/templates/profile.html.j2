@@ -11,6 +11,10 @@
        {%- else %}Pick the objectives an assessment should work with.{% endif %}</p>
   </div>
 
+  {%- if saved %}
+  <div class="notice" role="status">{{ saved }}</div>
+  {%- endif %}
+
   {%- if view and view.updates %}
   <div class="co-update">
     {%- for code, pair in view.updates.items() %}

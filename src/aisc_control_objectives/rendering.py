@@ -268,9 +268,11 @@ def render_profiles_page(library, root_path: str = "", project: str = "") -> str
         profiles=library.profiles(), here="profiles", **_navigation(root_path, project))
 
 
-def render_profile_page(library, profile_id: str | None, root_path: str = "", project: str = "") -> str:
+def render_profile_page(library, profile_id: str | None, root_path: str = "", project: str = "",
+                        saved: str | None = None) -> str:
     """One profile (None: a new one). The picker groups what can be picked by set, then dimension, each
-    set worded as the version the profile pins (a set it does not take from: its latest)."""
+    set worded as the version the profile pins (a set it does not take from: its latest). `saved` is
+    what the last Save did, said above it."""
     view = library.get_profile(profile_id) if profile_id else None
     editable = view is not None and not view.profile.read_only
     available = library.available_for(profile_id) if editable else library.available()
@@ -285,7 +287,7 @@ def render_profile_page(library, profile_id: str | None, root_path: str = "", pr
     return _environment().get_template("profile.html.j2").render(
         view=view, groups=groups, builtin=[o for o in available if o.set_code == "O"],
         newer_drops=library.newer_drops(profile_id) if editable and view.updates else [],
-        here="profiles", **_navigation(root_path, project))
+        saved=saved, here="profiles", **_navigation(root_path, project))
 
 
 # Refusals

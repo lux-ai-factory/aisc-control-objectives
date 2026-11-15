@@ -30,6 +30,24 @@ def _profile_saved(session, profile_id: str, change: dict) -> None:
     ledger.emit(session, action, **ledger_events.profile_save(profile_id, change))
 
 
+def _saved_code(change: dict) -> str:
+    """What a profile save did, for the address of the page it goes back to: a new version, a new name
+    or description only, or nothing (no change is recorded)."""
+    if change.get("number") is not None:
+        return f"version-{change['number']}"
+    if not change:
+        return "unchanged"
+    return "name" if change["before"]["name"] != change["after"]["name"] else "description"
+
+
+def _saved_said(code: str) -> str | None:
+    """The line the profile page says for `code`; anything else in the address says nothing."""
+    if code.startswith("version-") and code[len("version-"):].isdigit():
+        return f"Saved as version {int(code[len('version-'):])}."
+    return {"name": "Name saved.", "description": "Description saved.",
+            "unchanged": "Nothing changed: the name, the description and the objectives are as they were."}.get(code)
+
+
 def _who(request: Request) -> str:
     caller = getattr(request.state, "caller", None)
     return (getattr(caller, "username", None) or getattr(caller, "subject", None) or "") if caller else ""
@@ -190,24 +208,31 @@ def register_library(app, projects_of, root_path: str) -> None:
         return page(project, f"/profiles/{made.id}")
 
     @app.get("/p/{project}/profiles/{profile_id}", include_in_schema=False, response_class=HTMLResponse)
-    def profile_page(project: str, profile_id: str, request: Request) -> HTMLResponse:
+    def profile_page(project: str, profile_id: str, request: Request, saved: str = "") -> HTMLResponse:
         try:
-            return HTMLResponse(render_profile_page(library(request), profile_id, root_path=root_path, project=project))
+            return HTMLResponse(render_profile_page(library(request), profile_id, root_path=root_path, project=project,
+                                                    saved=_saved_said(saved)))
         except LookupError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @app.post("/p/{project}/profiles/{profile_id}", include_in_schema=False)
     def save_profile_form(project: str, profile_id: str, request: Request, form=Depends(posted_form)):
+        change = {}
+
+        def record(session, saved: dict) -> None:
+            change.update(saved)
+            _profile_saved(session, profile_id, saved)
         try:
             library(request).save_profile(
                 profile_id, [str(v) for v in form.getlist("objective")], who=_who(request),
                 name=str(form.get("name") or ""), description=str(form.get("description") or ""), who_sub=_who_sub(request),
-                record=lambda s, c: _profile_saved(s, profile_id, c))
+                record=record)
         except ValueError as exc:
             return refused_page(project, f"Invalid profile: {exc}", f"/profiles/{profile_id}", "Back to the profile")
         except LookupError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
-        return page(project, f"/profiles/{profile_id}")
+        # the page says what Save did
+        return page(project, f"/profiles/{profile_id}?saved={_saved_code(change)}")
 
     @app.post("/p/{project}/profiles/{profile_id}/newer", include_in_schema=False)
     def newer_form(project: str, profile_id: str, request: Request):
