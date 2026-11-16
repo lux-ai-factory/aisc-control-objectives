@@ -1,8 +1,8 @@
 """shown_error: an error as a reader may see it.
 
-The same cases run in apps/qualification/services/agents/tests/test_shown_error.py against that
-app's copy, which is byte-identical to src/aisc_control_objectives/errors.py; only MODULE differs between the
-two files. Every key below is made up.
+These cases hold the shared rule, aisc_redact.shown_error,
+which this app imports; the cases also run in apps/qualification/services/agents/tests/test_shown_error.py
+against that app's copy. Only MODULE differs between the two files. Every key below is made up.
 """
 from __future__ import annotations
 

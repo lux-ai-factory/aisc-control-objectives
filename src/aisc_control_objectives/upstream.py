@@ -12,8 +12,8 @@ from __future__ import annotations
 
 import os
 
-import httpx
 from aisc_identity.headers import GATEWAY_TOKEN_HEADER
+from aisc_service_client import Response, ServiceClient, ServiceError
 
 TIMEOUT = 10.0
 
@@ -56,11 +56,11 @@ def _headers(authorization: str | None) -> dict[str, str]:
     return headers
 
 
-def _get(url: str, authorization: str | None, service: str, timeout: float = TIMEOUT) -> httpx.Response:
+def _get(url: str, authorization: str | None, service: str, timeout: float = TIMEOUT) -> Response:
     """GET `url` as the caller; `service` is who the error names when nothing answers."""
     try:
-        return httpx.get(url, headers=_headers(authorization), timeout=timeout)
-    except httpx.HTTPError as exc:
+        return ServiceClient(url, timeout=timeout, service=service).get("", headers=_headers(authorization))
+    except ServiceError as exc:
         raise UpstreamDown(f"{service} did not answer: {exc}") from exc
 
 
