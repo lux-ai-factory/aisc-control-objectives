@@ -14,6 +14,7 @@ from __future__ import annotations
 import threading
 import time
 import uuid
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -627,6 +628,9 @@ def test_migrate_projects_upgrades_what_it_may_enter_and_skips_the_rest(cluster,
     with cluster.connect(projects.database(shut)) as conn:
         conn.execute(f'REVOKE CONNECT ON DATABASE "{projects.database(shut)}" FROM control_objectives_rw')
     env = dict(os.environ)
+    # the one-shot names each database by the shared rule (aisc_identity), mounted beside it as in compose
+    env["PYTHONPATH"] = os.pathsep.join(filter(None, [
+        str(Path(__file__).resolve().parents[3] / "shared/identity"), env.get("PYTHONPATH")]))
     env["DATABASE_URL"] = cluster.sa_url("platform", "control_objectives_rw")
     env["PROJECT_DATABASE_URL"] = cluster.sa_url("{database}", "control_objectives_rw")
     env["PROJECT_MIGRATE_DATABASE_URL"] = cluster.sa_url("{database}", "control_objectives_migrator")
@@ -660,6 +664,9 @@ def test_migrate_projects_exits_2_on_a_permanent_error(cluster, projects):
         # a schema someone other than its owner role or the platform holds: waiting would not help
         conn.execute(f'ALTER SCHEMA control_objectives OWNER TO "{cluster.user}"')
     env = dict(os.environ)
+    # the one-shot names each database by the shared rule (aisc_identity), mounted beside it as in compose
+    env["PYTHONPATH"] = os.pathsep.join(filter(None, [
+        str(Path(__file__).resolve().parents[3] / "shared/identity"), env.get("PYTHONPATH")]))
     env["DATABASE_URL"] = cluster.sa_url("platform", "control_objectives_rw")
     env["PROJECT_DATABASE_URL"] = cluster.sa_url("{database}", "control_objectives_rw")
     env["PROJECT_MIGRATE_DATABASE_URL"] = cluster.sa_url("{database}", "control_objectives_migrator")
