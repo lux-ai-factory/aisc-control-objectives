@@ -478,7 +478,9 @@ def test_start_assessment_forwards_the_gateway_token(client, signing, project_me
 
     monkeypatch.setenv("PLATFORM_URL", "http://platform.invalid")
     monkeypatch.setenv("QUALIFICATION_URL", "http://qualification.invalid/qualification")
-    monkeypatch.setattr("aisc_control_objectives.upstream.httpx.get", fake_get)
+    # every call of the service client: the one GET of upstream
+    monkeypatch.setattr(httpx.Client, "request",
+                        lambda self, method, url, headers=None, timeout=None, **kw: fake_get(url, headers, timeout))
 
     response = client.post(
         f"/p/{pid}/projects", data={"name": "x"},

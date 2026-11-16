@@ -6,7 +6,6 @@ import re
 
 import httpx
 
-from aisc_control_objectives import upstream
 from aisc_control_objectives.library import FAIRNESS_OVERSIGHT
 
 
@@ -77,7 +76,9 @@ def _answers(monkeypatch, status: int | None):
             raise httpx.ConnectError("connection refused")
         return httpx.Response(status, json={"detail": "refused"}, request=httpx.Request("GET", url))
 
-    monkeypatch.setattr(upstream.httpx, "get", get)
+    # every call of the service client: the one GET of upstream
+    monkeypatch.setattr(httpx.Client, "request",
+                        lambda self, method, url, headers=None, timeout=None, **kw: get(url, headers, timeout))
 
 
 def test_start_assessment_says_a_refusal_is_a_refusal(client, platform_project, monkeypatch):
