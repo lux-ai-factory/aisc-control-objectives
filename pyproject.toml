@@ -28,6 +28,19 @@ dependencies = [
     "httpx>=0.27",
 ]
 
+[tool.uv]
+# besser-agentic-framework pins its dependencies with ==, some inside published advisories: each is raised here to
+# the first version past them, as the qualification agents raise them in services/agents/overrides.txt. Exact pins:
+# the image's uv pip install reads these overrides too, and an open range there would replace the lock's version.
+override-dependencies = [
+    "aiohttp==3.14.4",
+    "gitpython==3.2.1",
+    "nltk==3.10.4",
+    "pillow==13.0.0",
+    "requests==2.33.0",
+    "streamlit==1.54.0",
+]
+
 [project.scripts]
 control-objectives-migrate = "aisc_control_objectives.migrate_projects:main"
 
