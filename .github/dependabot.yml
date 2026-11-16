@@ -1,0 +1,8 @@
+# Version updates for this repository's locks. Security alerts come
+# regardless of this file.
+version: 2
+updates:
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
