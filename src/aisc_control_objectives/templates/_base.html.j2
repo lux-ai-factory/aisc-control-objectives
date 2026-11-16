@@ -406,6 +406,10 @@
 </header>
 
 <div class="co-page">
+{#- a reader who may not change the project is offered no form, and told so once -#}
+{%- if may_write is defined and not may_write %}
+<div class="notice" role="status">You can read this project but not change it.</div>
+{%- endif %}
 {% block content %}{% endblock %}
 </div>
 

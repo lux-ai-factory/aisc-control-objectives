@@ -41,7 +41,7 @@ from starlette._utils import get_route_path
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from aisc_control_objectives import ledger, projectdb, upstream
-from aisc_control_objectives.access import NOT_FOUND, ProjectAccess, is_page, page_refusal
+from aisc_control_objectives.access import NOT_FOUND, ProjectAccess, is_page, may_write, page_refusal
 from aisc_control_objectives.api import ledger_events
 from aisc_control_objectives.api.library_routes import posted_form, register_library
 from aisc_control_objectives.config import RunConfig
@@ -106,11 +106,7 @@ def may_read_errors(request: Request) -> bool:
     """Whether this caller reads a model run's error text: those who may change the
     project. A viewer sees only how the run stopped. Without a gate (the single-database domain
     tests) the service runs open, and the text is shown."""
-    opened = getattr(request.state, "opened", None)
-    access = opened.access if opened is not None else getattr(request.state, "access", None)
-    if access is None:
-        return getattr(request.state, "caller", None) is None
-    return access.may_write
+    return may_write(request)
 
 
 def _unix_newlines(value) -> str:
@@ -409,7 +405,8 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
         views = projects.list()
         latest = next((view for view in views if projects.is_latest(view)), None)
         return HTMLResponse(
-            render_projects_page(views, latest=latest, root_path=root_path, project=project)
+            render_projects_page(views, latest=latest, root_path=root_path, project=project,
+                                 may_write=may_write(request))
         )
 
     @app.post("/p/{project}/projects", include_in_schema=False)
@@ -494,7 +491,7 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
                 view, objectives, root_path=root_path, project=project,
                 read_only=read_only,
                 profiles=profiles,
-                show_error=may_read_errors(request),
+                show_error=may_read_errors(request), may_write=may_write(request),
                 switching=switching,
                 dropped=[oid for oid in named if oid in known],
                 confirm_replace=replace == "ask" and read_only is None and bool(view.record.by_hand),
@@ -614,7 +611,7 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
             projects, view, read_only = editable(request, project_id)
             return HTMLResponse(render_project_page(
                 view, objectives, root_path=root_path, project=project, read_only=read_only,
-                profiles=projects.library.profiles(), show_error=may_read_errors(request),
+                profiles=projects.library.profiles(), show_error=may_read_errors(request), may_write=may_write(request),
                 card_changed=_card_changed(_pid(request, project), view.record, _caller(request)),
                 typed=typed, **said), status_code=status)
 

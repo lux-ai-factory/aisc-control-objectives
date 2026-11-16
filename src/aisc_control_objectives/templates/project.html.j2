@@ -5,6 +5,8 @@
 
 {% block content %}
   {%- set record = view.record %}
+  {#- nothing here may change: an older card version's assessment, or a reader who may not write -#}
+  {%- set locked = read_only or not may_write %}
   {#- With risks, the page is laid out like the qualification's card: a menu on
       the left shows one part at a time (static/sidemenu.js), the site's links
       at its bottom; the title, the profile and the parts are the panel beside
@@ -44,7 +46,7 @@
     {%- else %}
     Could not check whether the AI card changed since this assessment started: qualification did not answer in time, or refused.
     {%- endif %}
-    {%- if not read_only %}
+    {%- if not locked %}
     <form method="post" action="{{ project_base }}/projects/{{ record.id }}/card">
       <button class="btn btn--small" type="submit">Reload the AI card</button>
       <span class="qf-help">Reads the AI card again. Ratings and links stay on the risks whose text is unchanged.</span>
@@ -64,7 +66,7 @@
   <div class="co-profile">
     <span class="co-profile-k">Objective profile</span>
     <b class="co-profile-name">{{ profile['label'] }}</b>
-    {%- if profile['update'] and not read_only %}
+    {%- if profile['update'] and not locked %}
     <form method="post" action="{{ project_base }}/projects/{{ record.id }}/profile" class="co-profile-update">
       <input type="hidden" name="profile" value="{{ profile['id'] }}">
       <span>A newer version ({{ profile['update']['to'] }}) exists.</span>
@@ -75,7 +77,7 @@
     {%- endif %}
     {#- the current profile is left out: picking it again is what "Switch to version N" does -#}
     {%- set others = profiles | rejectattr("id", "equalto", profile['id']) | list %}
-    {%- if not read_only and others %}
+    {%- if not locked and others %}
     <details class="co-profile-change">
       <summary>Change profile</summary>
       <form method="post" action="{{ project_base }}/projects/{{ record.id }}/profile">
@@ -91,7 +93,7 @@
     </details>
     {%- endif %}
   </div>
-  {%- if switching %}
+  {%- if switching and not locked %}
   <div class="notice co-confirm" id="profile-switch">
     <form method="post" action="{{ project_base }}/projects/{{ record.id }}/profile">
       <input type="hidden" name="profile" value="{{ switching.to }}">
@@ -142,7 +144,7 @@
       <ul>{% for label, parts in changed_meanwhile.items() %}<li>{{ label }}: {{ parts | join(", ") }}</li>{% endfor %}</ul>
       The page now shows their values, except where you typed: your entries are kept below. Check them and save again.</div>
     {%- endif %}
-    {%- if not read_only %}<form id="ratings" method="post" action="{{ project_base }}/projects/{{ record.id }}/severity">{% endif %}
+    {%- if not locked %}<form id="ratings" method="post" action="{{ project_base }}/projects/{{ record.id }}/severity">{% endif %}
     <table class="co-register">
       <thead><tr><th>Risk</th><th>Impact</th><th>Likelihood</th><th>Risk level</th><th>Rationale <span>(optional)</span></th></tr></thead>
       <tbody>
@@ -151,7 +153,7 @@
         <td class="co-reg-risk"><b>{{ risk.risk.text }}</b></td>
         {%- for part, value in (("impact", risk.impact), ("likelihood", risk.likelihood)) %}
         <td>
-          {%- if read_only %}{{ value or "Not rated" }}
+          {%- if locked %}{{ value or "Not rated" }}
           {%- else %}
           {#- an unrated part starts empty; saving an empty one clears it -#}
           <input type="hidden" name="shown:{{ part }}:{{ risk.risk.id }}" value="{{ value if value is not none else '' }}">
@@ -169,7 +171,7 @@
           {%- if risk.rating %}
           <span class="co-band">{{ risk.band }}</span>{% endif %}</td>
         <td class="co-reg-comment">
-          {%- if read_only %}{% if risk.comment %}<p class="co-sev-comment">{{ risk.comment }}</p>{% endif %}
+          {%- if locked %}{% if risk.comment %}<p class="co-sev-comment">{{ risk.comment }}</p>{% endif %}
           {%- else %}
           <input type="hidden" name="shown:comment:{{ risk.risk.id }}" value="{{ risk.comment or '' }}">
           <textarea name="comment:{{ risk.risk.id }}" maxlength="1000" rows="2" aria-label="Rationale"
@@ -196,7 +198,7 @@
       {%- endfor %}
       </tbody>
     </table>
-    {%- if not read_only %}
+    {%- if not locked %}
       <div class="qf-actions"><button class="btn" type="submit">Save the ratings</button></div>
     </form>
     {%- endif %}
@@ -227,7 +229,7 @@
     <p class="qf-help">Each risk with the control objectives linked to it. Click an objective for its
        name, its priority score (the sum of the risk levels of its risks) and whether it is a priority
        objective. What is linked here goes forward to step 4, <b>AI Assessment Sandbox</b>.</p>
-    {%- if not read_only %}
+    {%- if not locked %}
     <form class="co-ai" method="post" action="{{ project_base }}/projects/{{ record.id }}/map" data-busy>
       <button class="btn" type="submit">Suggest with AI</button>
       <span class="qf-help">One model call per risk: this can take minutes.</span>
@@ -290,7 +292,7 @@
               <dt>Linked by</dt><dd>{% if chip.source == 'person' %}The assessor{% else %}AI suggestion{% endif %}{% if chip.quote %}, on "{{ chip.quote }}"{% endif %}</dd>
             </dl>
             {%- set why = "chosen by you" if o.id in record.keys else ("priority because its score is high" if chip.priority.key_default else "") %}
-            {%- if read_only %}{% if chip.priority.key %}<p><b>Priority objective</b>{% if why %} <span class="co-key-why">({{ why }})</span>{% endif %}</p>{% endif %}
+            {%- if locked %}{% if chip.priority.key %}<p><b>Priority objective</b>{% if why %} <span class="co-key-why">({{ why }})</span>{% endif %}</p>{% endif %}
             {%- else %}
             <label class="co-pop-key"><input type="checkbox" form="keys" name="key" value="{{ o.id }}"{% if chip.priority.key %} checked{% endif %}> Priority objective
               {%- if why %} <span class="co-key-why">({{ why }})</span>{% endif %}</label>
@@ -302,7 +304,7 @@
           {%- endfor %}
         </td>
         <td class="co-m-edit">
-          {%- if not read_only %}
+          {%- if not locked %}
           {%- set chosen = risk.mapped | map(attribute=0) | list %}
           <button type="button" class="co-edit" popovertarget="edit-{{ risk.risk.id }}">Edit</button>
           <div id="edit-{{ risk.risk.id }}" class="co-edit-pop" popover>
@@ -326,11 +328,11 @@
       {%- endfor %}
       </tbody>
     </table>
-    {%- if not read_only and mapped_count %}
+    {%- if not locked and mapped_count %}
     <div class="qf-actions"><button class="btn" type="submit" form="keys">Save priority choices</button></div>
     <script src="{{ root_path }}/static/keys.js" defer></script>
     {%- endif %}
-    {%- if not read_only and record.keys %}
+    {%- if not locked and record.keys %}
     {%- if resetting %}
     <div class="notice co-confirm">
       <form method="post" action="{{ project_base }}/projects/{{ record.id }}/keys/reset">

@@ -13,6 +13,7 @@ from fastapi import Body, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from aisc_control_objectives import ledger
+from aisc_control_objectives.access import may_write
 from aisc_control_objectives.api import ledger_events
 from aisc_control_objectives.library import BUILTIN_CODE, FIELDS
 from aisc_control_objectives.rendering import (
@@ -104,7 +105,8 @@ def register_library(app, projects_of, root_path: str) -> None:
 
     @app.get("/p/{project}/sets", include_in_schema=False, response_class=HTMLResponse)
     def sets_page(project: str, request: Request) -> HTMLResponse:
-        return HTMLResponse(render_sets_page(library(request), root_path=root_path, project=project))
+        return HTMLResponse(render_sets_page(library(request), root_path=root_path, project=project,
+                                             may_write=may_write(request)))
 
     @app.post("/p/{project}/sets", include_in_schema=False)
     def make_set_form(project: str, request: Request, form=Depends(posted_form)):
@@ -122,7 +124,8 @@ def register_library(app, projects_of, root_path: str) -> None:
         if set_id == BUILTIN_CODE:
             return page(project, "/objectives")
         try:
-            return HTMLResponse(render_set_page(library(request), set_id, root_path=root_path, project=project))
+            return HTMLResponse(render_set_page(library(request), set_id, root_path=root_path, project=project,
+                                                may_write=may_write(request)))
         except LookupError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -190,11 +193,13 @@ def register_library(app, projects_of, root_path: str) -> None:
 
     @app.get("/p/{project}/profiles", include_in_schema=False, response_class=HTMLResponse)
     def profiles_page(project: str, request: Request) -> HTMLResponse:
-        return HTMLResponse(render_profiles_page(library(request), root_path=root_path, project=project))
+        return HTMLResponse(render_profiles_page(library(request), root_path=root_path, project=project,
+                                                 may_write=may_write(request)))
 
     @app.get("/p/{project}/profiles/new", include_in_schema=False, response_class=HTMLResponse)
     def new_profile_page(project: str, request: Request) -> HTMLResponse:
-        return HTMLResponse(render_profile_page(library(request), None, root_path=root_path, project=project))
+        return HTMLResponse(render_profile_page(library(request), None, root_path=root_path, project=project,
+                                                may_write=may_write(request)))
 
     @app.post("/p/{project}/profiles", include_in_schema=False)
     def make_profile_form(project: str, request: Request, form=Depends(posted_form)):
@@ -211,7 +216,7 @@ def register_library(app, projects_of, root_path: str) -> None:
     def profile_page(project: str, profile_id: str, request: Request, saved: str = "") -> HTMLResponse:
         try:
             return HTMLResponse(render_profile_page(library(request), profile_id, root_path=root_path, project=project,
-                                                    saved=_saved_said(saved)))
+                                                    saved=_saved_said(saved), may_write=may_write(request)))
         except LookupError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 

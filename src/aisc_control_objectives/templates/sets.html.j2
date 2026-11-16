@@ -10,6 +10,7 @@
        then publish: profiles pick from published versions, and a published version never changes.</p>
   </div>
 
+  {%- if may_write %}
   <details class="qf-section co-fold" open>
     <summary class="co-macro-head"><h2>Create a set</h2></summary>
     <form method="post" action="{{ project_base }}/sets">
@@ -31,6 +32,7 @@
       <div class="qf-actions"><button class="btn" type="submit">Create the set</button></div>
     </form>
   </details>
+  {%- endif %}
 
   <details class="qf-section co-fold" open>
     <summary class="co-macro-head"><h2>Sets</h2><span class="n">{{ sets | length }}</span></summary>

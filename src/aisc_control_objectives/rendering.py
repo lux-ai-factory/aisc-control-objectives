@@ -62,12 +62,14 @@ def project_page(project: str) -> str:
     return f"{launcher_url()}p/{project}" if project else ""
 
 
-def _navigation(root_path: str, project: str) -> dict[str, str]:
-    """What every page's header and links are built from."""
+def _navigation(root_path: str, project: str, may_write: bool = True) -> dict:
+    """What every page's header and links are built from. `may_write` False is a reader who may not
+    change the project: the pages offer them no form, and say so once."""
     return {
         "root_path": root_path,
         "project_base": project_base(root_path, project),
         "project_page": project_page(project),
+        "may_write": may_write,
     }
 
 
@@ -166,11 +168,12 @@ def _chips(record, risks: list, catalogue: ControlObjectiveCatalogue, priorities
     return out
 
 
-def render_projects_page(views: list, latest=None, root_path: str = "", project: str = "") -> str:
+def render_projects_page(views: list, latest=None, root_path: str = "", project: str = "",
+                         may_write: bool = True) -> str:
     """The systems under assessment, in one project. `latest` is the assessment of the latest card
     version, None while that version has none."""
     return _environment().get_template("projects.html.j2").render(
-        projects=views, latest=latest, here="projects", **_navigation(root_path, project)
+        projects=views, latest=latest, here="projects", **_navigation(root_path, project, may_write)
     )
 
 
@@ -180,7 +183,7 @@ def render_project_page(
     dropped: list | None = None, confirm_replace: bool = False, card_changed: bool | None = False,
     confirm_reset: bool = False, switching: dict | None = None,
     typed: dict | None = None, changed_meanwhile: list | None = None, notice: str | None = None,
-    refused: str | None = None,
+    refused: str | None = None, may_write: bool = True,
 ) -> str:
     """One assessment as a risk and control matrix: the profile line, the risk register and the
     matrix. `read_only` says why an older version's assessment can no longer be changed. The
@@ -195,7 +198,8 @@ def render_project_page(
     `typed` (field name -> value) is what a refused ratings save posted for the fields its person changed,
     shown in those fields again; `changed_meanwhile` ((risk id, part) pairs) says which fields someone
     else saved since that page was loaded. `notice` is what a form that sent the person back here says.
-    `refused` is why a ratings save was refused, said above the fields that keep what was typed."""
+    `refused` is why a ratings save was refused, said above the fields that keep what was typed.
+    `may_write` False is a reader who may not change the project: no form, as on an older version's."""
     catalogue = view.catalogue or catalogue
     record = view.record
     priorities = {p.objective_id: p for p in view.priorities}
@@ -238,7 +242,7 @@ def render_project_page(
         replacing=replacing,
         resetting=len(record.keys) if confirm_reset else None,
         card_changed=card_changed,
-        **_navigation(root_path, project),
+        **_navigation(root_path, project, may_write),
     )
 
 
@@ -250,26 +254,26 @@ def _library_context(library) -> dict:
     return {"dimensions": library.dimensions, "modes": MODES, "no_basis": NO_BASIS}
 
 
-def render_sets_page(library, root_path: str = "", project: str = "") -> str:
+def render_sets_page(library, root_path: str = "", project: str = "", may_write: bool = True) -> str:
     return _environment().get_template("sets.html.j2").render(
-        sets=library.sets(), here="sets", **_navigation(root_path, project))
+        sets=library.sets(), here="sets", **_navigation(root_path, project, may_write))
 
 
-def render_set_page(library, set_id: str, root_path: str = "", project: str = "") -> str:
+def render_set_page(library, set_id: str, root_path: str = "", project: str = "", may_write: bool = True) -> str:
     view = library.get_set(set_id)
     numbers = [o.number for o, _ in view.draft_rows]
     return _environment().get_template("set.html.j2").render(
         view=view, next_number=(max(numbers) + 1) if numbers else 1, here="sets",
-        **_library_context(library), **_navigation(root_path, project))
+        **_library_context(library), **_navigation(root_path, project, may_write))
 
 
-def render_profiles_page(library, root_path: str = "", project: str = "") -> str:
+def render_profiles_page(library, root_path: str = "", project: str = "", may_write: bool = True) -> str:
     return _environment().get_template("profiles.html.j2").render(
-        profiles=library.profiles(), here="profiles", **_navigation(root_path, project))
+        profiles=library.profiles(), here="profiles", **_navigation(root_path, project, may_write))
 
 
 def render_profile_page(library, profile_id: str | None, root_path: str = "", project: str = "",
-                        saved: str | None = None) -> str:
+                        saved: str | None = None, may_write: bool = True) -> str:
     """One profile (None: a new one). The picker groups what can be picked by set, then dimension, each
     set worded as the version the profile pins (a set it does not take from: its latest). `saved` is
     what the last Save did, said above it."""
@@ -285,9 +289,9 @@ def render_profile_page(library, profile_id: str | None, root_path: str = "", pr
             number = view.pins.get(summary.code, summary.latest) if view else summary.latest
             groups.append((summary, number, [(m, m.objectives) for m in mine.macro_requirements()]))
     return _environment().get_template("profile.html.j2").render(
-        view=view, groups=groups, builtin=[o for o in available if o.set_code == "O"],
+        view=view, groups=groups, picked=[o for o in available if view is not None and o.id in view.picks],
         newer_drops=library.newer_drops(profile_id) if editable and view.updates else [],
-        saved=saved, here="profiles", **_navigation(root_path, project))
+        saved=saved, here="profiles", **_navigation(root_path, project, may_write))
 
 
 # Refusals

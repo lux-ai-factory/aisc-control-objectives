@@ -19,6 +19,8 @@
     {#- starting again on an assessed version would only open its assessment -#}
     {%- if latest %}
     <div class="qf-actions"><a class="btn" href="{{ project_base }}/projects/{{ latest.record.id }}">Open the assessment of v{{ latest.record.version_number }}</a></div>
+    {%- elif not may_write %}
+    <p class="qf-help">The latest version has no assessment yet: an editor or owner of the project starts it.</p>
     {%- else %}
     <form method="post" action="{{ project_base }}/projects">
       <div class="field">

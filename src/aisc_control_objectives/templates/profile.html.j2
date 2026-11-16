@@ -4,6 +4,8 @@
 
 {% block content %}
   {%- set read_only = view and view.profile.read_only %}
+  {#- nothing here may change: the built-in profile, or a reader who may not write -#}
+  {%- set locked = read_only or not may_write %}
   <div class="co-header">
     <h1>{{ view.profile.name if view else "New profile" }}</h1>
     <p>{% if read_only %}Built-in, read-only. {{ view.profile.description }} Create a profile of your own to choose.
@@ -20,7 +22,7 @@
     {%- for code, pair in view.updates.items() %}
     <p><b>{{ code }}: a newer version ({{ pair[1] }}) exists</b> (this profile uses version {{ pair[0] }}, worded as below).</p>
     {%- endfor %}
-    {%- if not read_only %}
+    {%- if not locked %}
     <form method="post" action="{{ project_base }}/profiles/{{ view.profile.id }}/newer">
       <p>{% if newer_drops %}Switching drops {{ newer_drops | join(", ") }}: withdrawn in the newer version.
          {%- else %}Nothing is dropped.{% endif %} It saves a new version of this profile.</p>
@@ -30,13 +32,15 @@
   </div>
   {%- endif %}
 
-  {%- if read_only %}
+  {%- if locked %}
+  {%- if view %}
   <details class="qf-section co-fold" open>
     <summary class="co-macro-head"><h2>Objectives</h2><span class="n">{{ view.picks | length }}</span></summary>
     <ul class="co-versions">
-      {%- for o in builtin if o.id in view.picks %}<li><b>{{ o.id }}</b> {{ o.sub_requirement_label }}</li>{% endfor %}
+      {%- for o in picked %}<li><b>{{ o.id }}</b> {{ o.sub_requirement_label }}</li>{% endfor %}
     </ul>
   </details>
+  {%- endif %}
   {%- else %}
   <form method="post" action="{{ project_base }}/profiles{% if view %}/{{ view.profile.id }}{% endif %}">
     <div class="qf-section">

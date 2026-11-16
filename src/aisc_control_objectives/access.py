@@ -65,6 +65,17 @@ def project_from_path(path: str) -> str | None:
     return found.group(1) if found else None
 
 
+def may_write(request) -> bool:
+    """Whether the caller may change the project of this request: what the gate decided. A viewer reads
+    only, and the pages offer them no form. Without a gate (the single-database domain tests) the
+    service runs open."""
+    opened = getattr(request.state, "opened", None)
+    access = opened.access if opened is not None else getattr(request.state, "access", None)
+    if access is None:
+        return getattr(request.state, "caller", None) is None
+    return access.may_write
+
+
 def is_page(path: str) -> bool:
     """Whether a route path is a page or a form of a project, which answers a refusal as a page of the
     site, rather than its JSON API."""

@@ -10,7 +10,9 @@
        change of its objectives is a new version; an assessment keeps the version it runs on until you
        switch to a newer one.</p>
   </div>
+  {%- if may_write %}
   <div class="co-set-actions"><a class="btn" href="{{ project_base }}/profiles/new">New profile</a></div>
+  {%- endif %}
 
   <details class="qf-section co-fold" open>
     <summary class="co-macro-head"><h2>Profiles</h2><span class="n">{{ profiles | length }}</span></summary>
