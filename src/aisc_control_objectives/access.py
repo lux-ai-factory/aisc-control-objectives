@@ -17,7 +17,9 @@ from aisc_identity.service import Misconfigured, NotAuthenticated, caller_from_h
 from starlette._utils import get_route_path
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import JSONResponse, PlainTextResponse
+from starlette.responses import HTMLResponse, JSONResponse, PlainTextResponse
+
+from aisc_control_objectives.rendering import launcher_url, render_refusal_page
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +45,13 @@ _API_PATH = re.compile(r"^/p/[^/]+/api(?:/|$)")
 
 NOT_FOUND = Refused("not-found")
 
+#: The way back from a refused page, by the part of the project the page is in.
+_BACK = {
+    "projects": "Back to the assessments",
+    "sets": "Back to the custom objective sets",
+    "profiles": "Back to the objective profiles",
+}
+
 
 def project_from_path(path: str) -> str | None:
     """The project a route path is inside, or None if it is not inside one.
@@ -54,6 +63,42 @@ def project_from_path(path: str) -> str | None:
     """
     found = _PROJECT_PATH.match(path or "")
     return found.group(1) if found else None
+
+
+def may_write(request) -> bool:
+    """Whether the caller may change the project of this request: what the gate decided. A viewer reads
+    only, and the pages offer them no form. Without a gate (the single-database domain tests) the
+    service runs open."""
+    opened = getattr(request.state, "opened", None)
+    access = opened.access if opened is not None else getattr(request.state, "access", None)
+    if access is None:
+        return getattr(request.state, "caller", None) is None
+    return access.may_write
+
+
+def is_page(path: str) -> bool:
+    """Whether a route path is a page or a form of a project, which answers a refusal as a page of the
+    site, rather than its JSON API."""
+    return project_from_path(path) is not None and not _API_PATH.match(path)
+
+
+def page_refusal(request, message: str, status: int, *, to_launcher: bool = False) -> HTMLResponse:
+    """A refusal on a project's page as a page of the site: the reason, and a link back to the part of
+    the project it was asked from (the Assessments page when the part has no page of its own), or, for
+    someone the project does not let in, to the launcher."""
+    path = get_route_path(request.scope)
+    root_path = request.scope.get("root_path", "")
+    project = project_from_path(path) or ""
+    if to_launcher:
+        back, label = launcher_url(), "Back to the launcher"
+    else:
+        part = path.split("/")[3] if path.count("/") >= 3 else ""
+        part = part if part in _BACK else "projects"
+        back, label = f"{root_path}/p/{project}/{part}", _BACK[part]
+    heading = "Not found" if status == 404 else "Not done"
+    return HTMLResponse(render_refusal_page(message, back, label, heading=heading, root_path=root_path,
+                                            project=project if not to_launcher else ""),
+                        status_code=status)
 
 
 def is_public(path: str) -> bool:
@@ -90,10 +135,13 @@ class ProjectAccess(BaseHTTPMiddleware):
         self._databases = databases
 
     @staticmethod
-    def _refuse(path: str, refused: Refused):
+    def _refuse(request, path: str, refused: Refused):
+        """The JSON API's refusals are JSON; a page's is a page of the site. A member who may not do
+        what they asked goes back to the project, anyone else to the launcher."""
         if _API_PATH.match(path):
             return JSONResponse({"detail": refused.message}, status_code=refused.status)
-        return PlainTextResponse(refused.message, status_code=refused.status)
+        return page_refusal(request, refused.message, refused.status,
+                            to_launcher=refused.code not in ("forbidden", "owner-only"))
 
     async def dispatch(self, request, call_next):
         path = get_route_path(request.scope)
@@ -111,7 +159,7 @@ class ProjectAccess(BaseHTTPMiddleware):
             project = project_from_path(path)
             if project is None:
                 # Under /p/ but no project the router could read: nothing to serve.
-                return self._refuse(path, NOT_FOUND)
+                return self._refuse(request, path, NOT_FOUND)
             try:
                 if self._databases is not None:
                     from aisc_control_objectives.projectdb import ProjectDatabaseGone
@@ -121,11 +169,11 @@ class ProjectAccess(BaseHTTPMiddleware):
                         request.state.opened = await run_in_threadpool(
                             self._databases.open, project, caller, write)
                     except ProjectDatabaseGone:
-                        return self._refuse(path, NOT_FOUND)
+                        return self._refuse(request, path, NOT_FOUND)
                 else:
                     request.state.access = await run_in_threadpool(
                         admit, project, caller, request.method,
                         connect=lambda: closing(self._engine.raw_connection()))
             except Refused as refused:
-                return self._refuse(path, refused)
+                return self._refuse(request, path, refused)
         return await call_next(request)

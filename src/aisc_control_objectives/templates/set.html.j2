@@ -10,6 +10,7 @@
        {%- if s.latest is none %}not published yet{% else %}Version {{ s.latest }} published{% if s.unpublished %}, with unpublished changes{% endif %}{% endif %}</p>
   </div>
 
+  {%- if may_write %}
   <div class="co-set-actions">
     {%- if s.latest is none or s.unpublished %}
     <form method="post" action="{{ project_base }}/sets/{{ s.id }}/publish">
@@ -30,6 +31,7 @@
       <div class="qf-actions"><button class="btn" type="submit">Add the objective</button></div>
     </form>
   </details>
+  {%- endif %}
 
   <details class="qf-section co-fold" open>
     <summary class="co-macro-head"><h2>Objectives</h2><span class="n">{{ view.draft | length }} active</span></summary>
@@ -44,6 +46,7 @@
       </div>
       <p class="co-text">{{ o.text }}</p>
       {%- if o.legal_basis != no_basis %}<p class="co-reason">Legal basis: {{ o.legal_basis }}</p>{% endif %}
+      {%- if may_write %}
       <div class="co-obj-actions">
         <details class="co-map-edit">
           <summary>Edit</summary>
@@ -56,6 +59,7 @@
           <button class="btn btn--ghost btn--small" type="submit">{{ 'Restore' if retired else 'Withdraw' }}</button>
         </form>
       </div>
+      {%- endif %}
     </article>
     {%- else %}
     <p class="qf-help">No objective yet: add the first above.</p>
@@ -72,4 +76,8 @@
     </ul>
   </details>
   {%- endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ root_path }}/static/unsaved.js" defer></script>
 {% endblock %}

@@ -233,7 +233,7 @@ class TestThePages:
         _start(client, graph, platform_project, name="MCAS pre-market", starter=_starter)
         page = client.get(f"/p/{platform_project}/projects").text
         assert "MCAS pre-market" in page
-        assert "Awaiting your rating" in page and "rank" not in page.lower()
+        assert "0 of 5 rated" in page and "rank" not in page.lower()
 
     def test_the_projects_page_opens_the_latest_versions_assessment_once_there_is_one(
         self, _starter, platform_project, client, graph, versions

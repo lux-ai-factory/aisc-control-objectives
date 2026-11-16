@@ -1,6 +1,7 @@
 // The assessment page holds several forms (the ratings and their rationales, the key ticks, each
-// risk's objectives) and buttons that reload it. Anything typed into one form and not saved is lost
-// when the page is left some other way, so the page asks first. Saving the changed form is not
+// risk's objectives) and buttons that reload it; the profile and set pages hold the objective picks
+// and the objective forms. Anything typed into one form and not saved is lost when the page is left
+// some other way, so the page asks first. Saving the changed form is not
 // leaving, nor is picking a part of the left menu (it only shows another part of this page), nor is
 // a download.
 (function () {

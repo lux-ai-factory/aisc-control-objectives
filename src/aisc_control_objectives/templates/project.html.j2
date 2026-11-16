@@ -5,6 +5,8 @@
 
 {% block content %}
   {%- set record = view.record %}
+  {#- nothing here may change: an older card version's assessment, or a reader who may not write -#}
+  {%- set locked = read_only or not may_write %}
   {#- With risks, the page is laid out like the qualification's card: a menu on
       the left shows one part at a time (static/sidemenu.js), the site's links
       at its bottom; the title, the profile and the parts are the panel beside
@@ -37,16 +39,23 @@
     <h1>{{ record.name }}</h1>
     <p>{% if record.version_number %}Assessment of v{{ record.version_number }} · {% endif %}{{ record.system_name }}</p>
   </div>
-  {%- if card_changed %}
+  {%- if card_changed or card_changed is none %}
   <div class="notice co-card-changed">
+    {%- if card_changed %}
     The AI card of v{{ record.version_number }} changed since this assessment started.
-    {%- if not read_only %}
+    {%- else %}
+    Could not check whether the AI card changed since this assessment started: qualification did not answer in time, or refused.
+    {%- endif %}
+    {%- if not locked %}
     <form method="post" action="{{ project_base }}/projects/{{ record.id }}/card">
       <button class="btn btn--small" type="submit">Reload the AI card</button>
       <span class="qf-help">Reads the AI card again. Ratings and links stay on the risks whose text is unchanged.</span>
     </form>
     {%- endif %}
   </div>
+  {%- endif %}
+  {%- if notice %}
+  <div class="notice" role="status">{{ notice }}</div>
   {%- endif %}
   {%- if read_only %}
   <div class="error">{{ read_only }} This assessment is kept as it was: open the latest version's assessment from the Assessments page to make changes.</div>
@@ -57,7 +66,7 @@
   <div class="co-profile">
     <span class="co-profile-k">Objective profile</span>
     <b class="co-profile-name">{{ profile['label'] }}</b>
-    {%- if profile['update'] and not read_only %}
+    {%- if profile['update'] and not locked %}
     <form method="post" action="{{ project_base }}/projects/{{ record.id }}/profile" class="co-profile-update">
       <input type="hidden" name="profile" value="{{ profile['id'] }}">
       <span>A newer version ({{ profile['update']['to'] }}) exists.</span>
@@ -68,7 +77,7 @@
     {%- endif %}
     {#- the current profile is left out: picking it again is what "Switch to version N" does -#}
     {%- set others = profiles | rejectattr("id", "equalto", profile['id']) | list %}
-    {%- if not read_only and others %}
+    {%- if not locked and others %}
     <details class="co-profile-change">
       <summary>Change profile</summary>
       <form method="post" action="{{ project_base }}/projects/{{ record.id }}/profile">
@@ -84,7 +93,7 @@
     </details>
     {%- endif %}
   </div>
-  {%- if switching %}
+  {%- if switching and not locked %}
   <div class="notice co-confirm" id="profile-switch">
     <form method="post" action="{{ project_base }}/projects/{{ record.id }}/profile">
       <input type="hidden" name="profile" value="{{ switching.to }}">
@@ -127,12 +136,15 @@
     <p class="qf-help">Rate each risk's impact and likelihood, 1 to 5. The risk level is their product:
        Low 1-4, Medium 5-9, High 10-16, Critical 17-25. A risk counts in the priority scores once both are
        rated; saving one as Not rated clears it.</p>
+    {%- if refused %}
+    <div class="error" role="alert">Not saved: {{ refused }} Your entries are kept below: correct them and save again.</div>
+    {%- endif %}
     {%- if changed_meanwhile %}
     <div class="error" role="alert">Not saved: these ratings were changed by someone else since you loaded the page.
       <ul>{% for label, parts in changed_meanwhile.items() %}<li>{{ label }}: {{ parts | join(", ") }}</li>{% endfor %}</ul>
       The page now shows their values, except where you typed: your entries are kept below. Check them and save again.</div>
     {%- endif %}
-    {%- if not read_only %}<form id="ratings" method="post" action="{{ project_base }}/projects/{{ record.id }}/severity">{% endif %}
+    {%- if not locked %}<form id="ratings" method="post" action="{{ project_base }}/projects/{{ record.id }}/severity">{% endif %}
     <table class="co-register">
       <thead><tr><th>Risk</th><th>Impact</th><th>Likelihood</th><th>Risk level</th><th>Rationale <span>(optional)</span></th></tr></thead>
       <tbody>
@@ -141,7 +153,7 @@
         <td class="co-reg-risk"><b>{{ risk.risk.text }}</b></td>
         {%- for part, value in (("impact", risk.impact), ("likelihood", risk.likelihood)) %}
         <td>
-          {%- if read_only %}{{ value or "Not rated" }}
+          {%- if locked %}{{ value or "Not rated" }}
           {%- else %}
           {#- an unrated part starts empty; saving an empty one clears it -#}
           <input type="hidden" name="shown:{{ part }}:{{ risk.risk.id }}" value="{{ value if value is not none else '' }}">
@@ -159,7 +171,7 @@
           {%- if risk.rating %}
           <span class="co-band">{{ risk.band }}</span>{% endif %}</td>
         <td class="co-reg-comment">
-          {%- if read_only %}{% if risk.comment %}<p class="co-sev-comment">{{ risk.comment }}</p>{% endif %}
+          {%- if locked %}{% if risk.comment %}<p class="co-sev-comment">{{ risk.comment }}</p>{% endif %}
           {%- else %}
           <input type="hidden" name="shown:comment:{{ risk.risk.id }}" value="{{ risk.comment or '' }}">
           <textarea name="comment:{{ risk.risk.id }}" maxlength="1000" rows="2" aria-label="Rationale"
@@ -186,7 +198,7 @@
       {%- endfor %}
       </tbody>
     </table>
-    {%- if not read_only %}
+    {%- if not locked %}
       <div class="qf-actions"><button class="btn" type="submit">Save the ratings</button></div>
     </form>
     {%- endif %}
@@ -209,29 +221,32 @@
       {%- if stop == "cap" %}The AI's suggestions still failed the checks after its last allowed attempt.
       {%- elif stop == "fixpoint" %}The AI repeated the same mistakes, so it was stopped.
       {%- else %}The AI could not be reached, or its answer could not be read.{% endif %}
+      {%- set unreached = risks | selectattr("unreached") | list | length %}
+      {%- if unreached %} {{ unreached }} of {{ risks | length }} risk{{ 's' if risks | length != 1 }} {{ 'were' if unreached != 1 else 'was' }} not suggested: {{ 'they keep' if unreached != 1 else 'it keeps' }} the objectives {{ 'they' if unreached != 1 else 'it' }} had.{% endif %}
       {%- if show_error and record.mapping_run.error %} The error was: {{ record.mapping_run.error }}.{% endif %}
        What passed the checks is below; what did not is listed with each risk.</div>
     {%- endif %}
     <p class="qf-help">Each risk with the control objectives linked to it. Click an objective for its
        name, its priority score (the sum of the risk levels of its risks) and whether it is a priority
        objective. What is linked here goes forward to step 4, <b>AI Assessment Sandbox</b>.</p>
-    {%- if not read_only %}
-    <form class="co-ai" method="post" action="{{ project_base }}/projects/{{ record.id }}/map">
+    {%- if not locked %}
+    <form class="co-ai" method="post" action="{{ project_base }}/projects/{{ record.id }}/map" data-busy>
       <button class="btn" type="submit">Suggest with AI</button>
+      <span class="qf-help">One model call per risk: this can take minutes.</span>
       <label class="co-ai-replace"><input type="checkbox" name="replace"> Also replace objectives I linked by hand</label>
       <button type="button" class="co-help" popovertarget="ai-help" aria-label="What suggesting with AI does">?</button>
       <div id="ai-help" class="co-help-pop" popover>
         <b>Suggest with AI.</b> The AI reads each risk against the catalogue and proposes the
         objectives that would mitigate it, each resting on a quote from that risk's own details;
         a proposal with no such quote is sent back. It costs one model call per risk, with the
-        model chosen in Manage › AI assistants › AI assistant models and keys. A risk whose
+        model the project's owners choose in Manage › Connectivity › Configurator agents. A risk whose
         objectives you linked yourself keeps them and is not sent; tick <b>Also replace objectives
         I linked by hand</b> to have the AI suggest links for those as well.
       </div>
     </form>
     {%- if replacing %}
     <div class="notice co-confirm">
-      <form method="post" action="{{ project_base }}/projects/{{ record.id }}/map">
+      <form method="post" action="{{ project_base }}/projects/{{ record.id }}/map" data-busy>
         <input type="hidden" name="replace" value="on">
         <input type="hidden" name="confirmed" value="on">
         <p>This replaces {{ replacing.objectives }} objective{{ 's' if replacing.objectives != 1 }} you linked by hand on
@@ -257,6 +272,7 @@
       {%- for risk in risks %}
       <tr class="co-mrow" data-risk="{{ risk.risk.id }}" id="map-{{ risk.risk.id }}">
         <td class="co-m-risk">{{ risk.risk.text }}
+          {%- if risk.unreached %}<p class="co-note co-note--flag">The AI could not be reached for this risk: it keeps the objectives it had.</p>{% endif %}
           {%- for finding in risk.findings %}<p class="co-note co-note--flag">
             {%- if finding.flag == "risk-unmapped" %}The AI suggested no objective for this risk.
             {%- else %}<b>{{ finding_names.get(finding.flag, "Not accepted") }}:</b> {{ finding.detail }}{% endif %}</p>{% endfor %}</td>
@@ -276,7 +292,7 @@
               <dt>Linked by</dt><dd>{% if chip.source == 'person' %}The assessor{% else %}AI suggestion{% endif %}{% if chip.quote %}, on "{{ chip.quote }}"{% endif %}</dd>
             </dl>
             {%- set why = "chosen by you" if o.id in record.keys else ("priority because its score is high" if chip.priority.key_default else "") %}
-            {%- if read_only %}{% if chip.priority.key %}<p><b>Priority objective</b>{% if why %} <span class="co-key-why">({{ why }})</span>{% endif %}</p>{% endif %}
+            {%- if locked %}{% if chip.priority.key %}<p><b>Priority objective</b>{% if why %} <span class="co-key-why">({{ why }})</span>{% endif %}</p>{% endif %}
             {%- else %}
             <label class="co-pop-key"><input type="checkbox" form="keys" name="key" value="{{ o.id }}"{% if chip.priority.key %} checked{% endif %}> Priority objective
               {%- if why %} <span class="co-key-why">({{ why }})</span>{% endif %}</label>
@@ -288,7 +304,7 @@
           {%- endfor %}
         </td>
         <td class="co-m-edit">
-          {%- if not read_only %}
+          {%- if not locked %}
           {%- set chosen = risk.mapped | map(attribute=0) | list %}
           <button type="button" class="co-edit" popovertarget="edit-{{ risk.risk.id }}">Edit</button>
           <div id="edit-{{ risk.risk.id }}" class="co-edit-pop" popover>
@@ -312,11 +328,11 @@
       {%- endfor %}
       </tbody>
     </table>
-    {%- if not read_only and mapped_count %}
+    {%- if not locked and mapped_count %}
     <div class="qf-actions"><button class="btn" type="submit" form="keys">Save priority choices</button></div>
     <script src="{{ root_path }}/static/keys.js" defer></script>
     {%- endif %}
-    {%- if not read_only and record.keys %}
+    {%- if not locked and record.keys %}
     {%- if resetting %}
     <div class="notice co-confirm">
       <form method="post" action="{{ project_base }}/projects/{{ record.id }}/keys/reset">
@@ -351,4 +367,5 @@
 {% block scripts %}
 <script src="{{ root_path }}/static/sidemenu.js" defer></script>
 <script src="{{ root_path }}/static/unsaved.js" defer></script>
+<script src="{{ root_path }}/static/busy.js" defer></script>
 {% endblock %}

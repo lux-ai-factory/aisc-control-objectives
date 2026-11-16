@@ -93,6 +93,17 @@ _PREVIOUS_ASSESSMENT = text(
 )
 
 
+#: An AI run that found, before saving, that the assessment had changed since it read it (a person's link,
+#: another run, a profile switch, a newer card version): nothing of the run was saved.
+RUN_NOT_APPLIED = ("The assessment changed while the AI was suggesting links, so this run's suggestions were not "
+                   "applied: the page shows what was saved meanwhile.")
+
+#: A person's objectives for a risk, refused because the assessment moved to another profile after the page was
+#: loaded: they were checked against the profile it had.
+PROFILE_CHANGED_MEANWHILE = ("The objective profile changed meanwhile, so this risk's objectives were not saved: "
+                             "open the risk again and pick its objectives from the new profile.")
+
+
 class AssessmentChanged(RuntimeError):
     """The assessment changed while the model was mapping it; the run was not saved."""
 
@@ -513,7 +524,7 @@ class ProjectRepository:
         with self._sessions.begin() as session:
             project = session.get(tables.Project, project_id, with_for_update=True)
             if unchanged is not None and not unchanged(self._to_record(session, project)):
-                raise AssessmentChanged("The assessment changed while the AI was suggesting links: suggest again.")
+                raise AssessmentChanged(RUN_NOT_APPLIED)
             replaced = [row for row in project.risks if row.risk_id not in keep]
             kept = self._archive(session, project, "ai_run", risks=replaced if keep else None, run_id=run_id,
                                  with_run=True)
@@ -582,7 +593,7 @@ class ProjectRepository:
         with self._sessions.begin() as session:
             project = session.get(tables.Project, project_id, with_for_update=True)
             if profile_version_id != "" and project.profile_version_id != profile_version_id:
-                raise AssessmentChanged("The assessment's objective profile changed meanwhile: suggest again.")
+                raise AssessmentChanged(PROFILE_CHANGED_MEANWHILE)
             row = next(r for r in project.risks if r.risk_id == risk_id)
             before = sorted(m.objective_id for m in row.mapped)
             after = sorted(item.objective_id for item in objectives)

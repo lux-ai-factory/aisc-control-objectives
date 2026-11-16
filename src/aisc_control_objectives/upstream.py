@@ -19,7 +19,17 @@ TIMEOUT = 10.0
 
 
 class UpstreamDown(Exception):
-    """The platform or qualification did not answer as expected."""
+    """The platform or qualification did not answer as expected. `status` is the HTTP status of an
+    answer that was not the one expected, None when nothing answered."""
+
+    def __init__(self, message: str, status: int | None = None):
+        super().__init__(message)
+        self.status = status
+
+    @property
+    def refused(self) -> bool:
+        """The service answered, and refused this caller: a session that expired, or no right to read."""
+        return self.status in (401, 403)
 
 
 def _base(variable: str) -> str:
@@ -59,7 +69,7 @@ def latest_version(project: str, authorization: str | None) -> dict | None:
     url = f"{_base('PLATFORM_URL')}/projects/{project}/system-versions/latest"
     response = _get(url, authorization, "the platform")
     if response.status_code != 200:
-        raise UpstreamDown(f"the platform answered {response.status_code}")
+        raise UpstreamDown(f"the platform answered {response.status_code}", status=response.status_code)
     try:
         latest = response.json()
     except ValueError as exc:                     # A sign-in page, say: not the platform's API
@@ -79,7 +89,7 @@ def card_jsonld(project: str, system_pid: str, authorization: str | None,
     if response.status_code == 404:
         return None
     if response.status_code != 200:
-        raise UpstreamDown(f"qualification answered {response.status_code}")
+        raise UpstreamDown(f"qualification answered {response.status_code}", status=response.status_code)
     try:
         return response.content.decode("utf-8")
     except UnicodeDecodeError as exc:

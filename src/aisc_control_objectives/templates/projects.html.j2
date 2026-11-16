@@ -19,6 +19,8 @@
     {#- starting again on an assessed version would only open its assessment -#}
     {%- if latest %}
     <div class="qf-actions"><a class="btn" href="{{ project_base }}/projects/{{ latest.record.id }}">Open the assessment of v{{ latest.record.version_number }}</a></div>
+    {%- elif not may_write %}
+    <p class="qf-help">The latest version has no assessment yet: an editor or owner of the project starts it.</p>
     {%- else %}
     <form method="post" action="{{ project_base }}/projects">
       <div class="field">
@@ -41,11 +43,11 @@
     <article class="co-obj">
       <div class="co-obj-head">
         <h3><a href="{{ project_base }}/projects/{{ record.id }}">{{ record.name }}</a></h3>
-        {%- if not view.rated %}
-        <span class="qf-tag qf-tag--pending">Awaiting your rating</span>
-        {%- elif not view.mapped %}
-        <span class="qf-tag qf-tag--in">Ready to link</span>
-        {%- else %}
+        {#- counted as the assessment page counts: a risk is rated once both its parts are -#}
+        {%- set n = record.ontology.risks | length %}
+        <span class="qf-tag {{ 'qf-tag--in' if view.fully_rated == n else 'qf-tag--pending' }}">{{ view.fully_rated }} of {{ n }} rated</span>
+        <span class="qf-tag {{ 'qf-tag--in' if view.linked == n else 'qf-tag--pending' }}">{{ view.linked }} of {{ n }} linked</span>
+        {%- if view.linked %}
         {%- set n_keys = view.priorities | selectattr('key') | list | length %}
         <span class="qf-tag qf-tag--tier1">{{ n_keys }} priority {{ 'objective' if n_keys == 1 else 'objectives' }}</span>
         {%- endif %}

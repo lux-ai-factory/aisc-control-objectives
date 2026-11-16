@@ -84,7 +84,7 @@ def test_the_assessment_speaks_of_priority_risk_level_and_links(client, start, p
     assert "<dt>Priority score</dt>" in page and "<dt>Linked by</dt><dd>AI suggestion" in page
     assert "Priority objective" in shown and "Save priority choices" in shown
     assert "Also replace objectives I linked by hand" in shown
-    assert "Manage › AI assistants › AI assistant models and keys" in shown
+    assert "Manage › Connectivity › Configurator agents" in shown
     assert '<option value="" selected>Not rated</option>' in page
     assert "step 4, <b>AI Assessment Sandbox</b>" in page
     for gone in ("Collect evidence", "Key objective", "key by default", "Risk register", "Risk and control matrix", "Full information",
@@ -127,7 +127,7 @@ def test_the_assessments_list_speaks_of_links_and_priority(client, start, platfo
     http, _ = client
     a = start()
     http.post(_api(platform_project, a, "/ratings"), json={"risk2": {"impact": 5, "likelihood": 4}})
-    assert "Ready to link" in http.get(f"/p/{platform_project}/projects").text
+    assert "1 of 5 rated" in _shown(http.get(f"/p/{platform_project}/projects").text)
     http.post(_api(platform_project, a, "/map"))
     shown = _shown(http.get(f"/p/{platform_project}/projects").text)
     assert re.search(r"\d+ priority objectives? ", shown)

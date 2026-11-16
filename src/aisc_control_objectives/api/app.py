@@ -28,23 +28,32 @@ from urllib.parse import urlencode
 from aisc_identity.headers import token_from_headers
 from aisc_identity.switches import check_environment
 from fastapi import Body, Depends, FastAPI, HTTPException, Query, Request
+from fastapi.exception_handlers import http_exception_handler
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import (
     FileResponse,
     HTMLResponse,
     JSONResponse,
-    PlainTextResponse,
     RedirectResponse,
 )
 from sqlalchemy.exc import DBAPIError, IntegrityError
+from starlette._utils import get_route_path
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from aisc_control_objectives import ledger, projectdb, upstream
-from aisc_control_objectives.access import NOT_FOUND, ProjectAccess
+from aisc_control_objectives.access import NOT_FOUND, ProjectAccess, is_page, may_write, page_refusal
 from aisc_control_objectives.api import ledger_events
 from aisc_control_objectives.api.library_routes import posted_form, register_library
 from aisc_control_objectives.config import RunConfig
 from aisc_control_objectives.control_objectives import ControlObjectiveCatalogue
-from aisc_control_objectives.db.repository import ProjectRepository, RatingsChangedMeanwhile, digest_of
+from aisc_control_objectives.db.repository import (
+    PROFILE_CHANGED_MEANWHILE,
+    ProjectRepository,
+    RUN_NOT_APPLIED,
+    RatingsChangedMeanwhile,
+    digest_of,
+)
+from aisc_control_objectives.errors import shown_error
 from aisc_control_objectives.models.control_objective import ControlObjective, MacroRequirement
 from aisc_control_objectives.models.ontology import Ontology, same_card
 from aisc_control_objectives.projects import AssessmentChanged, MappingInProgress, ModelUnavailable, Projects
@@ -54,6 +63,7 @@ from aisc_control_objectives.rendering import (
     render_objectives_page,
     render_project_page,
     render_projects_page,
+    render_refusal_page,
 )
 
 #: Filter over the assessment mode. A paired ("Control + Test") objective
@@ -65,6 +75,14 @@ NO_CARD = "No AI card for the latest version yet"
 #: How long the assessment page waits for qualification to say whether the card changed: past it, the
 #: page shows without saying.
 CARD_CHECK_TIMEOUT = 3.0
+
+#: What a form that sent the person back to the assessment page says there, by the `notice` of the address.
+NOTICES = {
+    "profile-changed": PROFILE_CHANGED_MEANWHILE,
+    "run-not-applied": RUN_NOT_APPLIED,
+    "no-model": ("The AI could not suggest links: the project's model could not be used. The project's owners choose "
+                 "the model and its key in Manage › Connectivity › Configurator agents."),
+}
 
 #: A start whose version the project's own database does not have.
 NOT_IN_PROJECT = "The latest version is not in this project's database."
@@ -88,11 +106,7 @@ def may_read_errors(request: Request) -> bool:
     """Whether this caller reads a model run's error text: those who may change the
     project. A viewer sees only how the run stopped. Without a gate (the single-database domain
     tests) the service runs open, and the text is shown."""
-    opened = getattr(request.state, "opened", None)
-    access = opened.access if opened is not None else getattr(request.state, "access", None)
-    if access is None:
-        return getattr(request.state, "caller", None) is None
-    return access.may_write
+    return may_write(request)
 
 
 def _unix_newlines(value) -> str:
@@ -114,27 +128,42 @@ class _Refused(Exception):
         self.status_code = status_code
 
 
+#: What a refusal of the platform or qualification is told: they answered, and did not let this caller read.
+SIGN_IN_AGAIN = ("{service} refused to give the AI card to you: your session may have expired, or you may not "
+                 "read this project's AI card. Sign in again, then try once more.")
+
+
+def _upstream_refused(service: str, exc: upstream.UpstreamDown) -> _Refused:
+    """What the person is told when the platform or qualification did not give what was asked: a refusal
+    is said as a refusal, and no answer as no answer, once."""
+    if exc.refused:
+        return _Refused(SIGN_IN_AGAIN.format(service=service), 502)
+    text = str(exc)
+    return _Refused(text[:1].upper() + text[1:] + ".", 502)
+
+
 def _latest_version(project: str, auth: str | None) -> dict:
     """The project's latest card version, as the platform reports it."""
     try:
         latest = upstream.latest_version(project, auth)
     except upstream.UpstreamDown as exc:
-        raise _Refused(f"The platform did not answer: {exc}", 502) from exc
+        raise _upstream_refused("The platform", exc) from exc
     if latest is None:
         raise _Refused(NO_CARD, 409)
     return latest
 
 
-def _card_changed(pid: str, record, auth: str | None) -> bool:
+def _card_changed(pid: str, record, auth: str | None) -> bool | None:
     """Whether qualification now serves another card for the assessment's version than the one it
-    started from. A qualification that does not answer, or a version with no card, says nothing. A card
+    started from; None when that could not be checked (qualification slow, refusing or not answering),
+    which the page says rather than reading as unchanged. A version with no card says nothing. A card
     that differs only by the provider's measures an older card carried (see same_card) has not changed."""
     if not record.system_id or not record.digest:
         return False
     try:
         card = upstream.card_jsonld(pid, record.system_id, auth, timeout=CARD_CHECK_TIMEOUT)
     except upstream.UpstreamDown:
-        return False
+        return None
     if card is None or digest_of(card) == record.digest:
         return False
     return not same_card(record.jsonld, card)
@@ -175,7 +204,7 @@ def _card_of(latest: dict, auth: str | None) -> tuple[str, object]:
     try:
         jsonld = upstream.card_jsonld(latest["project_id"], latest["pid"], auth)
     except upstream.UpstreamDown as exc:
-        raise _Refused(f"Qualification did not answer: {exc}", 502) from exc
+        raise _upstream_refused("Qualification", exc) from exc
     if jsonld is None:
         raise _Refused(NO_CARD, 409)
     try:
@@ -264,7 +293,15 @@ def create_app(
                 message, status = "Internal Server Error", 500
             if "/api/" in request.url.path:
                 return JSONResponse({"detail": message}, status_code=status)
-            return PlainTextResponse(message, status_code=status)
+            return page_refusal(request, message, status)
+
+    @app.exception_handler(StarletteHTTPException)
+    async def refused_on_a_page(request: Request, exc: StarletteHTTPException):
+        """A page or a form of a project answers its refusal as a page of the site with a way back; the
+        JSON API and the public paths keep FastAPI's JSON."""
+        if not is_page(get_route_path(request.scope)):
+            return await http_exception_handler(request, exc)
+        return page_refusal(request, str(exc.detail), exc.status_code)
 
     def projects_of(request: Request) -> Projects:
         """The service on the database the gate opened for this request."""
@@ -283,7 +320,7 @@ def create_app(
         """
         view = projects_of(request).view(project_id)
         if view is None:
-            raise HTTPException(status_code=404, detail=f"Unknown project {project_id}")
+            raise HTTPException(status_code=404, detail=f"This project has no assessment {project_id}.")
         return view
 
     def editable(request: Request, project_id: str):
@@ -308,6 +345,16 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
     The catalogue itself is the same for everyone, so it has no project in its
     path. Links therefore carry the project without a query string to lose.
     """
+
+    def refused_page(project: str, project_id: str | None, message: str, status: int, part: str = ""):
+        """A refused form as a page of the site: its reason, and the way back to the assessment (at `part`
+        of its menu) or, with no assessment, to the Assessments page."""
+        if project_id is None:
+            back, label = f"{root_path}/p/{project}/projects", "Back to the assessments"
+        else:
+            back, label = _assessment_url(root_path, project, project_id) + part, "Back to the assessment"
+        return HTMLResponse(render_refusal_page(message, back, label, root_path=root_path, project=project),
+                            status_code=status)
 
     @app.get("/", include_in_schema=False)
     def no_project() -> RedirectResponse:
@@ -358,7 +405,8 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
         views = projects.list()
         latest = next((view for view in views if projects.is_latest(view)), None)
         return HTMLResponse(
-            render_projects_page(views, latest=latest, root_path=root_path, project=project)
+            render_projects_page(views, latest=latest, root_path=root_path, project=project,
+                                 may_write=may_write(request))
         )
 
     @app.post("/p/{project}/projects", include_in_schema=False)
@@ -395,7 +443,7 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
             if not projects.has_version(latest["pid"]):
                 raise _Refused(NOT_IN_PROJECT, 409)
         except _Refused as refused:
-            return PlainTextResponse(refused.message, status_code=refused.status_code)
+            return refused_page(project, None, refused.message, refused.status_code)
         try:
             view = projects.create(
                 project=pid, name=name, jsonld=jsonld, raw=raw, system_id=latest["pid"],
@@ -407,7 +455,7 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
         except IntegrityError as exc:
             if getattr(exc.orig, "sqlstate", None) == "23503":
                 # the version went from project.system between the check and the write
-                return PlainTextResponse(NOT_IN_PROJECT, status_code=409)
+                return refused_page(project, None, NOT_IN_PROJECT, 409)
             # Started twice at once: the other start made it.
             found = projects.find_by_system(latest["pid"])
             if found is None:
@@ -421,7 +469,8 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
         response_class=HTMLResponse,
     )
     def project_page(project: str, project_id: str, request: Request, dropped: str = "",
-                     replace: str = "", reset: str = "", profile: str = "", to: str = "") -> HTMLResponse:
+                     replace: str = "", reset: str = "", profile: str = "", to: str = "",
+                     notice: str = "") -> HTMLResponse:
         projects, view, read_only = editable(request, project_id)
         library = projects.library
         profiles = library.profiles()
@@ -442,12 +491,14 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
                 view, objectives, root_path=root_path, project=project,
                 read_only=read_only,
                 profiles=profiles,
-                show_error=may_read_errors(request),
+                show_error=may_read_errors(request), may_write=may_write(request),
                 switching=switching,
                 dropped=[oid for oid in named if oid in known],
                 confirm_replace=replace == "ask" and read_only is None and bool(view.record.by_hand),
                 confirm_reset=reset == "ask" and read_only is None and bool(view.record.keys),
                 card_changed=_card_changed(_pid(request, project), view.record, _caller(request)),
+                # the address is anyone's to write: only a notice the page knows is said, in its own words
+                notice=NOTICES.get(notice),
             )
         )
 
@@ -457,7 +508,7 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
         I linked by hand" maps the risks a person mapped as well, once the page has asked."""
         projects, view, why = editable(request, project_id)
         if why is not None:
-            return PlainTextResponse(why, status_code=409)
+            return refused_page(project, project_id, why, 409, "#matrix")
         replace = bool(form.get("replace"))
         if replace and view.record.by_hand and not form.get("confirmed"):
             return RedirectResponse(
@@ -467,9 +518,16 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
                                   on_start=ledger_events.on_mapping_requested(project_id),
                                   on_save=ledger_events.on_mapping_run(project_id))
         except ModelUnavailable as exc:
-            return PlainTextResponse(str(exc), status_code=502)
-        except (AssessmentChanged, MappingInProgress) as exc:
-            return PlainTextResponse(str(exc), status_code=409)
+            # back on the matrix, sent to the page where the model is chosen; the reason is in the log
+            logger.warning("the AI run of assessment %s had no model: %s", project_id, shown_error(str(exc), 500))
+            return RedirectResponse(url=_assessment_url(root_path, project, project_id)
+                                    + "?notice=no-model#matrix", status_code=303)
+        except MappingInProgress as exc:
+            return refused_page(project, project_id, str(exc), 409, "#matrix")
+        except AssessmentChanged:
+            # something was saved while the model was asked: back on the matrix, saying this run was not applied
+            return RedirectResponse(url=_assessment_url(root_path, project, project_id)
+                                    + "?notice=run-not-applied#matrix", status_code=303)
         # back on the part of the page's menu that shows what the AI suggested
         return RedirectResponse(
             url=_assessment_url(root_path, project, project_id) + "#matrix", status_code=303
@@ -480,13 +538,13 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
         """"Update": the card of the assessment's version changed; read it again and carry the work over."""
         projects, view, why = editable(request, project_id)
         if why is not None:
-            return PlainTextResponse(why, status_code=409)
+            return refused_page(project, project_id, why, 409)
         try:
             _update_card(projects, project_id, view, _pid(request, project), _caller(request))
         except _Refused as refused:
-            return PlainTextResponse(refused.message, status_code=refused.status_code)
+            return refused_page(project, project_id, refused.message, refused.status_code)
         except AssessmentChanged as exc:
-            return PlainTextResponse(str(exc), status_code=409)
+            return refused_page(project, project_id, str(exc), 409)
         return RedirectResponse(url=_assessment_url(root_path, project, project_id), status_code=303)
 
     @app.post("/p/{project}/projects/{project_id}/risks/{risk_id}/mapping", include_in_schema=False)
@@ -494,14 +552,16 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
         """A person's mapping of one risk: the ticked objectives, and only those."""
         projects, view, why = editable(request, project_id)
         if why is not None:
-            return PlainTextResponse(why, status_code=409)
+            return refused_page(project, project_id, why, 409, f"#map-{risk_id}")
         try:
             projects.map_by_hand(project_id, risk_id, [str(v) for v in form.getlist("objective")],
                                  on_save=ledger_events.on_mapping_edited(project_id, risk_id))
         except ValueError as exc:
-            return PlainTextResponse(f"Invalid links: {exc}", status_code=400)
-        except AssessmentChanged as exc:
-            return PlainTextResponse(str(exc), status_code=409)
+            return refused_page(project, project_id, f"Invalid links: {exc}", 400, f"#map-{risk_id}")
+        except AssessmentChanged:
+            # the profile changed after the page was loaded: back on that risk, saying so
+            return RedirectResponse(url=_assessment_url(root_path, project, project_id)
+                                    + f"?notice=profile-changed#map-{risk_id}", status_code=303)
         return RedirectResponse(
             url=_assessment_url(root_path, project, project_id) + f"#map-{risk_id}", status_code=303
         )
@@ -511,7 +571,7 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
         """Run the assessment on another objective profile, or on its profile's newer version."""
         projects, view, why = editable(request, project_id)
         if why is not None:
-            return PlainTextResponse(why, status_code=409)
+            return refused_page(project, project_id, why, 409)
         profile_id = str(form.get("profile") or "")
         try:
             # a switch that would drop links or selected objectives asks first, saying which
@@ -522,7 +582,7 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
             switched = projects.use_profile(project_id, profile_id,
                                             record=ledger_events.on_profile_switched(project_id))
         except ValueError as exc:
-            return PlainTextResponse(f"Invalid profile: {exc}", status_code=400)
+            return refused_page(project, project_id, f"Invalid profile: {exc}", 400)
         # the page says what the switch dropped
         url = _assessment_url(root_path, project, project_id)
         if switched.dropped:
@@ -533,22 +593,40 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
     def rate_form(project: str, project_id: str, request: Request, form=Depends(posted_form)):
         projects, view, why = editable(request, project_id)
         if why is not None:
-            return PlainTextResponse(why, status_code=409)
-        try:
-            # per risk: `impact:<risk id>`, `likelihood:<risk id>` (1-5, blank clears it; a risk the
-            # form does not name keeps what it had) and an optional `comment:<risk id>` (a blank one
-            # clears it). `shown:<field>` says what the page showed: a field left as shown is not saved,
-            # and a changed field that someone else saved since the page was loaded refuses the whole
-            # save, so nobody writes over another assessor's rating without seeing it first.
-            shown = {key.split(":", 1)[1]: _unix_newlines(value)
-                     for key, value in form.items() if key.startswith("shown:")}
+            return refused_page(project, project_id, why, 409, "#register")
+        # per risk: `impact:<risk id>`, `likelihood:<risk id>` (1-5, blank clears it; a risk the
+        # form does not name keeps what it had) and an optional `comment:<risk id>` (a blank one
+        # clears it). `shown:<field>` says what the page showed: a field left as shown is not saved,
+        # and a changed field that someone else saved since the page was loaded refuses the whole
+        # save, so nobody writes over another assessor's rating without seeing it first.
+        shown = {key.split(":", 1)[1]: _unix_newlines(value)
+                 for key, value in form.items() if key.startswith("shown:")}
+        # what this person changed, kept in the fields when the page comes back refusing the save
+        typed = {key: _unix_newlines(value) for prefix in ("impact:", "likelihood:", "comment:")
+                 for key, value in form.items()
+                 if key.startswith(prefix) and shown.get(key) != _unix_newlines(value)}
 
+        def again(status: int, **said):
+            """The page again, as stored now, with what this person changed kept in the fields."""
+            projects, view, read_only = editable(request, project_id)
+            return HTMLResponse(render_project_page(
+                view, objectives, root_path=root_path, project=project, read_only=read_only,
+                profiles=projects.library.profiles(), show_error=may_read_errors(request), may_write=may_write(request),
+                card_changed=_card_changed(_pid(request, project), view.record, _caller(request)),
+                typed=typed, **said), status_code=status)
+
+        try:
             def changed(prefix):
                 return {key.split(":", 1)[1]: value for key, value in form.items()
                         if key.startswith(prefix) and shown.get(key) != _unix_newlines(value)}
 
             def rating(value):
-                return int(value) if str(value).strip() else None
+                if not str(value).strip():
+                    return None
+                try:
+                    return int(value)
+                except ValueError:
+                    raise ValueError(f"a rating is a whole number from 1 to 5, not {str(value)[:20]!r}.") from None
 
             def part(prefix):
                 return {risk_id: rating(value) for risk_id, value in changed(prefix).items()}
@@ -562,18 +640,9 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
             projects.rate(project_id, part("impact:"), part("likelihood:"), comments,
                           record=ledger_events.on_rated(), shown=expected if shown else None)
         except ValueError as exc:
-            return PlainTextResponse(f"Invalid rating: {exc}", status_code=400)
+            return again(400, refused=str(exc))
         except RatingsChangedMeanwhile as exc:
-            # the page again, as stored now, with what this person changed kept in the fields
-            typed = {key: _unix_newlines(value) for prefix in ("impact:", "likelihood:", "comment:")
-                     for key, value in form.items()
-                     if key.startswith(prefix) and shown.get(key) != _unix_newlines(value)}
-            projects, view, read_only = editable(request, project_id)
-            return HTMLResponse(render_project_page(
-                view, objectives, root_path=root_path, project=project, read_only=read_only,
-                profiles=projects.library.profiles(), show_error=may_read_errors(request),
-                card_changed=_card_changed(_pid(request, project), view.record, _caller(request)),
-                typed=typed, changed_meanwhile=exc.fields), status_code=409)
+            return again(409, changed_meanwhile=exc.fields)
         # back on the part of the page's menu the ratings were saved from
         return RedirectResponse(
             url=_assessment_url(root_path, project, project_id) + "#register", status_code=303
@@ -587,7 +656,7 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
         it was keeps following the ratings. Without it, the comparison is with what is key now."""
         projects, view, why = editable(request, project_id)
         if why is not None:
-            return PlainTextResponse(why, status_code=409)
+            return refused_page(project, project_id, why, 409, "#matrix")
         ticked = {str(v) for v in form.getlist("key")}
         shown = {}
         for value in form.getlist("shown"):
@@ -600,7 +669,7 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
         try:
             projects.set_keys(project_id, changed, record=ledger_events.on_keys_set(project_id))
         except ValueError as exc:
-            return PlainTextResponse(f"Invalid key objectives: {exc}", status_code=400)
+            return refused_page(project, project_id, f"Invalid key objectives: {exc}", 400, "#matrix")
         return RedirectResponse(
             url=_assessment_url(root_path, project, project_id) + "#matrix", status_code=303
         )
@@ -611,7 +680,7 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
         asked, and every objective follows the ratings again."""
         projects, view, why = editable(request, project_id)
         if why is not None:
-            return PlainTextResponse(why, status_code=409)
+            return refused_page(project, project_id, why, 409, "#matrix")
         if not form.get("confirmed"):
             return RedirectResponse(
                 url=_assessment_url(root_path, project, project_id) + "?reset=ask#matrix", status_code=303)
