@@ -32,6 +32,12 @@ COPY alembic ./alembic
 ENV PYTHONPATH=/app/src \
     CONTROL_OBJECTIVES_PORT=8090
 
+# runs as its own user, not root
+# BAF opens application.log in the working folder when it is imported, so that one file is the user's, and
+# downloads its NLTK data into the home folder, so the user has one
+RUN useradd --system --uid 10045 --create-home objectives \
+ && touch /app/application.log && chown objectives /app/application.log
+USER objectives
 EXPOSE 8090
 
 # Configuration comes from the environment (set by compose); see the README.
