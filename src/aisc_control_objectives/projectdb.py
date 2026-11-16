@@ -40,11 +40,11 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.pool import NullPool
 
-if TYPE_CHECKING:  # the migrate one-shot runs without aisc_identity on its path
-    from aisc_identity.access import Admitted
+from aisc_identity.projectdb import NotAPid
+from aisc_identity.projectdb import database_name as shared_database_name
 
-#: A platform project's pid, the only thing that may become part of a database name.
-PID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
+if TYPE_CHECKING:
+    from aisc_identity.access import Admitted
 
 #: /app in the image, apps/control-objectives in a checkout: where alembic lives.
 APP_ROOT = Path(__file__).resolve().parents[2]
@@ -59,10 +59,11 @@ _MIGRATING = threading.Lock()
 
 
 def database_name(pid: str) -> str:
-    """`project_` + the pid, lower case, without hyphens. Anything else is a ValueError."""
-    if not isinstance(pid, str) or not PID.fullmatch(pid.lower()):
-        raise ValueError("not a project pid")
-    return "project_" + pid.lower().replace("-", "")
+    """`project_` + the pid, lower case, without hyphens, by the shared rule. Anything else is a ValueError
+    (aisc_identity.projectdb.NotAPid)."""
+    if not isinstance(pid, str):
+        raise NotAPid("not a project pid")
+    return shared_database_name(pid)
 
 
 def make_engine(url: str, **kwargs) -> Engine:
