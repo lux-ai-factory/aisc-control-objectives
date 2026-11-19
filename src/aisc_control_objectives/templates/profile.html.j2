@@ -66,6 +66,9 @@
         {%- for o in objectives %}
         <label class="co-map-pick"><input type="checkbox" name="objective" value="{{ o.id }}"{% if o.id in picks %} checked{% endif %}>
           <b>{{ o.id }}</b> {{ o.sub_requirement_label }}</label>
+        <details class="co-map-help"><summary aria-label="What {{ o.id }} means">?</summary>
+          <p class="co-map-help-dim">{{ macro.id }} · {{ macro.title }}</p>
+          <p class="co-map-help-text">{{ o.text }}</p></details>
         {%- endfor %}
       </fieldset>
       {%- endfor %}

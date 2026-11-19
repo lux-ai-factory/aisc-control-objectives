@@ -185,3 +185,13 @@ def test_taking_the_newer_wording_names_what_it_drops(http, platform_project):
     assert "Switching drops BNK2: withdrawn in the newer version." in page
     r = http.post(api(platform_project, f"/profiles/{pid}/newer"))
     assert r.status_code == 200 and r.json()["dropped"] == ["BNK2"] and r.json()["current"]["number"] == 2
+
+
+def test_each_objective_of_the_profile_picker_opens_its_explanation(http, platform_project):
+    picker = http.get(f"/p/{platform_project}/profiles/new").text
+    pick = picker.index('<input type="checkbox" name="objective" value="O11"')
+    after = picker[picker.index("</label>", pick) + len("</label>"):]
+    assert after.lstrip().startswith('<details class="co-map-help">')
+    help_block = after[:after.index("</details>")]
+    assert '<summary aria-label="What O11 means">?</summary>' in help_block
+    assert " · " in help_block

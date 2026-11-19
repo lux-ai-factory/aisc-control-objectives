@@ -8,6 +8,8 @@ the risks no person has mapped; "Replace my mappings too" takes those as well, a
 """
 from __future__ import annotations
 
+import re
+
 from step2_support import _api
 
 
@@ -170,3 +172,21 @@ def test_the_page_offers_both_ways_to_map(client, start, platform_project):
     # every objective can be ticked for a risk, grouped by dimension
     assert page.count('name="objective" value="O50"') >= 1
     assert "co-chip--person" in page
+
+
+def test_each_objective_of_the_edit_list_opens_its_explanation(client, start, platform_project):
+    http, _ = client
+    assessment = start()
+    _map_by_hand(http, platform_project, assessment, "risk0", ["O5"])
+    page = http.get(f"/p/{platform_project}/projects/{assessment}").text
+    edit = page[page.index('id="edit-risk0"'):]
+    pick = edit.index('<input type="checkbox" name="objective" value="O11"')
+    label_end = edit.index("</label>", pick)
+    after = edit[label_end + len("</label>"):]
+    assert after.lstrip().startswith('<details class="co-map-help">')
+    help_block = after[:after.index("</details>")]
+    assert '<summary aria-label="What O11 means">?</summary>' in help_block
+    dimension = re.search(r'co-map-help-dim">(\S+) · ([^<]+)<', help_block)
+    text = re.search(r'co-map-help-text">([^<]{20,})<', help_block)
+    assert dimension and text, help_block
+    assert "co-map-help" not in edit[pick:label_end]
