@@ -63,7 +63,7 @@
 
   {# The objective profile it runs on. Everything below sees only this
      profile's objectives. #}
-  <div class="co-profile">
+  <div class="co-profile" id="profile">
     <span class="co-profile-k">Objective profile</span>
     <b class="co-profile-name">{{ profile['label'] }}</b>
     {%- if profile['update'] and not locked %}

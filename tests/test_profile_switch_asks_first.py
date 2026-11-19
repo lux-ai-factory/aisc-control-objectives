@@ -65,3 +65,16 @@ def test_switching_back_brings_back_the_dropped_links(client, start, platform_pr
     back = _body(http, platform_project, assessment)
     assert back["profile"]["id"] == FULL_AI_ACT
     assert _links(back) == before, "the links the switch dropped did not come back"
+
+
+def test_switching_profile_comes_back_to_the_profile_block(client, start, platform_project):
+    http, _ = client
+    url = f"/p/{platform_project}/projects/{{}}/profile"
+    assessment = start()
+    same = http.post(url.format(assessment), data={"profile": FULL_AI_ACT})
+    assert same.status_code == 303 and same.headers["location"].endswith("#profile"), same.headers["location"]
+    http.post(_api(platform_project, assessment, "/risks/risk0/mapping"), json={"objective_ids": ["O1", "O5"]})
+    asked = http.post(url.format(assessment), data={"profile": FAIRNESS_OVERSIGHT})
+    assert "profile=ask" in asked.headers["location"] and asked.headers["location"].endswith("#profile")
+    dropped = http.post(url.format(assessment), data={"profile": FAIRNESS_OVERSIGHT, "confirmed": "on"})
+    assert "dropped=" in dropped.headers["location"] and dropped.headers["location"].endswith("#profile")

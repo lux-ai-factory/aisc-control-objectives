@@ -584,7 +584,8 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
             if not form.get("confirmed") and projects.profile_drops(project_id, profile_id):
                 return RedirectResponse(
                     url=_assessment_url(root_path, project, project_id) + "?"
-                    + urlencode({"profile": "ask", "to": profile_id}), status_code=303)
+                    + urlencode({"profile": "ask", "to": profile_id}) + "#profile",
+                    status_code=303)
             switched = projects.use_profile(project_id, profile_id,
                                             record=ledger_events.on_profile_switched(project_id))
         except ValueError as exc:
@@ -593,7 +594,7 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
         url = _assessment_url(root_path, project, project_id)
         if switched.dropped:
             url += "?" + urlencode({"dropped": ",".join(switched.dropped)}, safe=",")
-        return RedirectResponse(url=url, status_code=303)
+        return RedirectResponse(url=url + "#profile", status_code=303)
 
     @app.post("/p/{project}/projects/{project_id}/severity", include_in_schema=False)
     def rate_form(project: str, project_id: str, request: Request, form=Depends(posted_form)):
