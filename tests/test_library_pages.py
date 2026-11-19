@@ -1,6 +1,7 @@
 """The Sets and Profiles pages and their API."""
 from __future__ import annotations
 
+import html
 import re
 
 import pytest
@@ -187,11 +188,13 @@ def test_taking_the_newer_wording_names_what_it_drops(http, platform_project):
     assert r.status_code == 200 and r.json()["dropped"] == ["BNK2"] and r.json()["current"]["number"] == 2
 
 
-def test_each_objective_of_the_profile_picker_opens_its_explanation(http, platform_project):
+def test_each_objective_of_the_profile_picker_opens_its_explanation(http, platform_project, objectives):
     picker = http.get(f"/p/{platform_project}/profiles/new").text
     pick = picker.index('<input type="checkbox" name="objective" value="O11"')
     after = picker[picker.index("</label>", pick) + len("</label>"):]
     assert after.lstrip().startswith('<details class="co-map-help">')
     help_block = after[:after.index("</details>")]
     assert '<summary aria-label="What O11 means">?</summary>' in help_block
-    assert " · " in help_block
+    o11 = next(o for o in objectives.objectives if o.id == "O11")
+    assert f'<p class="co-map-help-dim">{html.escape(o11.macro_id)} · {html.escape(o11.macro_title)}</p>' in help_block
+    assert f'<p class="co-map-help-text">{html.escape(o11.text)}</p>' in help_block

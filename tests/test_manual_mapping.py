@@ -8,7 +8,7 @@ the risks no person has mapped; "Replace my mappings too" takes those as well, a
 """
 from __future__ import annotations
 
-import re
+import html
 
 from step2_support import _api
 
@@ -174,7 +174,7 @@ def test_the_page_offers_both_ways_to_map(client, start, platform_project):
     assert "co-chip--person" in page
 
 
-def test_each_objective_of_the_edit_list_opens_its_explanation(client, start, platform_project):
+def test_each_objective_of_the_edit_list_opens_its_explanation(client, start, platform_project, objectives):
     http, _ = client
     assessment = start()
     _map_by_hand(http, platform_project, assessment, "risk0", ["O5"])
@@ -186,7 +186,7 @@ def test_each_objective_of_the_edit_list_opens_its_explanation(client, start, pl
     assert after.lstrip().startswith('<details class="co-map-help">')
     help_block = after[:after.index("</details>")]
     assert '<summary aria-label="What O11 means">?</summary>' in help_block
-    dimension = re.search(r'co-map-help-dim">(\S+) · ([^<]+)<', help_block)
-    text = re.search(r'co-map-help-text">([^<]{20,})<', help_block)
-    assert dimension and text, help_block
+    o11 = next(o for o in objectives.objectives if o.id == "O11")
+    assert f'<p class="co-map-help-dim">{html.escape(o11.macro_id)} · {html.escape(o11.macro_title)}</p>' in help_block
+    assert f'<p class="co-map-help-text">{html.escape(o11.text)}</p>' in help_block
     assert "co-map-help" not in edit[pick:label_end]
