@@ -9,6 +9,7 @@ the risks no person has mapped; "Replace my mappings too" takes those as well, a
 from __future__ import annotations
 
 import html
+import re
 
 from step2_support import _api
 
@@ -190,3 +191,6 @@ def test_each_objective_of_the_edit_list_opens_its_explanation(client, start, pl
     assert f'<p class="co-map-help-dim">{html.escape(o11.macro_id)} · {html.escape(o11.macro_title)}</p>' in help_block
     assert f'<p class="co-map-help-text">{html.escape(o11.text)}</p>' in help_block
     assert "co-map-help" not in edit[pick:label_end]
+    # the "?" shares a row with its objective instead of sitting on a line of its own
+    assert re.search(r'<div class="co-map-row">\s*<label class="co-map-pick">$', edit[:pick])
+    assert after.lstrip()[after.lstrip().index("</details>") + len("</details>"):].lstrip().startswith("</div>")

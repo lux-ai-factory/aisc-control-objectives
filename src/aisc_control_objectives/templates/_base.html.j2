@@ -330,6 +330,8 @@
   .co-map-edit form .qf-actions { grid-column: 1 / -1; }
   .co-map-dim { border: 0; margin: 10px 0 0; padding: 0; min-width: 0; }
   .co-map-dim legend { margin-bottom: 4px; }
+  /* the "?" sits on its objective's line; once opened, the explanation takes the full width below */
+  .co-map-row { display: flex; flex-wrap: wrap; align-items: flex-start; }
   .co-map-pick { display: block; font-size: 13px; padding: 2px 0; }
   .co-map-pick b { display: inline-block; min-width: 34px; }
   .co-map-help { display: inline-block; vertical-align: top; margin-left: 4px; }
@@ -337,7 +339,7 @@
                          line-height: 14px; text-align: center; border: 1px solid currentColor; border-radius: 50%;
                          font-size: 11px; font-weight: 600; color: var(--primary); }
   .co-map-help summary::-webkit-details-marker { display: none; }
-  .co-map-help[open] { display: block; }
+  .co-map-help[open] { display: block; flex-basis: 100%; margin-left: 0; }
   .co-map-help p { margin: 4px 0 0; font-size: 12px; }
   /* The trustworthiness dimension of an objective, in the tools catalogue's colours */
   .co-dim { display: inline-block; padding: 2px 8px; border-radius: 999px; border: 1px solid;
