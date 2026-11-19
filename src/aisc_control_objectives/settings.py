@@ -60,3 +60,10 @@ def project_migrate_database_url(env: dict | None = None) -> str:
         raise ValueError("PROJECT_MIGRATE_DATABASE_URL must contain {database}: migrations run as"
                          " control_objectives_migrator")
     return _normalised(template)
+
+
+def ai_actions_on(env: dict | None = None) -> bool:
+    """Whether this install offers "Suggest with AI": only when AISC_AI_ACTIONS is `on`. Off by default, so
+    an install makes no model call from this service until someone turns it on."""
+    env = env if env is not None else os.environ
+    return (env.get("AISC_AI_ACTIONS") or "").strip().lower() == "on"

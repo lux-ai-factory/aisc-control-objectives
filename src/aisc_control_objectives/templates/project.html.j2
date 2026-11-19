@@ -229,7 +229,7 @@
     <p class="qf-help">Each risk with the control objectives linked to it. Click an objective for its
        name, its priority score (the sum of the risk levels of its risks) and whether it is a priority
        objective. What is linked here goes forward to step 4, <b>AI Assessment Sandbox</b>.</p>
-    {%- if not locked %}
+    {%- if not locked and ai_actions_on() %}
     <form class="co-ai" method="post" action="{{ project_base }}/projects/{{ record.id }}/map" data-busy>
       <button class="btn" type="submit">Suggest with AI</button>
       <span class="qf-help">One model call per risk: this can take minutes.</span>

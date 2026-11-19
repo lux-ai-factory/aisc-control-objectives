@@ -173,6 +173,7 @@ Precedence for the model: built-in defaults, then `control-objectives.toml`, the
 | `KEYCLOAK_ISSUER` | *(unset)* | Token issuer; required when auth is on. |
 | `KEYCLOAK_JWKS_URL` | *(unset)* | Where Keycloak's signing keys are read; required when auth is on. |
 | `PLATFORM_URL` | *(unset)* | The platform service: latest AI card version, and the project's model choice. |
+| `AISC_AI_ACTIONS` | `off` | `on` shows **Suggest with AI** on an assessment and lets its two routes start a model run. Any other value hides the button and both routes answer 403. |
 | `PLATFORM_INTERNAL_TOKEN` | *(unset)* | Service token for the platform's internal model-choice route. Without it (or `PLATFORM_URL`) every project uses the service's own model. |
 | `LLM_RESOLVE_TIMEOUT` | `5` | Seconds the platform may take to say which model a project uses. |
 | `QUALIFICATION_URL` | *(unset)* | The qualification app, which serves a version's AI card as JSON-LD. |

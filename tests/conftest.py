@@ -18,6 +18,13 @@ def _ledger_off_unless_a_test_says_otherwise(monkeypatch):
         monkeypatch.setenv("LEDGER_MODE", "off")
 
 
+@pytest.fixture(autouse=True)
+def _ai_actions_on_unless_a_test_says_otherwise(monkeypatch):
+    """An install offers Suggest with AI only with AISC_AI_ACTIONS=on; the tests of that step run with it on,
+    and test_ai_actions_setting turns it off."""
+    monkeypatch.setenv("AISC_AI_ACTIONS", "on")
+
+
 @pytest.fixture(scope="session")
 def fixtures_dir() -> Path:
     return FIXTURES
