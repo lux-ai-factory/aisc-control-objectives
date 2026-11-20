@@ -256,6 +256,9 @@
       </form>
     </div>
     {%- endif %}
+    {%- endif %}
+    {#- the priority ticks and their Save, with or without AI actions #}
+    {%- if not locked %}
     <form id="keys" method="post" action="{{ project_base }}/projects/{{ record.id }}/key">
       {%- for oid, key in shown.items() %}
       <input type="hidden" name="shown" value="{{ oid }}:{{ 1 if key else 0 }}">

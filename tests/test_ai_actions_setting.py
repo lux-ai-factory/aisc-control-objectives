@@ -71,3 +71,17 @@ def test_with_ai_actions_off_the_api_route_refuses_and_runs_no_model(client, sta
     assert r.status_code == 403, (r.status_code, r.text)
     assert "turned off" in r.json()["detail"]
     assert asked == []
+
+
+def test_with_ai_actions_off_the_priority_ticks_still_have_their_save(client, start, platform_project, monkeypatch):
+    """Hiding Suggest with AI must not take the priority form with it: the ticks and Save name form="keys", and
+    with no such form on the page Save does nothing and every chip keeps its colour."""
+    http, _ = client
+    a = start()
+    monkeypatch.delenv("AISC_AI_ACTIONS", raising=False)
+    http.post(f"/p/{platform_project}/api/projects/{a}/risks/risk0/mapping", json={"objective_ids": ["O11", "O30"]})
+    page = http.get(f"/p/{platform_project}/projects/{a}").text
+    named = set(re.findall(r'\bform="([^"]+)"', page))
+    assert "keys" in named
+    forms = set(re.findall(r'<form\b[^>]*\bid="([^"]+)"', page))
+    assert named <= forms, f"form= names with no such form: {sorted(named - forms)}"
