@@ -4,7 +4,7 @@ Each risk is rated impact (1-5) x likelihood (1-5), 1 to 25, in the 5x5 bands ri
 1-4, Medium 5-9, High 10-16, Critical 17-25. A risk is unrated until both are set, and counts 0. An objective
 scores the sum of the ratings of the risks mapped to it; it is ranked by score, then its highest
 single rating, then a binding duty first, then catalogue order. The **key** objectives are, by
-default, the first seven driven by at least one High or Critical risk; the assessor can turn key on
+default, the first seven driven by at least one risk rated 12 or more; the assessor can turn key on
 or off for any objective, and that choice wins.
 """
 
@@ -125,3 +125,10 @@ def test_nothing_mapped_means_nothing_key(objectives):
 def test_a_rating_for_a_risk_the_card_lacks_fails(objectives):
     with pytest.raises(ValueError, match="not in this system"):
         prioritise(objectives, rated(nope=(3, 3)), {}, RISKS)
+
+
+@pytest.mark.parametrize("impact, likelihood, key", [(5, 2, False), (4, 3, True), (3, 4, True), (4, 4, True)])
+def test_an_objective_is_priority_by_default_only_from_a_risk_rated_12_or_more(objectives, impact, likelihood, key):
+    """Below 12 an objective starts grey (lower priority); the assessor can still make it priority."""
+    got = by_id(objectives, rated(r1=(impact, likelihood)), {"r1": maps("r1", "O1")})
+    assert got["O1"].key is key and got["O1"].key_default is key

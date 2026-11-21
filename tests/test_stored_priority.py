@@ -2,7 +2,7 @@
 
 `objective_selection.priority_ids` holds the objectives of the selection that are priority: the
 assessor's choices in `objective_key` over the default rule (the first seven by rank whose highest risk
-is High or Critical; a voluntary objective never by default). Every change that can move them writes
+is rated 12 or more; a voluntary objective never by default). Every change that can move them writes
 them again, in the change's own transaction, so what is stored is always what the page shows. The
 scores stay computed on every read.
 """

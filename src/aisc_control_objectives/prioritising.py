@@ -12,7 +12,7 @@ rated by the assessor the way risk teams rate risks:
     an objective scores the sum of the ratings of the risks it mitigates
               |
               v
-    key objectives = by default the first seven driven by a High or Critical risk;
+    key objectives = by default the first seven driven by a risk rated 12 or more;
                      the assessor turns key on or off for any objective
 
 An objective no identified risk maps to scores nothing: it is still owed, but it is not where this
@@ -42,8 +42,8 @@ MAX_COMMENT = 1000
 #: How many objectives are key by default. Seven is what an assessor can open a workstream on.
 KEY_BUDGET = 7
 
-#: The lowest rating that makes an objective key by default: High.
-KEY_RATING = 10
+#: The lowest risk rating that makes an objective key by default. Below it an objective starts as lower priority.
+KEY_RATING = 12
 
 #: The 5 x 5 bands (ISO 31000, COSO ERM): the highest rating in each, and its name.
 BANDS = ((4, "Low"), (9, "Medium"), (16, "High"), (25, "Critical"))

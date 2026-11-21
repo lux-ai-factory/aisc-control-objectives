@@ -79,7 +79,7 @@ flowchart LR
   Medium 5-9, High 10-16, Critical 17-25; a risk is "Not rated" and counts 0 until both its impact
   and likelihood are set. Objectives are ranked by score, then highest risk, then binding duty
   before standards-grounded, then catalogue order, with voluntary objectives last. By default the
-  priority objectives are the first seven by rank whose highest risk is High or Critical; a
+  priority objectives are the first seven by rank whose highest risk is rated 12 or more; a
   voluntary objective is never priority by default. The assessor's own choices override the
   default. Scores are never stored, so a changed rating can never leave a stale score. The
   selection keeps the resulting priority objectives (`objective_selection.priority_ids`) for the
