@@ -82,7 +82,8 @@ def test_the_assessment_speaks_of_priority_risk_level_and_links(client, start, p
     assert re.search(r'<span class="n">\d+ priority objectives</span>', menu)
     assert page.count("<th>Risk level</th>") == 2 and "impact × likelihood)" not in shown
     assert "<dt>Priority score</dt>" in page and "<dt>Linked by</dt><dd>AI suggestion" in page
-    assert "Priority objective" in shown and "Save priority choices" in shown
+    assert "Priority objective" in shown and "Save priority choices" not in shown
+    assert re.search(r'<button class="btn" type="submit" form="keys">Save</button>', page)
     assert "Also replace objectives I linked by hand" in shown
     assert "Manage › Connectivity › Configurator agents" in shown
     assert '<option value="" selected>Not rated</option>' in page

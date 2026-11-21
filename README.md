@@ -79,7 +79,7 @@ flowchart LR
   Medium 5-9, High 10-16, Critical 17-25; a risk is "Not rated" and counts 0 until both its impact
   and likelihood are set. Objectives are ranked by score, then highest risk, then binding duty
   before standards-grounded, then catalogue order, with voluntary objectives last. By default the
-  priority objectives are the first seven by rank whose highest risk is High or Critical; a
+  priority objectives are the first seven by rank whose highest risk is rated 12 or more; a
   voluntary objective is never priority by default. The assessor's own choices override the
   default. Scores are never stored, so a changed rating can never leave a stale score. The
   selection keeps the resulting priority objectives (`objective_selection.priority_ids`) for the
@@ -173,6 +173,7 @@ Precedence for the model: built-in defaults, then `control-objectives.toml`, the
 | `KEYCLOAK_ISSUER` | *(unset)* | Token issuer; required when auth is on. |
 | `KEYCLOAK_JWKS_URL` | *(unset)* | Where Keycloak's signing keys are read; required when auth is on. |
 | `PLATFORM_URL` | *(unset)* | The platform service: latest AI card version, and the project's model choice. |
+| `AISC_AI_ACTIONS` | `off` | `on` shows **Suggest with AI** on an assessment and lets its two routes start a model run. Any other value hides the button and both routes answer 403. |
 | `PLATFORM_INTERNAL_TOKEN` | *(unset)* | Service token for the platform's internal model-choice route. Without it (or `PLATFORM_URL`) every project uses the service's own model. |
 | `LLM_RESOLVE_TIMEOUT` | `5` | Seconds the platform may take to say which model a project uses. |
 | `QUALIFICATION_URL` | *(unset)* | The qualification app, which serves a version's AI card as JSON-LD. |

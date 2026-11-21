@@ -70,7 +70,7 @@ def test_the_title_is_at_the_top_of_the_panel(client, start, platform_project):
     page = _page(http, platform_project, start())
     panel = page.index('<div class="co-sidepanel">')
     assert panel < page.index('<div class="co-header">') < page.index('id="register"')
-    assert panel < page.index('<div class="co-profile">')
+    assert panel < page.index('<div class="co-profile" id="profile">')
     assert page.index('<aside class="co-sidemenu">') < panel
 
 

@@ -20,6 +20,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from aisc_control_objectives.control_objectives import ControlObjectiveCatalogue
 from aisc_control_objectives.prioritising import band
+from aisc_control_objectives.settings import ai_actions_on
 
 TEMPLATES = Path(__file__).resolve().parent / "templates"
 STATIC = Path(__file__).resolve().parent / "static"
@@ -41,6 +42,7 @@ def _environment() -> Environment:
         lstrip_blocks=True,
     )
     environment.globals["launcher_url"] = launcher_url
+    environment.globals["ai_actions_on"] = ai_actions_on
     return environment
 
 

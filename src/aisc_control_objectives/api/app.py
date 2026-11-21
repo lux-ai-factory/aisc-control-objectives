@@ -57,6 +57,7 @@ from aisc_control_objectives.errors import shown_error
 from aisc_control_objectives.models.control_objective import ControlObjective, MacroRequirement
 from aisc_control_objectives.models.ontology import Ontology, same_card
 from aisc_control_objectives.projects import AssessmentChanged, MappingInProgress, ModelUnavailable, Projects
+from aisc_control_objectives.settings import ai_actions_on
 from aisc_control_objectives.rendering import (
     DEFAULT_LAUNCHER_URL,
     STATIC,
@@ -91,6 +92,9 @@ logger = logging.getLogger(__name__)
 
 #: Where projects are chosen. One place, before any module is entered.
 LAUNCHER_URL = os.environ.get("LAUNCHER_URL", DEFAULT_LAUNCHER_URL)
+
+#: Why a model run is refused where the install has not turned AI actions on.
+AI_ACTIONS_OFF = "Suggesting with AI is turned off on this install (AISC_AI_ACTIONS)."
 
 
 def _read_only(projects, view) -> str | None:
@@ -506,6 +510,8 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
     def map_form(project: str, project_id: str, request: Request, form=Depends(posted_form)):
         """The one agentic step, on a button: it costs a model call per risk. "Also replace objectives
         I linked by hand" maps the risks a person mapped as well, once the page has asked."""
+        if not ai_actions_on():
+            return refused_page(project, project_id, AI_ACTIONS_OFF, 403, "#matrix")
         projects, view, why = editable(request, project_id)
         if why is not None:
             return refused_page(project, project_id, why, 409, "#matrix")
@@ -578,7 +584,8 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
             if not form.get("confirmed") and projects.profile_drops(project_id, profile_id):
                 return RedirectResponse(
                     url=_assessment_url(root_path, project, project_id) + "?"
-                    + urlencode({"profile": "ask", "to": profile_id}), status_code=303)
+                    + urlencode({"profile": "ask", "to": profile_id}) + "#profile",
+                    status_code=303)
             switched = projects.use_profile(project_id, profile_id,
                                             record=ledger_events.on_profile_switched(project_id))
         except ValueError as exc:
@@ -587,7 +594,7 @@ def _register_pages(app, objectives, projects_of, editable, source_name, root_pa
         url = _assessment_url(root_path, project, project_id)
         if switched.dropped:
             url += "?" + urlencode({"dropped": ",".join(switched.dropped)}, safe=",")
-        return RedirectResponse(url=url, status_code=303)
+        return RedirectResponse(url=url + "#profile", status_code=303)
 
     @app.post("/p/{project}/projects/{project_id}/severity", include_in_schema=False)
     def rate_form(project: str, project_id: str, request: Request, form=Depends(posted_form)):
@@ -778,6 +785,8 @@ def _register_project_api(app, projects_of, view_in, editable):
     @app.post("/p/{project}/api/projects/{project_id}/map")
     def map_risks(project: str, project_id: str, request: Request, replace: bool = Query(False)) -> dict:
         """Map the risks no person has mapped; `replace` maps those too."""
+        if not ai_actions_on():
+            raise HTTPException(status_code=403, detail=AI_ACTIONS_OFF)
         projects, _view = latest_or_409(request, project_id)
         try:
             return payload(projects.map_risks_of(project_id, replace=replace,

@@ -409,7 +409,7 @@ class ObjectiveProfileVersionItem(Base):
 
 class ObjectiveKey(Base):
     """The assessor's choice that an objective is, or is not, key. No row: the default
-    (the first seven driven by a High or Critical risk)."""
+    (the first seven driven by a risk rated 12 or more)."""
 
     __tablename__ = "objective_key"
     __table_args__ = (PrimaryKeyConstraint("project_id", "objective_id", name="pk_objective_key"),)

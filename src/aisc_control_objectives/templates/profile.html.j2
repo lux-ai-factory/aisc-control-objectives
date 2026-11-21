@@ -64,8 +64,13 @@
       <fieldset class="co-map-dim">
         <legend><span class="co-dim co-dim--r{{ macro.id[3:] }}">{{ macro.id }} · {{ macro.title }}</span></legend>
         {%- for o in objectives %}
-        <label class="co-map-pick"><input type="checkbox" name="objective" value="{{ o.id }}"{% if o.id in picks %} checked{% endif %}>
+        <div class="co-map-row">
+          <label class="co-map-pick"><input type="checkbox" name="objective" value="{{ o.id }}"{% if o.id in picks %} checked{% endif %}>
           <b>{{ o.id }}</b> {{ o.sub_requirement_label }}</label>
+        <details class="co-map-help"><summary aria-label="What {{ o.id }} means">?</summary>
+          <p class="co-map-help-dim">{{ macro.id }} · {{ macro.title }}</p>
+          <p class="co-map-help-text">{{ o.text }}</p></details>
+        </div>
         {%- endfor %}
       </fieldset>
       {%- endfor %}

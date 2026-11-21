@@ -171,16 +171,16 @@ def test_a_chips_colour_says_key_and_who_mapped_it(client, start, platform_proje
     assert "co-chip--ai" in risk0["O11"]                              # kept from the AI
 
 
-def test_the_legend_names_only_what_differs_from_the_default(client, start, platform_project):
-    """Blue is a key objective, a yellow ring an AI suggestion; grey without a ring is the default
-    and needs no entry."""
+def test_the_legend_names_priority_and_lower_priority(client, start, platform_project):
+    """Blue is a priority objective, grey a lower-priority one."""
     http, _ = client
     page = page_of(http, platform_project, start())
     legend = re.search(r'<ul class="co-legend">(.*?)</ul>', page, re.S).group(1)
     items = re.findall(r"<li>(.*?)</li>", legend, re.S)
     assert len(items) == 2
     assert 'co-chip co-chip--key' in items[0] and "Priority objective" in items[0]
-    assert 'co-chip--ai' in items[1] and "Suggested by AI" in items[1]
+    assert 'co-chip co-chip--plain' in items[1] and "Lower priority" in items[1]
+    assert "co-chip--ai" not in legend and "AI" not in legend
     assert "Not key" not in legend and "assessor" not in legend
 
 

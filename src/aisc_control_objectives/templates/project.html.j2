@@ -63,7 +63,7 @@
 
   {# The objective profile it runs on. Everything below sees only this
      profile's objectives. #}
-  <div class="co-profile">
+  <div class="co-profile" id="profile">
     <span class="co-profile-k">Objective profile</span>
     <b class="co-profile-name">{{ profile['label'] }}</b>
     {%- if profile['update'] and not locked %}
@@ -205,7 +205,7 @@
   </details>
 
   {# 2. Link objectives to risks: one row per risk, its control objectives as
-     chips. Blue is a priority objective, a yellow ring an AI suggestion; a click
+     chips. Blue is a priority objective, grey a lower-priority one; a click
      opens its name, priority score, who linked it and the priority tick. What is
      linked here goes forward to step 4. #}
   {%- set mapped_count = chips.values() | map("length") | sum %}
@@ -229,7 +229,7 @@
     <p class="qf-help">Each risk with the control objectives linked to it. Click an objective for its
        name, its priority score (the sum of the risk levels of its risks) and whether it is a priority
        objective. What is linked here goes forward to step 4, <b>AI Assessment Sandbox</b>.</p>
-    {%- if not locked %}
+    {%- if not locked and ai_actions_on() %}
     <form class="co-ai" method="post" action="{{ project_base }}/projects/{{ record.id }}/map" data-busy>
       <button class="btn" type="submit">Suggest with AI</button>
       <span class="qf-help">One model call per risk: this can take minutes.</span>
@@ -256,6 +256,9 @@
       </form>
     </div>
     {%- endif %}
+    {%- endif %}
+    {#- the priority ticks and their Save, with or without AI actions #}
+    {%- if not locked %}
     <form id="keys" method="post" action="{{ project_base }}/projects/{{ record.id }}/key">
       {%- for oid, key in shown.items() %}
       <input type="hidden" name="shown" value="{{ oid }}:{{ 1 if key else 0 }}">
@@ -264,7 +267,7 @@
     {%- endif %}
     <ul class="co-legend">
       <li><span class="co-chip co-chip--key co-chip--person">O1</span> Priority objective</li>
-      <li><span class="co-chip co-chip--plain co-chip--ai">O2</span> Suggested by AI</li>
+      <li><span class="co-chip co-chip--plain co-chip--person">O2</span> Lower priority</li>
     </ul>
     <table class="co-matrix">
       <thead><tr><th>Risk</th><th>Risk level</th><th>Control objectives</th><th></th></tr></thead>
@@ -296,7 +299,7 @@
             {%- else %}
             <label class="co-pop-key"><input type="checkbox" form="keys" name="key" value="{{ o.id }}"{% if chip.priority.key %} checked{% endif %}> Priority objective
               {%- if why %} <span class="co-key-why">({{ why }})</span>{% endif %}</label>
-            <p class="qf-help">Then save your priority choices below the table.</p>
+            <p class="qf-help">Then press Save below the table.</p>
             {%- endif %}
           </div>
           </span>
@@ -314,8 +317,13 @@
               <fieldset class="co-map-dim">
                 <legend><span class="co-dim co-dim--r{{ macro.id[3:] }}">{{ macro.id }} · {{ macro.title }}</span></legend>
                 {%- for objective in macro.objectives %}
-                <label class="co-map-pick"><input type="checkbox" name="objective" value="{{ objective.id }}"{% if objective.id in chosen %} checked{% endif %}>
+                <div class="co-map-row">
+                  <label class="co-map-pick"><input type="checkbox" name="objective" value="{{ objective.id }}"{% if objective.id in chosen %} checked{% endif %}>
                   <b>{{ objective.id }}</b> {{ objective.sub_requirement_label }}</label>
+                <details class="co-map-help"><summary aria-label="What {{ objective.id }} means">?</summary>
+                  <p class="co-map-help-dim">{{ macro.id }} · {{ macro.title }}</p>
+                  <p class="co-map-help-text">{{ objective.text }}</p></details>
+                </div>
                 {%- endfor %}
               </fieldset>
               {%- endfor %}
@@ -329,7 +337,7 @@
       </tbody>
     </table>
     {%- if not locked and mapped_count %}
-    <div class="qf-actions"><button class="btn" type="submit" form="keys">Save priority choices</button></div>
+    <div class="qf-actions"><button class="btn" type="submit" form="keys">Save</button></div>
     <script src="{{ root_path }}/static/keys.js" defer></script>
     {%- endif %}
     {%- if not locked and record.keys %}

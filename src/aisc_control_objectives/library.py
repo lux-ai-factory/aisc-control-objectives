@@ -42,8 +42,8 @@ FAIRNESS_OVERSIGHT_NAME = "Fairness and oversight"
 FAIRNESS_OVERSIGHT_PICKS = ("O1", "O2", "O3", "O4", "O11", "O17", "O19", "O21", "O22", "O23")
 #: Who a stored built-in profile reads as made by.
 BUILT_IN = "built-in"
-#: The profile a project's first assessment starts on; a later card version's keeps its previous one's.
-DEFAULT_PROFILE = FAIRNESS_OVERSIGHT
+#: The profile a project's first assessment starts on (every objective); a later card version's keeps its previous one's.
+DEFAULT_PROFILE = FULL_AI_ACT
 
 CODE = re.compile(r"^[A-Z]{2,6}$")
 MODES = ("Control", "Test", "Control + Test")

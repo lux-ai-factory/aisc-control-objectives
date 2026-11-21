@@ -55,17 +55,16 @@ def served(repository, objectives, mapper, graph, platform_project, system_versi
     return projects, start
 
 
-def test_an_assessment_starts_on_the_reduced_profile(served):
-    """A first assessment works with the ten objectives of Fairness and oversight; Full AI Act is one
-    Change profile away, and a later card version keeps the profile its previous one ran on."""
+def test_a_new_assessment_starts_on_every_objective(served):
+    """A first assessment offers O1 to O50 on Full AI Act; Fairness and oversight is one Change profile
+    away, and a later card version keeps the profile its previous one ran on."""
     projects, start = served
     first = projects.view(start())
-    assert first.profile == {"id": FAIRNESS_OVERSIGHT, "version": None, "label": "Fairness and oversight",
-                             "update": None}
-    assert len(first.priorities) == 10
-    switched = projects.use_profile(first.record.id, FULL_AI_ACT)
-    assert len(switched.priorities) == 50
-    assert len(projects.view(start(2)).priorities) == 50
+    assert first.profile["id"] == FULL_AI_ACT == "full-ai-act"
+    assert sorted(p.objective_id for p in first.priorities) == sorted(f"O{n}" for n in range(1, 51))
+    switched = projects.use_profile(first.record.id, FAIRNESS_OVERSIGHT)
+    assert len(switched.priorities) == 10
+    assert len(projects.view(start(2)).priorities) == 10
 
 
 def test_the_suite_starts_on_full_ai_act(client, start, platform_project):
@@ -271,12 +270,12 @@ def test_after_a_switch_the_page_says_what_was_dropped(client, start, platform_p
     r = http.post(f"/p/{platform_project}/projects/{assessment}/profile",
                   data={"profile": bank["profile"].id, "confirmed": "on"})
     assert r.status_code == 303
-    assert r.headers["location"].endswith(f"/projects/{assessment}?dropped=O5")
+    assert r.headers["location"].endswith(f"/projects/{assessment}?dropped=O5#profile")
     page = http.get(r.headers["location"]).text
     assert '<div class="notice">Outside the new profile, so dropped: O5.</div>' in page
     # nothing dropped, nothing said
     r = http.post(f"/p/{platform_project}/projects/{assessment}/profile", data={"profile": FULL_AI_ACT})
-    assert r.headers["location"].endswith(f"/projects/{assessment}")
+    assert r.headers["location"].endswith(f"/projects/{assessment}#profile")
     assert 'class="notice"' not in http.get(r.headers["location"]).text
 
 
